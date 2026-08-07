@@ -18,12 +18,15 @@ class SchoolFactory extends Factory
      */
     public function definition(): array
     {
-        $name = 'Smart Sukses School '.fake()->unique()->city();
+        $city = fake()->city();
+        $suffix = (string) fake()->unique()->numberBetween(1, 9999);
 
+        // Panjang dipotong mengikuti batas kolom ERD 2.2:
+        // code VARCHAR(20), slug VARCHAR(50) — MySQL menolak nilai yang melebihi.
         return [
-            'name' => $name,
-            'code' => Str::upper(Str::slug(Str::afterLast($name, ' '))).fake()->unique()->numberBetween(1, 9999),
-            'slug' => Str::slug($name).'-'.fake()->unique()->numberBetween(1, 9999),
+            'name' => Str::limit('Smart Sukses School '.$city, 150, ''),
+            'code' => Str::upper(Str::substr(Str::slug($city, ''), 0, 10)).$suffix,
+            'slug' => Str::substr(Str::slug($city), 0, 40).'-'.$suffix,
             'primary_color' => '#1B3A6B',
             'secondary_color' => '#E07020',
             'is_active' => true,
