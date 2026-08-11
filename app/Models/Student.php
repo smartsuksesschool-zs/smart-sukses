@@ -72,6 +72,16 @@ class Student extends Model
         return $this->hasMany(StudentClass::class);
     }
 
+    public function grades(): HasMany
+    {
+        return $this->hasMany(Grade::class);
+    }
+
+    public function reportCards(): HasMany
+    {
+        return $this->hasMany(ReportCard::class);
+    }
+
     /**
      * Penempatan kelas yang sedang berlaku pada tahun ajaran aktif.
      */
@@ -108,6 +118,22 @@ class Student extends Model
         return $query->whereHas(
             'studentClasses',
             fn (Builder $q) => $q->where('class_id', $classId)
+                ->where('status', StudentClassStatus::Active->value),
+        );
+    }
+
+    /**
+     * Varian scopeInClass untuk beberapa kelas sekaligus — dipakai saat menilai
+     * apakah satu kebijakan penilaian sudah selesai dipakai di seluruh kelas
+     * yang mengampu mata pelajarannya.
+     *
+     * @param  array<int, int>  $classIds
+     */
+    public function scopeInAnyClass(Builder $query, array $classIds): Builder
+    {
+        return $query->whereHas(
+            'studentClasses',
+            fn (Builder $q) => $q->whereIn('class_id', $classIds)
                 ->where('status', StudentClassStatus::Active->value),
         );
     }

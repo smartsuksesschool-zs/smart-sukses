@@ -39,6 +39,11 @@ class Subject extends Model
         return $this->hasMany(ClassSubject::class);
     }
 
+    public function gradeConfigs(): HasMany
+    {
+        return $this->hasMany(GradeConfig::class);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);

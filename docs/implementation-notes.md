@@ -311,6 +311,229 @@ Sprint 8 dan belum dibuat. Yang tersedia sekarang adalah bagian wa.me-nya: setel
 status diubah, panel menampilkan notifikasi Filament berisi tombol "Buka WhatsApp"
 dengan link yang sudah terisi teks — sesuai PPDB-04 poin 3 ("Admin tinggal klik").
 
+## Sprint 4 — Akademik (E-Rapor & Penilaian)
+
+Cakupan mengikuti roadmap `05-roadmap/01-implementation-order.md` Sprint 4 "Akademik":
+Input nilai, Grade config, Auto-hitung nilai akhir, Generate & publish rapor, PDF rapor
+— yaitu PRD 1.2.5 NILAI-01…NILAI-05, ERD 2.2 kelompok Penilaian, dan API 4.8.
+
+Sprint ini berjalan di atas **keputusan tertulis Pak Akbar** yang melengkapi titik-titik
+yang tidak dijawab blueprint (lihat verifikasi requirement K-1…K-15). Keputusan itu
+menjadi sumber kebenaran untuk butir 23–31 di bawah.
+
+### 23. Versioning `grade_configs`: kolom `status`, `version`, `activated_at`, `locked_at`
+
+| | |
+| --- | --- |
+| **Status** | Tambahan di luar ERD |
+| **Dasar** | Keputusan Sprint 4 butir 4 — "DRAFT → ACTIVE → LOCKED … Perubahan kebijakan bobot harus membuat Grade Config versi baru, bukan overwrite konfigurasi lama." |
+| **Bertentangan dengan** | `02-erd/05-tables-penilaian.md` — Tabel: grade_configs |
+
+ERD hanya menyediakan tujuh kolom tanpa penanda siklus hidup, sehingga tidak ada cara
+membedakan konfigurasi yang masih boleh disunting dari yang sudah dipakai menilai.
+Empat kolom ditambahkan: `version` SMALLINT UNSIGNED DEFAULT 1, `status`
+ENUM(DRAFT,ACTIVE,LOCKED) DEFAULT DRAFT ber-index, serta `activated_at` dan `locked_at`
+sebagai jejak waktu transisi.
+
+Aturan **"maksimal satu ACTIVE per (cabang, mapel, tahun ajaran)"** ditegakkan di
+aplikasi (`App\Services\Grading\GradeConfigVersionManager::activate()`), bukan lewat
+partial unique index — MySQL tidak memilikinya dan SQLite yang dipakai test suite juga
+tidak. Polanya mengikuti preseden `AcademicYear::activate()` dari Sprint 2.
+
+Nama unique index ditulis eksplisit sebagai `grade_configs_scope_version_unique`; nama
+bawaan Laravel untuk empat kolom itu melewati batas 64 karakter identifier MySQL.
+
+### 24. Kolom `updated_at` pada `grade_configs`
+
+| | |
+| --- | --- |
+| **Status** | Tambahan di luar ERD |
+| **Dasar** | Konsekuensi butir 23 — "DRAFT: bebas diedit" |
+
+ERD hanya mencantumkan `created_at` (pola yang sama dengan `subjects`, `schedules`, dst.
+pada Sprint 2 butir 8). Karena konfigurasi berstatus DRAFT memang dimaksudkan untuk
+disunting berulang kali, tanpa `updated_at` perubahannya tidak meninggalkan jejak sama
+sekali. Kolom ditambahkan; keempat tabel Sprint 2 tidak diubah.
+
+### 25. Kolom `grades.assessment_type`
+
+| | |
+| --- | --- |
+| **Status** | Tambahan di luar ERD |
+| **Dasar** | Keputusan Sprint 4 butir 3 — "Data harus membedakan formative dan summative. Tidak semua Daily/formative otomatis menjadi komponen nilai rapor." |
+
+ENUM(FORMATIVE, SUMMATIVE) NOT NULL DEFAULT **SUMMATIVE**, ber-index. Default sengaja
+SUMMATIVE karena itulah alur utama guru; nilai latihan dipilih eksplisit.
+
+Definisi "nilai valid" yang dipakai seluruh perhitungan menjadi: `assessment_type =
+SUMMATIVE` **dan** `grade_type` termasuk komponen akademik. Keduanya diterapkan di
+`App\Services\Grading\ComponentScoreAggregator::valid()`.
+
+### 26. Kolom `grades.grade_config_id`
+
+| | |
+| --- | --- |
+| **Status** | Tambahan di luar ERD |
+| **Dasar** | Keputusan Sprint 4 butir 2 — "grades.weight = SNAPSHOT bobot saat grade dibuat/finalized" |
+
+ERD sudah menyediakan `weight`, tetapi tidak menyimpan **dari konfigurasi mana** angka
+itu berasal. Tanpa itu prinsip "Rapor = hasil kalkulasi dari konfigurasi yang digunakan"
+tidak dapat diaudit. FK nullable ke `grade_configs.id`.
+
+Snapshot diambil di hook `creating` pada `App\Models\Grade`, bukan di halaman Filament,
+supaya input satuan, input massal, dan (nanti) import Excel sama-sama terlindungi.
+
+### 27. Kolom `schools.attitude_scale`
+
+| | |
+| --- | --- |
+| **Status** | Tambahan di luar ERD |
+| **Dasar** | Keputusan Sprint 4 butir 3 — "Range attitude JANGAN hard-code. Simpan sebagai configuration agar dapat diubah Admin." |
+
+JSON nullable berisi batas bawah per predikat, mis. `{"A":86,"B":76,"C":66,"D":0}`.
+Ditempatkan di `schools` karena ERD mendeskripsikan tabel itu sebagai *"Data dan
+konfigurasi setiap cabang sekolah (tenant)"* — alternatifnya membuat tabel ke-22 di luar
+21 entitas ERD. NULL berarti cabang memakai rentang default pada
+`App\Enums\AttitudePredicate::defaultScale()` (persis angka keputusan Pak Akbar).
+
+Penyuntingannya lewat halaman **Akademik → Pengaturan Penilaian**, bukan lewat
+SchoolResource — resource manajemen tenant (API 4.3) memang belum pernah dibuat.
+
+### 28. Versioning menggantikan bunyi literal NILAI-05 poin 2
+
+| | |
+| --- | --- |
+| **Status** | Penggantian aturan yang disengaja |
+| **Bertentangan dengan** | `01-prd/02-features-phase1.md` — NILAI-05 poin 2 |
+
+PRD berbunyi *"Perubahan konfigurasi hanya berlaku untuk **tahun ajaran baru**"*.
+Keputusan Sprint 4 butir 4 mengizinkan perubahan kebijakan **dalam tahun ajaran yang
+sama** selama dibuat sebagai versi baru, dan konfigurasi lama dikunci (LOCKED) alih-alih
+ditimpa. Tujuan PRD — nilai yang sudah ada tidak berubah — tetap terpenuhi, bahkan lebih
+kuat, karena dijaga oleh snapshot `grades.weight` (butir 26), bukan sekadar oleh batas
+tahun ajaran.
+
+**Jika PRD ingin dipertahankan literal:** cabut aksi "Buat Versi Baru" dan tolak
+pembuatan konfigurasi kedua pada tahun ajaran yang sudah punya baris ACTIVE.
+
+### 29. Unique index yang tidak tercantum ERD
+
+Melanjutkan pola Sprint 2 butir 6 — ERD kelompok Penilaian tidak menandai satu pun
+kolom dengan `UQ`:
+
+| Tabel | Unique index | Dasar |
+| --- | --- | --- |
+| `grade_configs` | `(school_id, subject_id, academic_year_id, version)` | Keputusan butir 4: versi adalah identitas konfigurasi |
+| `report_cards` | `(student_id, academic_year_id)` | ERD 2.2: "Rapor final per siswa per semester" |
+| `subjects` | `(school_id, code)` | ERD 2.2 menetapkan `final_scores` = `{"MTK": 87.5}` — kunci JSON memakai kode mapel, sehingga kode yang tidak unik membuat dua mapel saling menimpa di dalam rapor |
+
+Yang ketiga **mengubah tabel Sprint 2**; ini konsekuensi langsung dari bentuk
+`final_scores` di ERD, bukan penambahan fitur.
+
+### 30. Aturan turunan yang tidak dinyatakan dokumen maupun keputusan
+
+Tiga hal berikut tidak diatur di mana pun, tetapi harus diputuskan agar perhitungan
+dapat berjalan. Semuanya terisolasi di service dan mudah diubah:
+
+| Hal | Keputusan implementasi | Berkas |
+| --- | --- | --- |
+| Bobot komponen bila satu tipe punya beberapa nilai dengan snapshot berbeda (kebijakan berganti versi di tengah semester) | Dipakai snapshot dari **entri terbaru**, yakni kebijakan terakhir yang berlaku untuk komponen itu | `FinalScoreCalculator::weightsFrom()` |
+| Nilai akhir saat sebagian komponen konfigurasi belum ada nilainya | Nilai akhir dianggap **belum lengkap** (NULL), bukan dihitung sebagian — mencegah mapel dengan bobot terisi separuh tampak "sudah bernilai" dan lolos validasi publish NILAI-03 poin 1 | `FinalScoreCalculator::calculate()` |
+| Komponen yang wajib menurut konfigurasi tetapi nilainya tidak punya snapshot bobot | Dianggap **belum lengkap**. Bobotnya sengaja **tidak** ditambal dari konfigurasi yang berlaku sekarang: menambalnya membuat rapor bergantung pada kebijakan terbaru, persis yang dicegah keputusan butir 2 | `FinalScoreCalculator::calculate()` |
+| Total bobot snapshot yang tidak berjumlah 1.00 | Nilai akhir **tidak dihitung**. Lihat butir 34 | `FinalScoreCalculator::calculate()` |
+| Predikat sikap dari beberapa entri ATTITUDE | Rata-rata entri **sumatif** saja, lalu dipetakan ke predikat. Entri sikap berjenis FORMATIVE adalah catatan proses dan tidak menggeser predikat di rapor — pembedaan formatif/sumatif pada keputusan butir 3 berlaku untuk seluruh isi rapor, bukan hanya nilai akademik | `ComponentScoreAggregator::attitudeAverage()` |
+| Siswa yang dibuatkan rapor saat generate | Hanya siswa berstatus ACTIVE. `Student::inClass()` sendiri hanya memeriksa status pivot `student_classes`, sehingga siswa yang sudah lulus/pindah tetapi pivot-nya belum ditutup akan ikut terjaring bila statusnya tidak diperiksa | `ReportCardGenerator::studentsOf()` |
+
+### 31. Paket baru: `barryvdh/laravel-dompdf`
+
+`03-architecture/01-tech-stack.md` menulis *"PDF Generation | DomPDF / Browsershot"*
+tanpa memilih. Dipilih **DomPDF** karena murni PHP: Browsershot menuntut Node + Chromium
+pada VPS 2 Core/2 GB (`01-prd/04-non-functional-requirements.md` menargetkan 200 user
+konkuren di mesin itu). Template ada di `resources/views/pdf/report-card.blade.php`.
+
+Tech stack menempatkan PDF rapor sebagai *background job (queue)*; saat ini PDF
+di-stream sinkron saat tombol diklik. Untuk volume satu-kelas-sekaligus, pemindahan ke
+queue perlu dilakukan sebelum go-live.
+
+### 32. Yang sengaja dikosongkan
+
+| Kolom / fitur | Alasan |
+| --- | --- |
+| `report_cards.attend_present` / `_sick` / `_permission` / `_absent` | Tidak ada tabel absensi di antara 21 entitas ERD; "Presensi Digital" adalah Phase 2. Kolomnya tetap dibuat sesuai ERD dan tampil di PDF sebagai "—" |
+| `report_cards.rank_in_class` | Tidak ada requirement maupun rumus peringkat di seluruh blueprint |
+| Import Excel nilai (`POST /grades/import`) | Format template tidak didefinisikan dokumen; input massal sudah tersedia lewat halaman **Input Nilai** yang memetakan `POST /grades/bulk` |
+| Penyajian nilai/rapor di portal siswa & ortu (NILAI-03 poin 3, NILAI-04 poin 1–2) | Sprint 7 — Portal |
+| Notifikasi ke ortu saat rapor terbit (API 4.8) | Sprint 8 — Notifikasi |
+
+### 33. Kewenangan `grade_configs` tidak memakai `grade.manage`
+
+Matriks PRD 1.1.2 tidak punya baris "Grade config", tetapi kewenangannya dinyatakan
+eksplisit di empat tempat: NILAI-05 (*"Sebagai **Admin Sekolah**"*), NILAI-02
+(*"dikonfigurasi **Admin**"*), API 4.8 (`POST /grade-configs` → Auth Level **Admin**),
+dan API 4.1 (*"Auth Level: Admin = Wajib token + role **SCHOOL_ADMIN / SUPER_ADMIN**"*).
+
+Karena `grade.manage` juga dipegang GURU, penulisan konfigurasi **tidak** digantung pada
+izin itu — `GradeConfigPolicy` memeriksa peran SCHOOL_ADMIN secara langsung (SUPER_ADMIN
+lolos lebih dulu lewat `Gate::before`). Membaca tetap terbuka untuk seluruh pemegang
+`grade.view`, sesuai `GET /grade-configs` yang ber-Auth Level "Auth".
+
+Tidak ada izin baru yang dibuat dan `RolePermissionSeeder` tidak disentuh.
+
+### 34. Bobot snapshot lintas-versi divalidasi saat menghitung nilai akhir
+
+| | |
+| --- | --- |
+| **Status** | Pengaman turunan butir 4 |
+| **Dasar** | Keputusan Sprint 4 butir 2 & 4 |
+
+Butir 23 mengizinkan kebijakan bobot berganti versi **di tengah semester**, dan butir
+26 menyimpan bobot sebagai snapshot per entri nilai. Kombinasi keduanya membuka kasus
+yang tidak dijawab keputusan mana pun: nilai satu mata pelajaran bisa lahir dari dua
+versi konfigurasi yang berbeda, sehingga **bobot efektifnya tidak lagi berjumlah 1.00**.
+
+Contoh: v1 (Harian 0.40 · UTS 0.30 · UAS 0.30) dipakai menilai Harian, lalu v2
+(Harian 0.50 · UTS 0.25 · UAS 0.25) diaktifkan sebelum UTS dan UAS diinput. Bobot
+efektifnya 0.40 + 0.25 + 0.25 = **0.90**, dan nilai akhirnya turun sekitar 10% tanpa
+seorang pun menyadarinya. `validateComponents()` tidak menangkap ini — kedua versi
+sendiri sudah benar; yang cacat adalah campurannya.
+
+`FinalScoreCalculator::calculate()` karena itu memeriksa total bobot yang benar-benar
+dipakai dan menyatakan nilai **belum lengkap** bila melenceng dari 1.00, memakai
+toleransi `GradeConfig::WEIGHT_EPSILON` yang sama dengan validasi konfigurasi. Rapor
+tidak dapat diterbitkan sampai keadaan itu dibereskan, sesuai NILAI-03 poin 1.
+
+Jalan keluarnya bagi guru: menilai ulang komponen yang bobotnya sudah tidak berlaku,
+sehingga snapshot terbarunya mengikuti versi yang sedang aktif.
+
+Alasan kegagalan ini diteruskan apa adanya dari `FinalScoreResult::$reason` ke ringkasan
+**Generate Rapor Kelas**, sehingga wali kelas melihat penyebabnya per mata pelajaran —
+bukan sekadar "belum lengkap".
+
+### 35. Grade Config dikunci otomatis setelah rapor terbit
+
+| | |
+| --- | --- |
+| **Status** | Melengkapi butir 4 keputusan |
+| **Dasar** | Keputusan Sprint 4 butir 4 — "LOCKED setelah rapor/finalisasi semester" |
+
+Transisi ACTIVE → LOCKED semula hanya tersedia sebagai tombol manual. Kini
+`ReportCardGenerator::publish()` menguncinya sendiri lewat
+`GradeConfigVersionManager::lockIfActive()`; tombol manual tetap ada untuk finalisasi
+yang dilakukan lebih awal.
+
+Yang perlu diketahui adalah **kapan** penguncian terjadi. Konfigurasi berlaku per
+(mapel, tahun ajaran) — bukan per kelas, dan bukan per siswa. Mengunci pada rapor
+siswa pertama akan menghentikan penilaian semua siswa lain yang memakai konfigurasi
+itu: `GradeConfig::activeFor()` tidak lagi menemukan apa pun, nilai baru tersimpan
+tanpa snapshot bobot, dan menurut butir 34 rapor mereka menjadi tidak lengkap
+selamanya.
+
+Karena itu penguncian baru berjalan ketika **seluruh siswa aktif di semua kelas yang
+mengampu mata pelajaran tersebut sudah memegang rapor terbit**
+(`ReportCardGenerator::isFullyReported()`) — definisi "finalisasi semester" yang
+paling dekat dengan yang bisa ditegakkan data yang ada. Konsekuensinya: satu kelas
+yang selesai lebih dulu tidak mengunci kelas lain yang masih menilai.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

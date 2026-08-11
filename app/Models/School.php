@@ -28,12 +28,15 @@ class School extends Model
         'wa_template_ppdb',
         'wa_template_spp',
         'wa_template_rapor',
+        'attitude_scale',
         'is_active',
     ];
 
     protected function casts(): array
     {
         return [
+            // Keputusan Sprint 4 butir 3 — rentang predikat sikap per cabang.
+            'attitude_scale' => 'array',
             'is_active' => 'boolean',
         ];
     }

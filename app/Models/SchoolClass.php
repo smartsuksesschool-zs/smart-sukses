@@ -63,6 +63,11 @@ class SchoolClass extends Model
         return $this->hasMany(ClassSubject::class, 'class_id');
     }
 
+    public function reportCards(): HasMany
+    {
+        return $this->hasMany(ReportCard::class, 'class_id');
+    }
+
     public function scopeForActiveYear(Builder $query): Builder
     {
         return $query->whereHas('academicYear', fn (Builder $q) => $q->where('is_active', true));

@@ -49,4 +49,9 @@ class ClassSubject extends Model
     {
         return $this->hasMany(Schedule::class);
     }
+
+    public function grades(): HasMany
+    {
+        return $this->hasMany(Grade::class);
+    }
 }
