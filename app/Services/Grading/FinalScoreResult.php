@@ -15,6 +15,10 @@ readonly class FinalScoreResult
      * @param  array<string, float>  $componentAverages  rata-rata per komponen
      * @param  array<string, float>  $componentWeights  bobot snapshot per komponen
      * @param  array<int, string>  $missingComponents  komponen tanpa nilai valid
+     * @param  array<int, string>  $ignoredComponents  komponen sumatif yang ada
+     *                                                 nilainya tetapi tidak
+     *                                                 dikonfigurasi, sehingga
+     *                                                 tidak ikut nilai akhir
      */
     public function __construct(
         public ?float $score,
@@ -24,13 +28,18 @@ readonly class FinalScoreResult
         public array $missingComponents = [],
         public ?int $gradeConfigId = null,
         public ?string $reason = null,
+        public array $ignoredComponents = [],
     ) {}
 
+    /**
+     * @param  array<int, string>  $ignoredComponents
+     */
     public static function incomplete(
         string $reason,
         array $componentAverages = [],
         array $missingComponents = [],
         ?int $gradeConfigId = null,
+        array $ignoredComponents = [],
     ): self {
         return new self(
             score: null,
@@ -39,6 +48,7 @@ readonly class FinalScoreResult
             missingComponents: $missingComponents,
             gradeConfigId: $gradeConfigId,
             reason: $reason,
+            ignoredComponents: $ignoredComponents,
         );
     }
 
@@ -50,12 +60,14 @@ readonly class FinalScoreResult
      *
      * @param  array<string, float>  $componentAverages
      * @param  array<string, float>  $componentWeights
+     * @param  array<int, string>  $ignoredComponents
      */
     public static function inconsistentWeights(
         float $weightTotal,
         array $componentAverages = [],
         array $componentWeights = [],
         ?int $gradeConfigId = null,
+        array $ignoredComponents = [],
     ): self {
         return new self(
             score: null,
@@ -63,6 +75,7 @@ readonly class FinalScoreResult
             componentAverages: $componentAverages,
             componentWeights: $componentWeights,
             gradeConfigId: $gradeConfigId,
+            ignoredComponents: $ignoredComponents,
             reason: sprintf(
                 'Total bobot snapshot %.2f, seharusnya 1.00 — nilai berasal dari '
                     .'versi konfigurasi yang berbeda. Perbaiki dengan menginput ulang '

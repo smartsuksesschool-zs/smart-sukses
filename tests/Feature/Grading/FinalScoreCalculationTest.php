@@ -51,6 +51,78 @@ class FinalScoreCalculationTest extends GradingTestCase
         $this->assertSame(80.0, $result->score);
     }
 
+    public function test_a_summative_component_outside_the_configuration_is_reported_as_ignored(): void
+    {
+        // C-6 — konfigurasi hanya mengenal Harian/UTS/UAS, tetapi guru sempat
+        // menginput nilai SKILL sumatif. Nilainya tersimpan dan tidak boleh
+        // menggeser nilai akhir, tetapi kini dilaporkan.
+        $this->activeConfig();
+
+        $this->grade(GradeType::Daily, 80);
+        $this->grade(GradeType::Midterm, 75);
+        $this->grade(GradeType::Final, 85);
+        $this->grade(GradeType::Skill, 100);
+
+        $result = $this->calculator->calculate($this->grades());
+
+        $this->assertSame([GradeType::Skill->value], $result->ignoredComponents);
+
+        // Nilai akhir tetap persis seperti sebelum C-6 — SKILL tidak ikut.
+        $this->assertTrue($result->isComplete);
+        $this->assertSame(80.0, $result->score);
+    }
+
+    public function test_a_configured_component_is_never_reported_as_ignored(): void
+    {
+        $this->activeConfig([
+            ['type' => GradeType::Daily->value, 'weight' => 0.50],
+            ['type' => GradeType::Skill->value, 'weight' => 0.50],
+        ]);
+
+        $this->grade(GradeType::Daily, 80);
+        $this->grade(GradeType::Skill, 90);
+
+        $result = $this->calculator->calculate($this->grades());
+
+        $this->assertSame([], $result->ignoredComponents);
+        $this->assertSame(85.0, $result->score);
+    }
+
+    public function test_formative_and_attitude_entries_are_not_reported_as_ignored(): void
+    {
+        // Keduanya memang di luar nilai akademik by design, jadi menyebutnya
+        // "diabaikan" hanya akan menjadi bising.
+        $this->activeConfig();
+
+        $this->grade(GradeType::Daily, 80);
+        $this->grade(GradeType::Midterm, 75);
+        $this->grade(GradeType::Final, 85);
+        $this->grade(GradeType::Skill, 100, AssessmentType::Formative);
+        $this->grade(GradeType::Attitude, 90);
+
+        $result = $this->calculator->calculate($this->grades());
+
+        $this->assertSame([], $result->ignoredComponents);
+        $this->assertSame(80.0, $result->score);
+    }
+
+    public function test_ignored_components_are_reported_even_when_the_score_is_incomplete(): void
+    {
+        // Dua masalah sekaligus: UAS belum diinput, dan SKILL diabaikan.
+        // Keduanya harus terlihat, bukan hanya yang pertama.
+        $this->activeConfig();
+
+        $this->grade(GradeType::Daily, 80);
+        $this->grade(GradeType::Midterm, 75);
+        $this->grade(GradeType::Skill, 100);
+
+        $result = $this->calculator->calculate($this->grades());
+
+        $this->assertFalse($result->isComplete);
+        $this->assertContains(GradeType::Final->value, $result->missingComponents);
+        $this->assertSame([GradeType::Skill->value], $result->ignoredComponents);
+    }
+
     public function test_result_is_rounded_to_two_decimals(): void
     {
         $this->activeConfig([['type' => GradeType::Daily->value, 'weight' => 1.0]]);

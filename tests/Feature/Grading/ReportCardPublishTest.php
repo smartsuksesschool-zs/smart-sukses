@@ -364,6 +364,83 @@ class ReportCardPublishTest extends GradingTestCase
         $this->assertStringContainsString('0.90', $body);
     }
 
+    public function test_generate_summary_reports_a_component_the_configuration_ignores(): void
+    {
+        // C-6 — nilai SKILL sumatif tersimpan, tetapi konfigurasi hanya
+        // mengenal Harian/UTS/UAS.
+        $this->actingAs($this->teacher);
+        $this->completeGrades();
+        $this->grade(GradeType::Skill, 100);
+
+        $this->actingAs($this->homeroom);
+        $summary = $this->generator->generateForClass($this->class);
+
+        $this->assertSame(['MTK' => [GradeType::Skill->value]], $summary['ignored']);
+
+        // Rapornya sendiri tetap lengkap — C-6 hanya memberi tahu.
+        $this->assertSame([], $summary['incomplete']);
+        $this->assertSame(1, $summary['created']);
+    }
+
+    public function test_generate_summary_has_nothing_to_report_when_every_component_is_configured(): void
+    {
+        $this->actingAs($this->teacher);
+        $this->completeGrades();
+
+        $this->actingAs($this->homeroom);
+
+        $this->assertSame([], $this->generator->generateForClass($this->class)['ignored']);
+    }
+
+    public function test_an_ignored_component_is_listed_once_for_the_whole_class(): void
+    {
+        // Grade Config berlaku per mapel, jadi komponen yang sama terabaikan
+        // bagi semua siswa. Ringkasannya tidak boleh mengulang pesan itu
+        // sebanyak jumlah siswa.
+        $classmate = Student::factory()->create(['school_id' => $this->school->id]);
+
+        StudentClass::factory()->create([
+            'school_id' => $this->school->id,
+            'student_id' => $classmate->id,
+            'class_id' => $this->class->id,
+            'academic_year_id' => $this->year->id,
+        ]);
+
+        $this->actingAs($this->teacher);
+        $this->completeGrades();
+        $this->grade(GradeType::Skill, 100);
+
+        // Teman sekelas dinilai dengan konfigurasi yang sama.
+        $this->grade(GradeType::Daily, 80, student: $classmate);
+        $this->grade(GradeType::Midterm, 75, student: $classmate);
+        $this->grade(GradeType::Final, 85, student: $classmate);
+        $this->grade(GradeType::Skill, 95, student: $classmate);
+
+        $this->actingAs($this->homeroom);
+        $summary = $this->generator->generateForClass($this->class);
+
+        $this->assertSame(['MTK' => [GradeType::Skill->value]], $summary['ignored']);
+        $this->assertSame(2, $summary['created']);
+    }
+
+    public function test_generate_notification_names_the_ignored_component(): void
+    {
+        $this->actingAs($this->teacher);
+        $this->completeGrades();
+        $this->grade(GradeType::Skill, 100);
+
+        $this->actingAs($this->homeroom);
+
+        Livewire::test(ListReportCards::class)
+            ->callAction('generate', ['class_id' => $this->class->id]);
+
+        $body = $this->lastNotificationBody();
+
+        $this->assertStringContainsString('MTK', $body);
+        $this->assertStringContainsString(GradeType::Skill->label(), $body);
+        $this->assertStringContainsString('tidak ada di Grade Config', $body);
+    }
+
     /**
      * Isi notifikasi Filament yang terakhir dikirim. Notification::send()
      * menumpuknya di sesi, dan membacanya lewat komponen Notifications akan

@@ -3,13 +3,13 @@
 namespace App\Filament\Resources;
 
 use App\Enums\AttitudePredicate;
+use App\Enums\ReportCardPdfStatus;
 use App\Filament\Resources\ReportCardResource\Pages;
 use App\Models\AcademicYear;
 use App\Models\ReportCard;
 use App\Models\SchoolClass;
-use App\Models\Subject;
 use App\Services\Grading\ReportCardGenerator;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Services\Grading\ReportCardPdfRenderer;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
 use Filament\Notifications\Notification;
@@ -18,6 +18,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -135,6 +136,14 @@ class ReportCardResource extends Resource
                     ->dateTime('d M Y H:i')
                     ->placeholder('—')
                     ->toggleable(),
+
+                Tables\Columns\TextColumn::make('pdf_status')
+                    ->label('PDF')
+                    ->badge()
+                    ->placeholder('—')
+                    ->formatStateUsing(fn (?ReportCardPdfStatus $state) => $state?->label())
+                    ->color(fn (?ReportCardPdfStatus $state) => $state?->color() ?? 'gray')
+                    ->description(fn (ReportCard $record) => $record->pdf_generated_at?->format('d M Y H:i')),
             ])
             // API 4.8 — filter: student_id, academic_year_id, is_published.
             ->filters([
@@ -152,6 +161,7 @@ class ReportCardResource extends Resource
                 Tables\Actions\ViewAction::make(),
                 static::publishAction(),
                 static::pdfAction(),
+                static::pdfFromStorageAction(),
             ])
             ->bulkActions([])
             ->defaultSort('id', 'desc');
@@ -199,38 +209,37 @@ class ReportCardResource extends Resource
             ->action(fn (ReportCard $record): StreamedResponse => static::streamPdf($record));
     }
 
+    /**
+     * Unduhan satuan tetap sinkron — dirender saat itu juga dan tidak pernah
+     * disimpan, sehingga kolom `pdf_*` tidak tersentuh sama sekali.
+     */
     public static function streamPdf(ReportCard $reportCard): StreamedResponse
     {
+        $renderer = app(ReportCardPdfRenderer::class);
+
         $reportCard->loadMissing(['student', 'schoolClass', 'academicYear', 'school']);
 
-        $filename = sprintf(
-            'rapor_%s_%s.pdf',
-            str($reportCard->student?->nis ?? $reportCard->getKey())->slug('_'),
-            str($reportCard->academicYear?->name ?? '')->slug('_'),
-        );
-
         return response()->streamDownload(
-            function () use ($reportCard): void {
-                echo Pdf::loadView('pdf.report-card', [
-                    'reportCard' => $reportCard,
-                    'subjects' => static::subjectNames($reportCard),
-                ])->setPaper('a4')->output();
+            function () use ($reportCard, $renderer): void {
+                echo $renderer->render($reportCard);
             },
-            $filename,
+            $renderer->filenameFor($reportCard),
         );
     }
 
     /**
-     * Peta kode mapel → nama, agar PDF menampilkan nama lengkap.
-     *
-     * @return array<string, string>
+     * Mengunduh berkas hasil antrean, bukan merender ulang.
      */
-    protected static function subjectNames(ReportCard $reportCard): array
+    public static function pdfFromStorageAction(): Tables\Actions\Action
     {
-        return Subject::query()
-            ->whereIn('code', array_keys($reportCard->final_scores ?? []))
-            ->pluck('name', 'code')
-            ->all();
+        return Tables\Actions\Action::make('pdfFromStorage')
+            ->label('Unduh PDF (hasil antrean)')
+            ->icon('heroicon-o-arrow-down-on-square')
+            ->color('success')
+            ->authorize('downloadPdf')
+            ->visible(fn (ReportCard $record): bool => $record->hasDownloadablePdf())
+            ->action(fn (ReportCard $record): StreamedResponse => Storage::disk(ReportCard::PDF_DISK)
+                ->download($record->pdf_path, app(ReportCardPdfRenderer::class)->filenameFor($record)));
     }
 
     public static function getEloquentQuery(): Builder

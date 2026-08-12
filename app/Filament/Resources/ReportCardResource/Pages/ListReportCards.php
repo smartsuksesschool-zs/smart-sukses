@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\ReportCardResource\Pages;
 
+use App\Enums\GradeType;
 use App\Filament\Resources\ReportCardResource;
+use App\Jobs\GenerateReportCardPdf;
 use App\Models\ReportCard;
 use App\Models\SchoolClass;
 use App\Services\Grading\ReportCardGenerator;
@@ -49,36 +51,91 @@ class ListReportCards extends ListRecords
 
                     $summary = app(ReportCardGenerator::class)->generateForClass($class);
 
-                    $notification = Notification::make()
-                        ->title('Draft rapor diproses')
-                        ->body(sprintf(
-                            '%d dibuat, %d diperbarui, %d dilewati (sudah terbit).',
-                            $summary['created'],
-                            $summary['updated'],
-                            $summary['skipped'],
-                        ));
+                    $body = [sprintf(
+                        '%d dibuat, %d diperbarui, %d dilewati (sudah terbit).',
+                        $summary['created'],
+                        $summary['updated'],
+                        $summary['skipped'],
+                    )];
 
                     // Alasan per mapel ikut ditampilkan: "belum lengkap" bisa
                     // berarti komponennya memang belum diinput, tetapi bisa juga
                     // berarti bobot snapshot-nya tidak utuh karena kebijakan
                     // berganti versi di tengah semester — dua hal yang
                     // penanganannya berbeda bagi wali kelas.
-                    $summary['incomplete'] === []
+                    if ($summary['incomplete'] !== []) {
+                        $body[] = '<br>Belum lengkap:<br>'.collect($summary['incomplete'])
+                            ->map(fn (array $reasons, string $name) => collect($reasons)
+                                ->map(fn (string $reason, string $code) => "• {$name} — {$code}: {$reason}")
+                                ->join('<br>'))
+                            ->join('<br>');
+                    }
+
+                    // C-6 — nilai sumatif yang komponennya tidak ada di Grade
+                    // Config tersimpan rapi tetapi tidak pernah ikut menghitung
+                    // apa pun. Tanpa pesan ini guru tidak punya cara mengetahui
+                    // bahwa penilaiannya tidak terpakai.
+                    if ($summary['ignored'] !== []) {
+                        $body[] = '<br>Tidak masuk nilai akhir karena komponennya tidak ada di Grade Config:<br>'
+                            .collect($summary['ignored'])
+                                ->map(fn (array $types, string $code) => sprintf(
+                                    '• %s — %s',
+                                    $code,
+                                    collect($types)
+                                        ->map(fn (string $type) => GradeType::tryFrom($type)?->label() ?? $type)
+                                        ->join(', '),
+                                ))
+                                ->join('<br>');
+                    }
+
+                    $notification = Notification::make()
+                        ->title('Draft rapor diproses')
+                        ->body(implode('', $body));
+
+                    $summary['incomplete'] === [] && $summary['ignored'] === []
                         ? $notification->success()
-                        : $notification->warning()->body(
-                            sprintf(
-                                '%d dibuat, %d diperbarui. Belum lengkap:<br>%s',
-                                $summary['created'],
-                                $summary['updated'],
-                                collect($summary['incomplete'])
-                                    ->map(fn (array $reasons, string $name) => collect($reasons)
-                                        ->map(fn (string $reason, string $code) => "• {$name} — {$code}: {$reason}")
-                                        ->join('<br>'))
-                                    ->join('<br>'),
-                            ),
-                        );
+                        : $notification->warning();
 
                     $notification->send();
+                }),
+
+            // Tech stack 3.1 — generate PDF sekelas berjalan di antrean.
+            // Merendernya di dalam request akan menahan satu proses web selama
+            // puluhan detik untuk kelas berisi tiga puluh siswa; VPS 2 core
+            // tidak punya kemewahan itu.
+            Actions\Action::make('generatePdfKelas')
+                ->label('Generate PDF Kelas')
+                ->icon('heroicon-o-document-arrow-down')
+                ->color('gray')
+                ->form([
+                    Forms\Components\Select::make('class_id')
+                        ->label('Kelas')
+                        ->options(fn () => $this->classOptions())
+                        ->required()
+                        ->helperText('PDF dibuat di latar belakang. Kolom PDF akan berubah menjadi "Siap diunduh" bila selesai.'),
+                ])
+                ->action(function (array $data): void {
+                    $class = SchoolClass::query()->findOrFail($data['class_id']);
+
+                    if (! Auth::user()?->can('generate', [ReportCard::class, $class])) {
+                        Notification::make()
+                            ->title('Tidak diizinkan')
+                            ->body('Hanya wali kelas dari kelas tersebut yang dapat membuat PDF rapor sekelas.')
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    $queued = $this->queuePdfsFor($class);
+
+                    Notification::make()
+                        ->title($queued === 0 ? 'Tidak ada rapor untuk diproses' : "{$queued} PDF rapor masuk antrean")
+                        ->body($queued === 0
+                            ? 'Kelas ini belum memiliki rapor. Jalankan Generate Rapor Kelas lebih dulu.'
+                            : 'Berkas dibuat di latar belakang; halaman ini tidak perlu dibiarkan terbuka.')
+                        ->{$queued === 0 ? 'warning' : 'success'}()
+                        ->send();
                 }),
 
             Actions\Action::make('publishClass')
@@ -122,6 +179,30 @@ class ListReportCards extends ListRecords
                     $notification->send();
                 }),
         ];
+    }
+
+    /**
+     * Mengantrekan pembuatan PDF untuk seluruh rapor di satu kelas.
+     *
+     * Rapor draft ikut diproses, konsisten dengan unduhan satuan yang juga
+     * melayaninya — berkasnya ditandai DRAFT oleh template.
+     *
+     * @return int jumlah rapor yang masuk antrean
+     */
+    protected function queuePdfsFor(SchoolClass $class): int
+    {
+        $reportCards = ReportCard::query()
+            ->where('class_id', $class->getKey())
+            ->where('academic_year_id', $class->academic_year_id)
+            ->get();
+
+        foreach ($reportCards as $reportCard) {
+            $reportCard->markPdfQueued();
+
+            GenerateReportCardPdf::dispatch($reportCard->getKey(), $reportCard->school_id);
+        }
+
+        return $reportCards->count();
     }
 
     /**

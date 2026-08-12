@@ -100,6 +100,23 @@ class GradeConfig extends Model
     }
 
     /**
+     * Konfigurasi LOCKED terakhir untuk satu mapel pada satu tahun ajaran.
+     *
+     * Dipakai untuk membedakan dua keadaan yang sama-sama membuat
+     * `activeFor()` mengembalikan NULL: mapel yang memang belum pernah
+     * dikonfigurasi, dan mapel yang konfigurasinya sudah dikunci setelah rapor
+     * terbit. Yang kedua perlu versi baru; yang pertama tidak.
+     */
+    public static function lockedFor(int $subjectId, int $academicYearId): ?self
+    {
+        return static::query()
+            ->forSubjectYear($subjectId, $academicYearId)
+            ->where('status', GradeConfigStatus::Locked->value)
+            ->orderByDesc('version')
+            ->first();
+    }
+
+    /**
      * Bobot komponen tertentu, atau NULL bila tipe itu tidak dikonfigurasi.
      */
     public function weightFor(GradeType $type): ?float

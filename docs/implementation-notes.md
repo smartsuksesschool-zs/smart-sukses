@@ -551,3 +551,32 @@ karena SQLite mengabaikan panjang `VARCHAR`:
 - Sprint 3 — kasus uji panjang `reg_number` memakai kode cabang 23 karakter, di atas
   batas `schools.code` VARCHAR(20); kasusnya diperbaiki menjadi kode 20 karakter
   (batas sah terpanjang) sehingga benar-benar menguji pemotongan di butir 13.
+
+Langkah 1 — Attitude Scale Validation
+
+A > B > C > D wajib.
+Nilai harus 0–100.
+Skala tidak valid → ditolak.
+Skala rusak/incomplete yang sudah ada → fallback ke default.
+
+Langkah 2 — C-6
+
+Komponen akademik SUMMATIVE yang ada nilainya tetapi tidak ada di Grade Config dilaporkan.
+Tidak mengubah perhitungan nilai akhir.
+Formative dan Attitude tidak dianggap sebagai ignored component.
+
+Langkah 3 — LOCKED Config
+
+Jika tidak ada ACTIVE tetapi ada LOCKED, guru mendapat warning.
+Tidak otomatis unlock.
+Tidak otomatis membuat versi baru.
+Nilai tetap tersimpan dengan snapshot kosong sesuai behavior existing.
+
+Langkah 4 — PDF Queue
+
+Download satu rapor tetap synchronous.
+Generate PDF satu kelas → queue/background job.
+QUEUED → READY/FAILED.
+PDF disimpan di private/local storage.
+pdf_path, pdf_status, pdf_generated_at.
+Worker wajib aktif di deployment.

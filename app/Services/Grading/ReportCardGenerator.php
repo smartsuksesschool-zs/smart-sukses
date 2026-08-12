@@ -41,14 +41,20 @@ class ReportCardGenerator
      * mapel itu belum lengkap. Alasannya datang apa adanya dari
      * FinalScoreResult::$reason.
      *
-     * @return array{created: int, updated: int, skipped: int, incomplete: array<string, array<string, string>>}
+     * `ignored` dipetakan kode mapel → komponen sumatif yang diabaikan
+     * konfigurasi. Sengaja dikumpulkan per mapel, bukan per siswa: Grade Config
+     * berlaku untuk satu mapel pada satu tahun ajaran, sehingga komponen yang
+     * sama akan terabaikan bagi seluruh kelas — mendaftarnya per siswa hanya
+     * mengulang pesan yang sama sebanyak jumlah siswa.
+     *
+     * @return array{created: int, updated: int, skipped: int, incomplete: array<string, array<string, string>>, ignored: array<string, array<int, string>>}
      */
     public function generateForClass(SchoolClass $class): array
     {
         $students = $this->studentsOf($class);
         $classSubjects = $class->classSubjects()->with('subject')->get();
 
-        $summary = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'incomplete' => []];
+        $summary = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'incomplete' => [], 'ignored' => []];
 
         DB::transaction(function () use ($students, $classSubjects, $class, &$summary): void {
             foreach ($students as $student) {
@@ -68,6 +74,13 @@ class ReportCardGenerator
 
                 if ($result['missing'] !== []) {
                     $summary['incomplete'][$student->full_name] = $result['missing'];
+                }
+
+                foreach ($result['ignored'] as $code => $types) {
+                    $summary['ignored'][$code] = array_values(array_unique(array_merge(
+                        $summary['ignored'][$code] ?? [],
+                        $types,
+                    )));
                 }
 
                 if ($existing === null) {
@@ -101,12 +114,13 @@ class ReportCardGenerator
      * Menyusun nilai akhir seluruh mapel + predikat sikap untuk satu siswa.
      *
      * @param  Collection<int, ClassSubject>  $classSubjects
-     * @return array{final_scores: array<string, float>, attitude: AttitudePredicate|null, missing: array<string, string>}
+     * @return array{final_scores: array<string, float>, attitude: AttitudePredicate|null, missing: array<string, string>, ignored: array<string, array<int, string>>}
      */
     public function buildFor(Student $student, SchoolClass $class, Collection $classSubjects): array
     {
         $finalScores = [];
         $missing = [];
+        $ignored = [];
 
         foreach ($classSubjects as $classSubject) {
             $code = $classSubject->subject?->code;
@@ -125,6 +139,13 @@ class ReportCardGenerator
             $this->snapshotter->backfill($grades);
 
             $result = $this->calculator->calculate($grades);
+
+            // Dilaporkan terlepas dari lengkap atau tidaknya nilai: mapel yang
+            // nilai akhirnya sudah keluar pun bisa menyembunyikan komponen
+            // sumatif yang diabaikan konfigurasi.
+            if ($result->ignoredComponents !== []) {
+                $ignored[$code] = $result->ignoredComponents;
+            }
 
             if (! $result->isComplete) {
                 $missing[$code] = $result->reason ?? 'Nilai akhir belum dapat dihitung.';
@@ -145,7 +166,12 @@ class ReportCardGenerator
             $class->school,
         );
 
-        return ['final_scores' => $finalScores, 'attitude' => $attitude, 'missing' => $missing];
+        return [
+            'final_scores' => $finalScores,
+            'attitude' => $attitude,
+            'missing' => $missing,
+            'ignored' => $ignored,
+        ];
     }
 
     /**

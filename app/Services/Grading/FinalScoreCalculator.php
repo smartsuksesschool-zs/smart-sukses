@@ -44,6 +44,16 @@ class FinalScoreCalculator
             array_keys($averages),
         );
 
+        // Komponen sumatif yang ada nilainya tetapi tidak tercantum di
+        // konfigurasi. Nilainya sudah terlanjur diinput guru, tetapi tidak
+        // pernah ikut menghitung apa pun — dan sampai sekarang tidak ada satu
+        // pun pesan yang mengatakannya. Dikumpulkan di sini agar bisa
+        // dilaporkan; perhitungannya sendiri tidak berubah.
+        $ignored = array_values(array_diff(
+            array_keys($averages),
+            array_map(fn (GradeType $type) => $type->value, $requiredTypes),
+        ));
+
         $snapshots = $this->weightsFrom($valid);
         $weights = [];
         $missing = [];
@@ -78,6 +88,7 @@ class FinalScoreCalculator
                 $averages,
                 $missing,
                 $config?->getKey(),
+                $ignored,
             );
         }
 
@@ -94,6 +105,7 @@ class FinalScoreCalculator
                 $averages,
                 $weights,
                 $config?->getKey(),
+                $ignored,
             );
         }
 
@@ -104,6 +116,7 @@ class FinalScoreCalculator
             componentWeights: $weights,
             missingComponents: [],
             gradeConfigId: $config?->getKey(),
+            ignoredComponents: $ignored,
         );
     }
 

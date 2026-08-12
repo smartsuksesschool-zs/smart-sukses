@@ -3,9 +3,18 @@
 namespace Tests\Feature\Grading;
 
 use App\Enums\GradeType;
+use App\Enums\ReportCardPdfStatus;
 use App\Filament\Resources\ReportCardResource;
+use App\Filament\Resources\ReportCardResource\Pages\ListReportCards;
+use App\Jobs\GenerateReportCardPdf;
 use App\Models\ReportCard;
+use App\Models\School;
 use App\Services\Grading\ReportCardGenerator;
+use App\Services\Grading\ReportCardPdfRenderer;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -102,5 +111,209 @@ class ReportCardPdfTest extends GradingTestCase
         $this->assertTrue($this->homeroom->can('downloadPdf', $reportCard));
         $this->assertTrue($this->admin->can('downloadPdf', $reportCard));
         $this->assertFalse($this->teacher->can('downloadPdf', $reportCard));
+    }
+
+    public function test_a_single_download_never_touches_the_queued_pdf_state(): void
+    {
+        // Unduhan satuan tetap sinkron: dirender saat itu juga, tidak disimpan,
+        // dan karena itu tidak boleh mengubah kolom pdf_* apa pun.
+        $reportCard = $this->publishedReportCard();
+
+        ReportCardResource::streamPdf($reportCard);
+
+        $reportCard->refresh();
+
+        $this->assertNull($reportCard->pdf_status);
+        $this->assertNull($reportCard->pdf_path);
+        $this->assertNull($reportCard->pdf_generated_at);
+    }
+
+    public function test_generating_pdfs_for_a_class_dispatches_one_job_per_report_card(): void
+    {
+        Queue::fake();
+
+        $reportCard = $this->publishedReportCard();
+
+        $this->actingAs($this->homeroom);
+
+        Livewire::test(ListReportCards::class)
+            ->callAction('generatePdfKelas', ['class_id' => $this->class->id]);
+
+        Queue::assertPushed(
+            GenerateReportCardPdf::class,
+            fn (GenerateReportCardPdf $job) => $job->reportCardId === $reportCard->getKey()
+                && $job->schoolId === $this->school->id,
+        );
+
+        Queue::assertPushed(GenerateReportCardPdf::class, 1);
+
+        // Antrean sudah menerima pekerjaannya, tetapi berkasnya jelas belum ada.
+        $this->assertSame(ReportCardPdfStatus::Queued, $reportCard->fresh()->pdf_status);
+        $this->assertFalse($reportCard->fresh()->hasDownloadablePdf());
+    }
+
+    public function test_the_job_writes_the_pdf_and_records_path_and_timestamp(): void
+    {
+        Storage::fake(ReportCard::PDF_DISK);
+
+        $reportCard = $this->publishedReportCard();
+
+        (new GenerateReportCardPdf($reportCard->getKey(), $this->school->id))
+            ->handle(app(ReportCardPdfRenderer::class));
+
+        $reportCard->refresh();
+
+        $expected = "rapor/{$this->school->id}/rapor_{$reportCard->getKey()}.pdf";
+
+        $this->assertSame($expected, $reportCard->pdf_path);
+        $this->assertSame(ReportCardPdfStatus::Ready, $reportCard->pdf_status);
+        $this->assertNotNull($reportCard->pdf_generated_at);
+
+        Storage::disk(ReportCard::PDF_DISK)->assertExists($expected);
+        $this->assertStringStartsWith(
+            '%PDF',
+            Storage::disk(ReportCard::PDF_DISK)->get($expected),
+        );
+
+        $this->assertTrue($reportCard->hasDownloadablePdf());
+    }
+
+    public function test_running_the_job_twice_overwrites_the_same_file(): void
+    {
+        // Idempoten: nama berkasnya deterministik, jadi pengulangan tidak
+        // menumpuk salinan baru.
+        Storage::fake(ReportCard::PDF_DISK);
+
+        $reportCard = $this->publishedReportCard();
+        $job = new GenerateReportCardPdf($reportCard->getKey(), $this->school->id);
+
+        $job->handle(app(ReportCardPdfRenderer::class));
+        $firstPath = $reportCard->fresh()->pdf_path;
+
+        $job->handle(app(ReportCardPdfRenderer::class));
+
+        $this->assertSame($firstPath, $reportCard->fresh()->pdf_path);
+        $this->assertCount(
+            1,
+            Storage::disk(ReportCard::PDF_DISK)->allFiles("rapor/{$this->school->id}"),
+        );
+    }
+
+    public function test_the_job_refuses_a_report_card_belonging_to_another_school(): void
+    {
+        Storage::fake(ReportCard::PDF_DISK);
+
+        $reportCard = $this->publishedReportCard();
+        $otherSchool = School::factory()->create();
+
+        // school_id yang dibawa job tidak cocok dengan pemilik rapor.
+        (new GenerateReportCardPdf($reportCard->getKey(), $otherSchool->id))
+            ->handle(app(ReportCardPdfRenderer::class));
+
+        $reportCard->refresh();
+
+        $this->assertNull($reportCard->pdf_path);
+        $this->assertNull($reportCard->pdf_status);
+        Storage::disk(ReportCard::PDF_DISK)->assertDirectoryEmpty('/');
+    }
+
+    public function test_a_deleted_report_card_makes_the_job_stop_quietly(): void
+    {
+        Storage::fake(ReportCard::PDF_DISK);
+
+        $reportCard = $this->publishedReportCard();
+        $id = $reportCard->getKey();
+        $reportCard->delete();
+
+        (new GenerateReportCardPdf($id, $this->school->id))
+            ->handle(app(ReportCardPdfRenderer::class));
+
+        Storage::disk(ReportCard::PDF_DISK)->assertDirectoryEmpty('/');
+    }
+
+    public function test_a_failed_job_never_leaves_a_misleading_ready_state(): void
+    {
+        Storage::fake(ReportCard::PDF_DISK);
+
+        $reportCard = $this->publishedReportCard();
+        $reportCard->markPdfQueued();
+
+        (new GenerateReportCardPdf($reportCard->getKey(), $this->school->id))
+            ->failed(new RuntimeException('dompdf meledak'));
+
+        $reportCard->refresh();
+
+        $this->assertSame(ReportCardPdfStatus::Failed, $reportCard->pdf_status);
+        $this->assertNull($reportCard->pdf_path);
+        $this->assertFalse($reportCard->hasDownloadablePdf());
+    }
+
+    public function test_a_failure_after_a_successful_run_keeps_the_previous_file(): void
+    {
+        // Kegagalan pembuatan ulang tidak boleh membuang PDF lama yang masih
+        // sah — tetapi statusnya harus jujur bahwa versi terbaru gagal.
+        Storage::fake(ReportCard::PDF_DISK);
+
+        $reportCard = $this->publishedReportCard();
+        $job = new GenerateReportCardPdf($reportCard->getKey(), $this->school->id);
+
+        $job->handle(app(ReportCardPdfRenderer::class));
+        $path = $reportCard->fresh()->pdf_path;
+        $generatedAt = $reportCard->fresh()->pdf_generated_at;
+
+        $job->failed(new RuntimeException('percobaan berikutnya gagal'));
+
+        $reportCard->refresh();
+
+        $this->assertSame(ReportCardPdfStatus::Failed, $reportCard->pdf_status);
+        $this->assertSame($path, $reportCard->pdf_path);
+        $this->assertEquals($generatedAt, $reportCard->pdf_generated_at);
+        Storage::disk(ReportCard::PDF_DISK)->assertExists($path);
+    }
+
+    public function test_a_ready_report_card_is_not_downloadable_once_the_file_disappears(): void
+    {
+        // Status saja tidak cukup: berkas bisa hilang dari disk tanpa
+        // sepengetahuan basis data.
+        Storage::fake(ReportCard::PDF_DISK);
+
+        $reportCard = $this->publishedReportCard();
+
+        (new GenerateReportCardPdf($reportCard->getKey(), $this->school->id))
+            ->handle(app(ReportCardPdfRenderer::class));
+
+        Storage::disk(ReportCard::PDF_DISK)->delete($reportCard->fresh()->pdf_path);
+
+        $this->assertFalse($reportCard->fresh()->hasDownloadablePdf());
+    }
+
+    public function test_the_stored_pdf_can_be_downloaded_from_the_table(): void
+    {
+        Storage::fake(ReportCard::PDF_DISK);
+
+        $reportCard = $this->publishedReportCard();
+
+        (new GenerateReportCardPdf($reportCard->getKey(), $this->school->id))
+            ->handle(app(ReportCardPdfRenderer::class));
+
+        $this->actingAs($this->homeroom);
+
+        Livewire::test(ListReportCards::class)
+            ->assertTableActionVisible('pdfFromStorage', $reportCard->fresh())
+            ->callTableAction('pdfFromStorage', $reportCard->fresh())
+            ->assertFileDownloaded();
+    }
+
+    public function test_the_stored_download_is_hidden_before_the_job_finishes(): void
+    {
+        Storage::fake(ReportCard::PDF_DISK);
+
+        $reportCard = $this->publishedReportCard();
+        $reportCard->markPdfQueued();
+
+        $this->actingAs($this->homeroom);
+
+        Livewire::test(ListReportCards::class)
+            ->assertTableActionHidden('pdfFromStorage', $reportCard->fresh());
     }
 }

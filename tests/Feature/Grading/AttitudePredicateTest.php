@@ -153,6 +153,114 @@ class AttitudePredicateTest extends GradingTestCase
         $this->assertSame('A', $this->resolver->resolve($average, $this->school)?->value);
     }
 
+    public function test_a_valid_custom_scale_still_resolves_every_predicate(): void
+    {
+        // Rentang tetap milik Admin — yang ditegakkan hanya koherensinya.
+        $this->school->update(['attitude_scale' => ['A' => 90, 'B' => 80, 'C' => 70, 'D' => 5]]);
+        $school = $this->school->fresh();
+
+        $this->assertSame('A', $this->resolver->resolve(100.0, $school)?->value);
+        $this->assertSame('A', $this->resolver->resolve(90.0, $school)?->value);
+        $this->assertSame('B', $this->resolver->resolve(89.0, $school)?->value);
+        $this->assertSame('B', $this->resolver->resolve(80.0, $school)?->value);
+        $this->assertSame('C', $this->resolver->resolve(79.0, $school)?->value);
+        $this->assertSame('C', $this->resolver->resolve(70.0, $school)?->value);
+        $this->assertSame('D', $this->resolver->resolve(69.0, $school)?->value);
+        $this->assertSame('D', $this->resolver->resolve(5.0, $school)?->value);
+    }
+
+    public function test_a_score_below_the_lowest_threshold_still_yields_d(): void
+    {
+        $this->school->update(['attitude_scale' => ['A' => 90, 'B' => 80, 'C' => 70, 'D' => 10]]);
+
+        // 4 berada di bawah batas terendah sekalipun; predikat terendah tetap
+        // yang berlaku, bukan NULL.
+        $this->assertSame('D', $this->resolver->resolve(4.0, $this->school->fresh())?->value);
+        $this->assertSame('D', $this->resolver->resolve(0.0, $this->school->fresh())?->value);
+    }
+
+    public function test_an_inverted_scale_is_rejected_when_saved(): void
+    {
+        // Inti perbaikan: A=50 dan B=80 masing-masing sah sebagai angka,
+        // tetapi gabungannya membalik predikat.
+        $this->actingAs($this->admin);
+
+        Livewire::test(PengaturanPenilaian::class)
+            ->fillForm([
+                'attitude_scale' => [
+                    ['predicate' => 'A', 'minimum' => 50],
+                    ['predicate' => 'B', 'minimum' => 80],
+                    ['predicate' => 'C', 'minimum' => 66],
+                    ['predicate' => 'D', 'minimum' => 0],
+                ],
+            ])
+            ->call('save')
+            ->assertHasFormErrors(['attitude_scale']);
+
+        $this->assertNull($this->school->fresh()->attitude_scale);
+    }
+
+    public function test_equal_thresholds_are_rejected_when_saved(): void
+    {
+        $this->actingAs($this->admin);
+
+        Livewire::test(PengaturanPenilaian::class)
+            ->fillForm([
+                'attitude_scale' => [
+                    ['predicate' => 'A', 'minimum' => 80],
+                    ['predicate' => 'B', 'minimum' => 80],
+                    ['predicate' => 'C', 'minimum' => 66],
+                    ['predicate' => 'D', 'minimum' => 0],
+                ],
+            ])
+            ->call('save')
+            ->assertHasFormErrors(['attitude_scale']);
+
+        $this->assertNull($this->school->fresh()->attitude_scale);
+    }
+
+    public function test_a_scale_outside_zero_to_one_hundred_is_rejected(): void
+    {
+        $this->actingAs($this->admin);
+
+        Livewire::test(PengaturanPenilaian::class)
+            ->fillForm([
+                'attitude_scale' => [
+                    ['predicate' => 'A', 'minimum' => 120],
+                    ['predicate' => 'B', 'minimum' => 80],
+                    ['predicate' => 'C', 'minimum' => 66],
+                    ['predicate' => 'D', 'minimum' => 0],
+                ],
+            ])
+            ->call('save')
+            ->assertHasFormErrors(['attitude_scale']);
+
+        $this->assertNull($this->school->fresh()->attitude_scale);
+    }
+
+    public function test_an_incoherent_stored_scale_falls_back_to_the_default(): void
+    {
+        // Jaring pengaman untuk data yang terlanjur tersimpan sebelum validasi
+        // ada, atau yang ditulis langsung ke basis data: lebih baik memakai
+        // rentang default daripada mengembalikan predikat yang terbalik.
+        $this->school->update(['attitude_scale' => ['A' => 50, 'B' => 80, 'C' => 66, 'D' => 0]]);
+        $school = $this->school->fresh();
+
+        $this->assertSame(AttitudePredicate::defaultScale(), $this->resolver->scaleFor($school));
+        $this->assertSame('B', $this->resolver->resolve(85.0, $school)?->value);
+        $this->assertSame('D', $this->resolver->resolve(60.0, $school)?->value);
+    }
+
+    public function test_an_incomplete_stored_scale_falls_back_to_the_default(): void
+    {
+        $this->school->update(['attitude_scale' => ['A' => 90, 'C' => 70]]);
+
+        $this->assertSame(
+            AttitudePredicate::defaultScale(),
+            $this->resolver->scaleFor($this->school->fresh()),
+        );
+    }
+
     public function test_attitude_without_a_summative_entry_yields_no_predicate(): void
     {
         $this->actingAs($this->teacher);

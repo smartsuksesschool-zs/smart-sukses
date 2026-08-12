@@ -3,12 +3,15 @@
 namespace Tests\Feature\Grading;
 
 use App\Enums\AssessmentType;
+use App\Enums\GradeConfigStatus;
 use App\Enums\GradeType;
 use App\Enums\RoleName;
 use App\Filament\Pages\InputNilai;
 use App\Filament\Resources\GradeResource\Pages\CreateGrade;
 use App\Models\ClassSubject;
 use App\Models\Grade;
+use App\Models\GradeConfig;
+use App\Models\School;
 use App\Models\Student;
 use App\Models\StudentClass;
 use App\Models\Subject;
@@ -163,6 +166,232 @@ class GradeInputTest extends GradingTestCase
             ->call('save');
 
         $this->assertSame(0, Grade::query()->count());
+    }
+
+    public function test_bulk_page_warns_when_the_component_is_not_in_the_configuration(): void
+    {
+        // C-6 — nilai tetap tersimpan, tetapi guru diberi tahu bahwa komponen
+        // itu tidak ikut menghitung nilai akhir.
+        $this->actingAs($this->teacher);
+        $this->activeConfig();
+
+        Livewire::test(InputNilai::class)
+            ->set('data.class_subject_id', $this->classSubject->id)
+            ->call('refreshStudentRows')
+            ->set('data.grade_type', GradeType::Skill->value)
+            ->set('data.assessment_type', AssessmentType::Summative->value)
+            ->set('data.rows.0.score', 95)
+            ->call('save');
+
+        $this->assertSame(1, Grade::query()->count());
+        $this->assertStringContainsString(
+            'tidak ada di Grade Config',
+            $this->lastNotificationBody(),
+        );
+    }
+
+    public function test_bulk_page_stays_quiet_for_a_configured_component(): void
+    {
+        $this->actingAs($this->teacher);
+        $this->activeConfig();
+
+        Livewire::test(InputNilai::class)
+            ->set('data.class_subject_id', $this->classSubject->id)
+            ->call('refreshStudentRows')
+            ->set('data.grade_type', GradeType::Daily->value)
+            ->set('data.assessment_type', AssessmentType::Summative->value)
+            ->set('data.rows.0.score', 95)
+            ->call('save');
+
+        $this->assertStringNotContainsString(
+            'tidak ada di Grade Config',
+            $this->lastNotificationBody(),
+        );
+    }
+
+    public function test_bulk_page_does_not_warn_about_formative_or_attitude_entries(): void
+    {
+        $this->actingAs($this->teacher);
+        $this->activeConfig();
+
+        // Formatif memang tidak dihitung, sikap dilaporkan terpisah — bukan
+        // kelalaian konfigurasi, jadi tidak perlu diperingatkan.
+        Livewire::test(InputNilai::class)
+            ->set('data.class_subject_id', $this->classSubject->id)
+            ->call('refreshStudentRows')
+            ->set('data.grade_type', GradeType::Skill->value)
+            ->set('data.assessment_type', AssessmentType::Formative->value)
+            ->set('data.rows.0.score', 95)
+            ->call('save');
+
+        Livewire::test(InputNilai::class)
+            ->set('data.class_subject_id', $this->classSubject->id)
+            ->call('refreshStudentRows')
+            ->set('data.grade_type', GradeType::Attitude->value)
+            ->set('data.assessment_type', AssessmentType::Summative->value)
+            ->set('data.rows.0.score', 95)
+            ->call('save');
+
+        $this->assertStringNotContainsString(
+            'tidak ada di Grade Config',
+            $this->lastNotificationBody(),
+        );
+    }
+
+    public function test_bulk_page_warns_when_the_configuration_is_locked(): void
+    {
+        // Keadaan siswa yang masuk setelah rapor sekelas terbit: versi terakhir
+        // sudah dikunci, sehingga tidak ada acuan bobot untuk nilai baru.
+        $this->actingAs($this->teacher);
+        $this->lockedConfig();
+
+        Livewire::test(InputNilai::class)
+            ->set('data.class_subject_id', $this->classSubject->id)
+            ->call('refreshStudentRows')
+            ->set('data.grade_type', GradeType::Daily->value)
+            ->set('data.assessment_type', AssessmentType::Summative->value)
+            ->set('data.rows.0.score', 80)
+            ->call('save');
+
+        $this->assertStringContainsString('LOCKED', $this->lastNotificationBody());
+        $this->assertStringContainsString('Buat Versi Baru', $this->lastNotificationBody());
+
+        // Nilai tetap tersimpan, tetapi tanpa snapshot bobot — perilaku ini
+        // tidak boleh berubah, hanya diberi penjelasan.
+        $grade = Grade::query()->sole();
+        $this->assertNull($grade->weight);
+        $this->assertNull($grade->grade_config_id);
+    }
+
+    public function test_the_locked_warning_never_unlocks_or_versions_anything(): void
+    {
+        // Larangan eksplisit keputusan butir 4: peringatan hanya memberi tahu.
+        $this->actingAs($this->teacher);
+        $locked = $this->lockedConfig();
+
+        Livewire::test(InputNilai::class)
+            ->set('data.class_subject_id', $this->classSubject->id)
+            ->call('refreshStudentRows')
+            ->set('data.grade_type', GradeType::Daily->value)
+            ->set('data.assessment_type', AssessmentType::Summative->value)
+            ->set('data.rows.0.score', 80)
+            ->call('save');
+
+        $this->assertSame(GradeConfigStatus::Locked, $locked->fresh()->status);
+        $this->assertSame(1, GradeConfig::query()->count());
+        $this->assertSame(0, GradeConfig::query()->where('status', GradeConfigStatus::Draft->value)->count());
+    }
+
+    public function test_a_subject_without_any_configuration_is_not_treated_as_locked(): void
+    {
+        // Belum pernah dikonfigurasi bukan hal yang sama dengan sudah dikunci:
+        // nilainya akan mendapat snapshot begitu konfigurasi pertama aktif.
+        $this->actingAs($this->teacher);
+
+        Livewire::test(InputNilai::class)
+            ->set('data.class_subject_id', $this->classSubject->id)
+            ->call('refreshStudentRows')
+            ->set('data.grade_type', GradeType::Daily->value)
+            ->set('data.assessment_type', AssessmentType::Summative->value)
+            ->set('data.rows.0.score', 80)
+            ->call('save');
+
+        $this->assertSame(1, Grade::query()->count());
+        $this->assertStringNotContainsString('LOCKED', $this->lastNotificationBody());
+    }
+
+    public function test_an_active_configuration_never_triggers_the_locked_warning(): void
+    {
+        // Versi lama yang sudah dikunci berdampingan dengan versi aktif —
+        // yang berlaku adalah yang aktif.
+        $this->actingAs($this->teacher);
+        $this->lockedConfig();
+
+        GradeConfig::factory()->active()->create([
+            'school_id' => $this->school->id,
+            'subject_id' => $this->subject->id,
+            'academic_year_id' => $this->year->id,
+            'created_by' => $this->admin->id,
+            'version' => 2,
+            'components' => [
+                ['type' => GradeType::Daily->value, 'weight' => 0.40],
+                ['type' => GradeType::Midterm->value, 'weight' => 0.30],
+                ['type' => GradeType::Final->value, 'weight' => 0.30],
+            ],
+        ]);
+
+        Livewire::test(InputNilai::class)
+            ->set('data.class_subject_id', $this->classSubject->id)
+            ->call('refreshStudentRows')
+            ->set('data.grade_type', GradeType::Daily->value)
+            ->set('data.assessment_type', AssessmentType::Summative->value)
+            ->set('data.rows.0.score', 80)
+            ->call('save');
+
+        $this->assertStringNotContainsString('LOCKED', $this->lastNotificationBody());
+        $this->assertSame('0.40', Grade::query()->sole()->weight);
+    }
+
+    public function test_a_locked_configuration_of_another_school_is_not_consulted(): void
+    {
+        // Mapel dan tahun ajaran sengaja dibuat identik, sehingga yang
+        // membedakan hanya school_id.
+        $this->actingAs($this->teacher);
+
+        GradeConfig::factory()->locked()->create([
+            'school_id' => School::factory()->create()->id,
+            'subject_id' => $this->subject->id,
+            'academic_year_id' => $this->year->id,
+            'created_by' => $this->admin->id,
+        ]);
+
+        Livewire::test(InputNilai::class)
+            ->set('data.class_subject_id', $this->classSubject->id)
+            ->call('refreshStudentRows')
+            ->set('data.grade_type', GradeType::Daily->value)
+            ->set('data.assessment_type', AssessmentType::Summative->value)
+            ->set('data.rows.0.score', 80)
+            ->call('save');
+
+        $this->assertStringNotContainsString('LOCKED', $this->lastNotificationBody());
+    }
+
+    public function test_the_locked_warning_stays_quiet_for_formative_and_attitude(): void
+    {
+        $this->actingAs($this->teacher);
+        $this->lockedConfig();
+
+        Livewire::test(InputNilai::class)
+            ->set('data.class_subject_id', $this->classSubject->id)
+            ->call('refreshStudentRows')
+            ->set('data.grade_type', GradeType::Daily->value)
+            ->set('data.assessment_type', AssessmentType::Formative->value)
+            ->set('data.rows.0.score', 80)
+            ->call('save');
+
+        $this->assertStringNotContainsString('LOCKED', $this->lastNotificationBody());
+    }
+
+    /**
+     * Konfigurasi yang sudah dikunci, tanpa versi aktif apa pun di belakangnya.
+     */
+    protected function lockedConfig(): GradeConfig
+    {
+        return GradeConfig::factory()->locked()->create([
+            'school_id' => $this->school->id,
+            'subject_id' => $this->subject->id,
+            'academic_year_id' => $this->year->id,
+            'created_by' => $this->admin->id,
+        ]);
+    }
+
+    /**
+     * Isi notifikasi Filament terakhir. Sesinya dibaca langsung karena
+     * memasang komponen Notifications ikut menguras antreannya.
+     */
+    protected function lastNotificationBody(): string
+    {
+        return (string) (collect(session('filament.notifications', []))->last()['body'] ?? '');
     }
 
     public function test_bulk_page_only_offers_class_subjects_taught_by_the_teacher(): void

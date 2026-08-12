@@ -6,6 +6,7 @@ use App\Enums\AttitudePredicate;
 use App\Models\GradeConfig;
 use App\Models\School;
 use App\Services\Grading\AttitudePredicateResolver;
+use Closure;
 use Filament\Forms;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -13,6 +14,7 @@ use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Keputusan Sprint 4 butir 3 — "Range attitude JANGAN hard-code. Simpan
@@ -89,10 +91,45 @@ class PengaturanPenilaian extends Page implements HasForms
                                     ->maxValue(100)
                                     ->step(0.01)
                                     ->required(),
+                            ])
+                            // Validasi per-field tidak cukup: A=50 dan B=80
+                            // masing-masing sah, tetapi gabungannya membalik
+                            // predikat. Koherensi antar-baris karena itu
+                            // diperiksa di tingkat repeater.
+                            ->rules([
+                                fn (): Closure => function (string $attribute, $value, Closure $fail): void {
+                                    try {
+                                        app(AttitudePredicateResolver::class)
+                                            ->validateScale(static::scaleFromRows((array) $value));
+                                    } catch (ValidationException $exception) {
+                                        $fail((string) collect($exception->errors())->flatten()->first());
+                                    }
+                                },
                             ]),
                     ]),
             ])
             ->statePath('data');
+    }
+
+    /**
+     * Baris repeater → peta predikat ke batas bawah.
+     *
+     * @param  array<int, mixed>  $rows
+     * @return array<string, mixed>
+     */
+    protected static function scaleFromRows(array $rows): array
+    {
+        $scale = [];
+
+        foreach ($rows as $row) {
+            $predicate = AttitudePredicate::tryFrom((is_array($row) ? $row['predicate'] : null) ?? '');
+
+            if ($predicate !== null) {
+                $scale[$predicate->value] = is_array($row) ? ($row['minimum'] ?? null) : null;
+            }
+        }
+
+        return $scale;
     }
 
     public function save(): void
@@ -109,16 +146,14 @@ class PengaturanPenilaian extends Page implements HasForms
             return;
         }
 
+        // getState() menjalankan validasi repeater lebih dulu, jadi skala yang
+        // urutannya terbalik tidak pernah sampai ke baris di bawahnya.
         $state = $this->form->getState();
-        $scale = [];
 
-        foreach ($state['attitude_scale'] ?? [] as $row) {
-            $predicate = AttitudePredicate::tryFrom($row['predicate'] ?? '');
-
-            if ($predicate !== null) {
-                $scale[$predicate->value] = (float) $row['minimum'];
-            }
-        }
+        $scale = array_map(
+            fn (mixed $minimum) => (float) $minimum,
+            static::scaleFromRows((array) ($state['attitude_scale'] ?? [])),
+        );
 
         $school->update(['attitude_scale' => $scale]);
 
