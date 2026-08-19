@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Http\Middleware\EnsurePasswordIsChanged;
+use App\Http\Middleware\RecordAuditIpAddress;
 use App\Http\Middleware\SetUserLocale;
 use App\Support\SchoolBranding;
 use Filament\Http\Middleware\Authenticate;
@@ -83,6 +84,9 @@ class AdminPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
+                // Rute panel tidak melewati grup `web`, jadi middleware audit
+                // dipasang di sini juga — polanya sama dengan SetUserLocale.
+                RecordAuditIpAddress::class,
             ])
             ->authMiddleware([
                 Authenticate::class,

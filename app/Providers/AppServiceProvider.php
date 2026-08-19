@@ -2,11 +2,14 @@
 
 namespace App\Providers;
 
+use App\Enums\AuditAction;
 use App\Enums\RoleName;
 use App\Models\User;
 use App\Policies\RolePolicy;
 use App\Policies\UserPolicy;
+use App\Support\AuditLogger;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -20,7 +23,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Singleton karena IP-nya disetel middleware di awal request lalu dibaca
+        // listener audit kapan pun terjadi write; instance baru per resolusi
+        // akan membuat IP itu hilang.
+        $this->app->singleton(AuditLogger::class);
     }
 
     /**
@@ -31,6 +37,7 @@ class AppServiceProvider extends ServiceProvider
         $this->configureAuthorization();
         $this->configurePasswordRules();
         $this->recordLastLogin();
+        $this->recordAuditTrail();
     }
 
     /**
@@ -57,6 +64,10 @@ class AppServiceProvider extends ServiceProvider
 
     /**
      * ERD 2.2 — users.last_login_at.
+     *
+     * `saveQuietly()` disengaja: penandaan waktu login bukan mutasi data bisnis,
+     * dan mencatatnya sebagai UPDATED akan membuat setiap login memproduksi satu
+     * baris audit yang tidak menerangkan apa-apa.
      */
     protected function recordLastLogin(): void
     {
@@ -65,5 +76,32 @@ class AppServiceProvider extends ServiceProvider
                 $event->user->forceFill(['last_login_at' => now()])->saveQuietly();
             }
         });
+    }
+
+    /**
+     * NFR 1.4 & Arsitektur 3.4 — jejak seluruh aksi CUD.
+     *
+     * Satu listener wildcard menangkap **setiap** model tanpa satu baris pun di
+     * model-modelnya: tidak ada trait yang bisa lupa dipasang saat modul baru
+     * ditambahkan. Aksi baca sengaja tidak didengarkan (Security 3.4 menyebut
+     * CUD, bukan CRUD — butir 45).
+     */
+    protected function recordAuditTrail(): void
+    {
+        $actions = [
+            'eloquent.created: *' => AuditAction::Created,
+            'eloquent.updated: *' => AuditAction::Updated,
+            'eloquent.deleted: *' => AuditAction::Deleted,
+        ];
+
+        foreach ($actions as $pattern => $action) {
+            Event::listen($pattern, function (string $eventName, array $payload) use ($action): void {
+                $model = $payload[0] ?? null;
+
+                if ($model instanceof Model) {
+                    app(AuditLogger::class)->record($model, $action);
+                }
+            });
+        }
     }
 }

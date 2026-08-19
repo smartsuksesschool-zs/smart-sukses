@@ -2,11 +2,13 @@
 
 namespace App\Services\Grading;
 
+use App\Enums\AuditAction;
 use App\Enums\GradeConfigStatus;
 use App\Enums\GradeType;
 use App\Models\GradeConfig;
 use App\Models\Scopes\SchoolScope;
 use App\Models\User;
+use App\Support\AuditLogger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -97,16 +99,36 @@ class GradeConfigVersionManager
         $this->validateComponents($config->components ?? []);
 
         return DB::transaction(function () use ($config): GradeConfig {
-            GradeConfig::query()
+            // Mass update lewat query builder tidak memicu model event, sehingga
+            // penguncian versi sebelumnya tidak akan pernah sampai ke listener
+            // audit. Id-nya diambil lebih dulu lalu dicatat eksplisit (butir 46).
+            // Paling banyak satu baris: unique index menjamin hanya satu ACTIVE
+            // per (cabang, mapel, tahun ajaran).
+            $lockedIds = GradeConfig::query()
                 ->withoutGlobalScope(SchoolScope::class)
                 ->where('school_id', $config->school_id)
                 ->forSubjectYear($config->subject_id, $config->academic_year_id)
                 ->active()
                 ->whereKeyNot($config->getKey())
-                ->update([
-                    'status' => GradeConfigStatus::Locked->value,
-                    'locked_at' => now(),
-                ]);
+                ->pluck('id')
+                ->all();
+
+            if ($lockedIds !== []) {
+                GradeConfig::query()
+                    ->withoutGlobalScope(SchoolScope::class)
+                    ->whereKey($lockedIds)
+                    ->update([
+                        'status' => GradeConfigStatus::Locked->value,
+                        'locked_at' => now(),
+                    ]);
+
+                app(AuditLogger::class)->recordMany(
+                    GradeConfig::class,
+                    $lockedIds,
+                    AuditAction::Updated,
+                    (int) $config->school_id,
+                );
+            }
 
             $config->forceFill([
                 'status' => GradeConfigStatus::Active,

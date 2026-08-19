@@ -840,6 +840,123 @@ memberi akses manajemen tenant. Field-nya diambil dari
 `SchoolResource::brandingSection()` supaya kedua jalur menyunting kolom yang sama dengan
 validasi yang sama.
 
+## Foundation Gap Batch 2 — Audit Log
+
+### 45. Audit log mencatat CUD, bukan CRUD
+
+| | |
+| --- | --- |
+| **Status** | Resolusi konflik antar dokumen |
+| **Dasar** | `03-architecture/04-security.md` — Audit Log |
+| **Bertentangan dengan** | `01-prd/04-non-functional-requirements.md` — baris Audit |
+
+Dua dokumen menyebut cakupan yang berbeda:
+
+| Dokumen | Bunyi |
+| --- | --- |
+| NFR 1.4 | *"Semua aksi **CRUD** dicatat di tabel audit_logs dengan user & timestamp"* |
+| Security 3.4 | *"Semua aksi **CUD** (Create, Update, Delete) dicatat: user, action, table, id, timestamp, IP"* |
+
+Yang dipakai adalah **Security 3.4**: ia lebih spesifik — menyebut singkatannya secara
+eksplisit *dan* merinci setiap field yang harus disimpan, sementara NFR hanya menyebut
+"CRUD" sambil lalu dengan dua field. Mencatat aksi baca juga akan membuat tabel audit
+tumbuh berkali lipat lebih cepat daripada data yang diauditnya, tanpa menambah satu pun
+informasi yang dapat ditindaklanjuti. `App\Enums\AuditAction` karena itu hanya mengenal
+CREATED, UPDATED, DELETED.
+
+**Kolom `changes` sengaja tidak dibuat.** Tidak satu pun dari kedua dokumen memintanya,
+dan menambahkannya berarti menyimpan salinan setiap perubahan data — termasuk data pribadi
+siswa dan orang tua — di tabel yang aturan retensinya belum ditetapkan siapa pun.
+Konsekuensi yang perlu diketahui: baris UPDATED memberi tahu *siapa mengubah record mana
+dan kapan*, tetapi tidak *apa yang berubah*. Bila kelak dibutuhkan, kolom itu dapat
+ditambah tanpa mengubah mekanisme penangkapannya.
+
+**Tidak ada penghapusan otomatis.** Tidak ada requirement retensi untuk audit log; yang ada
+hanya retensi 90 hari untuk notifikasi (NOTIF-04), dan itu modul berbeda. Menghapus jejak
+audit tanpa dasar bertentangan dengan tujuan tabel ini, jadi barisnya tidak pernah
+dibuang — juga tidak punya `updated_at`, karena tidak pernah berubah.
+
+**Kewenangan membaca.** Matriks PRD 1.1.2 tidak memiliki baris Audit Log dan
+`App\Enums\PermissionName` tidak punya `audit.*`. Membuat izin baru akan melanggar pola
+yang dipegang sejak Sprint 2 (butir 7 & 18), sehingga `AuditLogPolicy` menumpang izin
+paling ketat yang sudah ada: `tenant.view` — pada matriks hanya dimiliki SUPER_ADMIN.
+Bila client kelak menghendaki Admin Sekolah membaca jejak cabangnya sendiri, yang perlu
+ditambah adalah baris matriks, bukan kodenya.
+
+**"Custom Middleware + Event" dipakai keduanya, masing-masing untuk alasannya sendiri.**
+Bagian *Event* adalah satu listener wildcard di `AppServiceProvider` yang menangkap setiap
+model tanpa trait di model mana pun — tidak ada yang bisa lupa dipasangi saat modul baru
+lahir. Bagian *Middleware* (`RecordAuditIpAddress`) hanya menyerahkan IP klien, dan itu
+bukan formalitas: di CLI, Symfony mengisi `REMOTE_ADDR` dengan `127.0.0.1` sebagai bawaan,
+sehingga membaca `request()->ip()` langsung akan membuat setiap baris hasil seeder dan
+worker antrean tercatat ber-IP padahal tidak punya klien sama sekali. Karena hanya
+middleware yang mengisinya, **NULL berarti benar-benar tidak ada request** — bukan sekadar
+tidak terbaca.
+
+Yang **tidak** diaudit, beserta alasannya:
+
+| Dilewati | Alasan |
+| --- | --- |
+| `AuditLog` sendiri | Menulis baris audit memicu event `created` miliknya sendiri — rekursi tak terbatas |
+| `Role` & `Permission` (spatie) | **Oleh listener otomatis saja** — supaya `RolePermissionSeeder` yang membuat 8 peran dan puluhan izin tidak melahirkan puluhan baris audit di setiap seed dan setiap test |
+| Penugasan peran ke user (`model_has_roles`) | Pivot `belongsToMany` tidak memicu model event sama sekali, dan `config/permission.php` menyetel `events_enabled => false` |
+| `users.last_login_at` | Ditulis `saveQuietly()` sejak Sprint 1: penandaan waktu login bukan mutasi data bisnis, dan mencatatnya akan memproduksi satu baris audit per login yang tidak menerangkan apa-apa |
+| Aksi baca | Security 3.4 menyebut CUD |
+
+**Batasan yang diketahui:** perubahan kewenangan lewat panel — peran seorang pengguna
+maupun izin sebuah peran — belum terekam listener ini. Keduanya disimpan lewat relationship
+`belongsToMany`, dan `sync()` tidak memicu model event apa pun.
+
+### 46. Dua jalur write yang tidak memicu model event
+
+Listener wildcard hanya mendengar event Eloquent. Penelusuran seluruh jalur write di
+`app/` menemukan **dua** tempat yang memutakhirkan baris lewat query builder, sehingga
+tidak akan pernah sampai ke listener:
+
+| Lokasi | Yang dilakukan |
+| --- | --- |
+| `AcademicYear::activate()` | Menonaktifkan tahun ajaran lain di cabang yang sama (API 4.6 — *"menonaktifkan yang lain"*) |
+| `GradeConfigVersionManager::activate()` | Mengunci versi konfigurasi yang sebelumnya ACTIVE (keputusan Sprint 4 butir 4) |
+
+Keduanya bukan detail sepele: sebuah Grade Config yang berpindah ke LOCKED mengubah cara
+nilai dihitung, dan tahun ajaran yang nonaktif memindahkan seluruh konteks akademik cabang.
+Justru perubahan seperti inilah yang paling perlu terlacak.
+
+Penyelesaiannya paling kecil yang benar: id yang terdampak diambil lebih dulu, lalu dicatat
+eksplisit lewat `AuditLogger::recordMany()`. Biayanya satu query `pluck` tambahan, dan
+paling banyak **satu** baris pada masing-masing kasus — ERD menjamin hanya satu tahun
+ajaran aktif per cabang, dan unique index menjamin hanya satu Grade Config ACTIVE per
+(cabang, mapel, tahun ajaran). Perilaku bisnis kedua method tidak berubah sama sekali.
+
+Jalur write lain sudah tercakup listener karena semuanya melewati model: `create()`,
+`update()`, `updateOrCreate()`, `forceFill()->save()`, `delete()`, importer Excel, job
+antrean, dan seluruh aksi Filament. Tidak ada `DB::table()` di seluruh `app/`.
+
+**Seeder ikut menghasilkan baris audit, dan itu memang dibiarkan.** Menonaktifkannya
+menuntut pengecualian khusus yang tidak diminta dokumen mana pun, sedangkan data yang lahir
+dari seeder tetap data yang masuk ke sistem — `user_id` dan `ip_address`-nya NULL, dan
+itulah yang membedakannya dari aksi manusia.
+
+### 48. Biaya query audit: satu INSERT per aksi, tanpa pembacaan tambahan
+
+`AuditLogger::record()` tidak menjalankan satu pun query baca: `shouldAudit()` murni PHP,
+`schoolIdFor()` membaca atribut yang sudah dimuat, `Auth::id()` memakai pengguna yang sudah
+ter-resolve, dan IP diambil dari properti yang diisi middleware. Yang tersisa hanyalah satu
+`INSERT` — dan itu memang harga yang diminta requirement.
+
+**Risiko yang perlu diketahui:**
+`ReportCardPublishTest::test_generating_does_not_issue_queries_per_student` menjaga bahwa
+menambah siswa tidak menambah query secara sebanding. Setelah audit aktif, angkanya
+**11 → 14 query** dengan ambang 15 — lolos, tetapi hanya bersisa **satu** query. Fitur
+berikutnya yang menambah satu penulisan per siswa akan membalikkannya.
+
+Ambang itu **tidak dilonggarkan**: melonggarkan test yang masih hijau hanya menghapus
+peringatan dini. Tidak ada pula optimasi yang aman untuk diambil — mem-*batch* baris audit
+sampai akhir transaksi akan menambah state buffer dan menunda kemunculan jejak, dua hal yang
+tidak diminta siapa pun demi satu query. Bila ambang itu kelak benar-benar tertembus,
+yang perlu diperiksa lebih dulu adalah apakah generate rapor memang menambah penulisan baru
+— bukan angkanya.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

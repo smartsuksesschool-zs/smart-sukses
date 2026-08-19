@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Enums\AuditAction;
 use App\Models\Concerns\BelongsToSchool;
+use App\Support\AuditLogger;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -74,11 +76,32 @@ class AcademicYear extends Model
     public function activate(): void
     {
         DB::transaction(function (): void {
-            static::query()
+            $deactivated = static::query()
                 ->withoutGlobalScopes()
                 ->where('school_id', $this->school_id)
                 ->whereKeyNot($this->getKey())
-                ->update(['is_active' => false]);
+                ->where('is_active', true);
+
+            // Mass update lewat query builder tidak memicu model event, jadi
+            // penonaktifan tahun ajaran lain tidak akan pernah sampai ke
+            // listener audit. Id-nya diambil lebih dulu lalu dicatat eksplisit
+            // (butir 46). Satu query tambahan, dan paling banyak satu baris —
+            // ERD menjamin hanya satu tahun ajaran aktif per cabang.
+            $ids = $deactivated->pluck('id')->all();
+
+            if ($ids !== []) {
+                static::query()
+                    ->withoutGlobalScopes()
+                    ->whereKey($ids)
+                    ->update(['is_active' => false]);
+
+                app(AuditLogger::class)->recordMany(
+                    static::class,
+                    $ids,
+                    AuditAction::Updated,
+                    (int) $this->school_id,
+                );
+            }
 
             $this->forceFill(['is_active' => true])->save();
         });

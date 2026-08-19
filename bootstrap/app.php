@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\RecordAuditIpAddress;
 use App\Http\Middleware\SetUserLocale;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -14,6 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
             SetUserLocale::class,
+            // Arsitektur 3.4 — bagian "Custom Middleware" dari audit log.
+            RecordAuditIpAddress::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
