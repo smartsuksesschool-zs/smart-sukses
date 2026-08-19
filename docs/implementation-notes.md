@@ -5,6 +5,10 @@ Catatan penyimpangan implementasi terhadap `smartsukses-docs/`. Folder
 dokumen ini hanya mencatat titik-titik di mana kode sengaja berbeda dari ERD,
 beserta alasan dan referensi dokumennya.
 
+> Mencari cara **menjalankan demo**-nya, bukan alasannya? Lihat
+> [`demo-sprint-4.md`](demo-sprint-4.md) — seeder, queue worker, akun demo, dan urutan
+> peragaan Input Nilai → Import → Generate Rapor → Terbitkan → PDF.
+
 ## Phase 2 — Authentication & RBAC
 
 ### 1. Kolom `users.must_change_password`
