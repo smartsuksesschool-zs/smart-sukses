@@ -443,6 +443,7 @@ dapat berjalan. Semuanya terisolasi di service dan mudah diubah:
 | Total bobot snapshot yang tidak berjumlah 1.00 | Nilai akhir **tidak dihitung**. Lihat butir 34 | `FinalScoreCalculator::calculate()` |
 | Predikat sikap dari beberapa entri ATTITUDE | Rata-rata entri **sumatif** saja, lalu dipetakan ke predikat. Entri sikap berjenis FORMATIVE adalah catatan proses dan tidak menggeser predikat di rapor — pembedaan formatif/sumatif pada keputusan butir 3 berlaku untuk seluruh isi rapor, bukan hanya nilai akademik | `ComponentScoreAggregator::attitudeAverage()` |
 | Siswa yang dibuatkan rapor saat generate | Hanya siswa berstatus ACTIVE. `Student::inClass()` sendiri hanya memeriksa status pivot `student_classes`, sehingga siswa yang sudah lulus/pindah tetapi pivot-nya belum ditutup akan ikut terjaring bila statusnya tidak diperiksa | `ReportCardGenerator::studentsOf()` |
+| Komponen wajib bila konfigurasi tidak dapat dilacak sama sekali (tidak ada satu pun nilai yang membawa `grade_config_id`) | Nilai akhir **tidak dihitung**, dan susunan komponennya **tidak ditebak** dari nilai yang kebetulan ada. Menebaknya membuat mapel tanpa Grade Config seolah punya susunan komponen, padahal keputusan butir 3 menyatakan komponen akademik hanya dihitung bila ditetapkan Grade Config. Rata-rata per komponen tetap dilaporkan agar nilainya tidak terkesan hilang | `FinalScoreCalculator::calculate()` |
 
 ### 31. Paket baru: `barryvdh/laravel-dompdf`
 
@@ -533,6 +534,47 @@ mengampu mata pelajaran tersebut sudah memegang rapor terbit**
 (`ReportCardGenerator::isFullyReported()`) — definisi "finalisasi semester" yang
 paling dekat dengan yang bisa ditegakkan data yang ada. Konsekuensinya: satu kelas
 yang selesai lebih dulu tidak mengunci kelas lain yang masih menilai.
+
+### 36. Formula NILAI-02 digeneralisasi ke n komponen
+
+| | |
+| --- | --- |
+| **Status** | Perluasan aturan yang disengaja |
+| **Dasar** | Keputusan Sprint 4 butir 3 — "Skill dapat menjadi komponen nilai akhir tersendiri dan bobotnya configurable di Grade Config." |
+| **Bertentangan dengan** | `01-prd/02-features-phase1.md` — NILAI-02 poin 2 |
+
+PRD menuliskan formulanya dengan **tiga komponen tetap**: *"Nilai Akhir = (Harian × bobot)
++ (UTS × bobot) + (UAS × bobot)"*. ERD pun hanya mencontohkan `DAILY` dan `MIDTERM` pada
+`grade_configs.components`. Keduanya tidak pernah menyebut SKILL maupun ASSIGNMENT sebagai
+bagian nilai akhir — SKILL hanya muncul sebagai salah satu nilai ENUM `grades.grade_type`.
+
+Keputusan butir 3 menyatakan sebaliknya untuk SKILL, dan konsekuensi wajarnya berlaku juga
+untuk ASSIGNMENT yang sama-sama terdaftar di ENUM itu. Formula karena itu diimplementasikan
+sebagai penjumlahan atas **komponen apa pun yang tercantum di Grade Config**:
+
+```
+Nilai Akhir = Σ (rata-rata komponen × bobot snapshot komponen)
+```
+
+Yang tetap dijaga persis seperti PRD: hasil dibulatkan 2 desimal, dan total bobot wajib
+1.00. Konfigurasi Harian 40 · UTS 30 · UAS 30 menghasilkan angka yang identik dengan
+formula literal PRD — perluasan ini menambah kemungkinan, bukan mengubah perhitungan yang
+sudah ada.
+
+Batasnya tetap dua, dan keduanya ditegakkan:
+
+- **ATTITUDE tidak boleh menjadi komponen berbobot.** `GradeType::isAcademic()`
+  mengecualikannya, form Grade Config tidak menawarkannya (`GradeType::academicOptions()`),
+  dan `GradeConfigVersionManager::validateComponents()` menolaknya secara eksplisit —
+  sehingga tidak dapat dimasukkan sekalipun sengaja dicoba.
+- **Komponen yang tidak ada di Grade Config tidak ikut menghitung**, termasuk SKILL.
+  Nilainya tetap tersimpan dan dilaporkan lewat `FinalScoreResult::$ignoredComponents`
+  (butir C-6), bukan dibuang.
+
+**Jika PRD ingin dipertahankan literal:** batasi pilihan komponen pada form Grade Config
+menjadi `DAILY`, `MIDTERM`, `FINAL` saja, dan tolak konfigurasi yang memuat `SKILL` atau
+`ASSIGNMENT` di `validateComponents()`. `FinalScoreCalculator` tidak perlu diubah — ia
+hanya mengikuti apa pun yang ditetapkan konfigurasi.
 
 ### 37. Pemilihan cabang pada Pengaturan Penilaian untuk Super Admin
 

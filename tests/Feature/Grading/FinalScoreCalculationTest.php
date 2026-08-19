@@ -304,6 +304,28 @@ class FinalScoreCalculationTest extends GradingTestCase
         $this->assertSame(82.5, $result->score);
     }
 
+    public function test_a_subject_without_a_traceable_configuration_is_not_scored(): void
+    {
+        // Keputusan butir 3 — komponen akademik hanya dihitung bila ditetapkan
+        // Grade Config. Tanpa konfigurasi yang terlacak, susunan komponennya
+        // tidak boleh ditebak dari nilai yang kebetulan ada.
+        $this->grade(GradeType::Daily, 80);
+        $this->grade(GradeType::Midterm, 75);
+        $this->grade(GradeType::Final, 85);
+
+        $result = $this->calculator->calculate($this->grades());
+
+        $this->assertFalse($result->isComplete);
+        $this->assertNull($result->score);
+
+        // Tidak ada komponen yang "hilang" — yang tidak ada adalah konfigurasinya.
+        $this->assertSame([], $result->missingComponents);
+        $this->assertStringContainsString('Grade Config belum ditetapkan', (string) $result->reason);
+
+        // Nilainya sendiri tidak hilang; rata-ratanya tetap dilaporkan.
+        $this->assertSame(80.0, $result->componentAverages[GradeType::Daily->value]);
+    }
+
     public function test_component_without_a_snapshot_is_not_patched_from_the_configuration(): void
     {
         // Keputusan butir 2: bobot rapor berasal dari snapshot nilai, bukan

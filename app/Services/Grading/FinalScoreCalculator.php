@@ -37,12 +37,23 @@ class FinalScoreCalculator
         $averages = $this->aggregator->averagesByType($valid);
         $config = $this->configUsedBy($valid);
 
-        // Komponen yang wajib terisi ditentukan konfigurasi yang dipakai; bila
-        // tidak terlacak, pakai komponen yang benar-benar ada nilainya.
-        $requiredTypes = $config?->componentTypes() ?? array_map(
-            fn (string $type) => GradeType::from($type),
-            array_keys($averages),
-        );
+        // Tanpa konfigurasi yang terlacak tidak ada yang bisa menyatakan
+        // komponen mana yang wajib. Menebaknya dari nilai yang kebetulan ada
+        // akan membuat mata pelajaran tanpa Grade Config tampak punya susunan
+        // komponen — padahal keputusan butir 3 menyatakan komponen akademik
+        // hanya dihitung bila ditetapkan Grade Config. Hasilnya tetap sama
+        // seperti sebelumnya (nilai akhir tidak dihitung), yang berubah hanya
+        // alasannya: kini menyebut penyebab sebenarnya.
+        if ($config === null) {
+            return FinalScoreResult::incomplete(
+                'Grade Config belum ditetapkan untuk mata pelajaran ini, sehingga tidak ada '
+                    .'bobot yang dapat dipakai menghitung nilai akhir. Aktifkan Grade Config '
+                    .'lalu generate rapor kembali.',
+                $averages,
+            );
+        }
+
+        $requiredTypes = $config->componentTypes();
 
         // Komponen sumatif yang ada nilainya tetapi tidak tercantum di
         // konfigurasi. Nilainya sudah terlanjur diinput guru, tetapi tidak
