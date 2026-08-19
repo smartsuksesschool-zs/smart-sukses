@@ -14,6 +14,13 @@ class School extends Model
 {
     use HasFactory;
 
+    /**
+     * Disk penyimpanan logo white-label. Mengikuti pola `students.photo_url`
+     * dan berkas PPDB (butir 17): logo memang harus dapat dimuat browser tanpa
+     * otorisasi, karena ikut tampil di halaman publik PPDB.
+     */
+    public const LOGO_DISK = 'public';
+
     protected $fillable = [
         'name',
         'code',

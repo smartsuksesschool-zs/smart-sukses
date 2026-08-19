@@ -732,6 +732,42 @@ Yang membuatnya perlu dirapikan: `mutateFormDataBeforeCreate()` memanggil
 memakai dua facade berbeda akan menyimpang diam-diam bila suatu saat guard panel dipisah
 dari guard bawaan. Disatukan ke `Auth::user()`, mengikuti mayoritas.
 
+## Foundation Gap Batch 1 — Manajemen Tenant & White-Label
+
+Menutup dua baris matriks PRD 1.1.2 yang belum punya UI sama sekali: "Manajemen
+Tenant/Cabang" (hanya SUPER_ADMIN) dan "White-label Settings" (SUPER_ADMIN + SCHOOL_ADMIN),
+beserta AUTH-03 dan API 4.3. Tidak ada kolom baru — seluruhnya memakai `schools` apa adanya.
+
+### 43. Cabang tidak memiliki jalur hapus
+
+API 4.3 hanya mengenal `PATCH /admin/schools/{id}/toggle`; tidak ada `DELETE`. Menghapus
+tenant akan memutus seluruh data akademik, keuangan, dan rapor yang menggantung padanya.
+
+`SchoolPolicy::delete()` karena itu selalu mengembalikan `false` — tetapi itu **bukan**
+yang menutup jalurnya bagi Super Admin: `Gate::before` (Arsitektur 3.2.2) meloloskan Super
+Admin sebelum policy mana pun dievaluasi. Yang benar-benar menutupnya adalah tidak adanya
+aksi hapus di mana pun — tidak di tabel, tidak di halaman edit, tidak sebagai bulk action.
+`SchoolManagementTest::test_no_delete_path_is_exposed_for_a_branch` menjaga ketiadaan itu,
+bukan sekadar menguji policy-nya.
+
+### 44. `schools` adalah satu-satunya tabel bisnis tanpa `school_id`
+
+Tabel ini *adalah* tenant-nya, sehingga `SchoolScope` tidak berlaku dan `School::query()`
+mengembalikan seluruh cabang bagi siapa pun yang berhasil menjalankannya. Isolasinya
+karena itu ditegakkan dua lapis:
+
+1. **Policy** — `SchoolPolicy` menuntut izin `tenant.*` (hanya SUPER_ADMIN pada matriks)
+   dan, untuk peran School Level, mensyaratkan `user.school_id === school.id`.
+2. **Query** — `SchoolResource::getEloquentQuery()` menyaring ke cabang sendiri bagi
+   non-Super Admin. Konsekuensi yang disengaja: menebak URL cabang lain menghasilkan
+   **404, bukan 403** — keberadaan cabang itu pun tidak terkonfirmasi.
+
+Penyuntingan tampilan dipisahkan ke halaman `PengaturanTampilan` dengan izin
+`white_label.manage`, karena matriks memberi SCHOOL_ADMIN akses white-label **tanpa**
+memberi akses manajemen tenant. Field-nya diambil dari
+`SchoolResource::brandingSection()` supaya kedua jalur menyunting kolom yang sama dengan
+validasi yang sama.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
