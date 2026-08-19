@@ -597,6 +597,26 @@ Yang **tidak** ikut dibuat: export nilai ke Excel. `StudentResource` memilikinya
 SIS-05 memintanya eksplisit; tidak ada requirement setara untuk nilai di seluruh blueprint.
 Template di atas bukan export — isinya kosong dan tidak membawa satu pun data nilai.
 
+### 40. Facade autentikasi di halaman Filament: `Auth`, bukan `Filament::auth()`
+
+| | |
+| --- | --- |
+| **Status** | Konsistensi internal, tanpa perubahan perilaku |
+| **Dasar** | Tidak diatur blueprint — dipilih mengikuti pola yang sudah berjalan |
+
+`CreateGradeConfig` sempat memakai `Filament::auth()->user()`, satu-satunya pemakaian
+facade itu di seluruh `app/`. Sebelas berkas Filament lain — termasuk `CreateGrade` dan
+`CreateUser` yang sejenis — memakai `Auth::user()` / `Auth::id()`.
+
+Keduanya menghasilkan pengguna yang sama: `AdminPanelProvider` menyetel
+`->authGuard('web')`, dan guard bawaan aplikasi juga `web` (`config/auth.php`). Jadi ini
+murni soal konsistensi, bukan perilaku.
+
+Yang membuatnya perlu dirapikan: `mutateFormDataBeforeCreate()` memanggil
+`GradeConfigResource::resolveSchoolId()`, yang membaca `Auth::user()`. Satu alur yang
+memakai dua facade berbeda akan menyimpang diam-diam bila suatu saat guard panel dipisah
+dari guard bawaan. Disatukan ke `Auth::user()`, mengikuti mayoritas.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

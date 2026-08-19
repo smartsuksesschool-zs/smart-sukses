@@ -82,6 +82,140 @@ class GradeConfigVersioningTest extends TestCase
         $this->assertSame($this->admin->id, $config->created_by);
     }
 
+    /**
+     * Super Admin adalah peran Platform Level dengan school_id = NULL
+     * (SchoolScope::currentSchoolId() sengaja melepas scope untuk mereka),
+     * sehingga cabang konfigurasi harus datang dari form.
+     */
+    public function test_super_admin_creates_configuration_for_the_chosen_school(): void
+    {
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        Livewire::test(CreateGradeConfig::class)
+            ->fillForm([
+                'school_id' => $this->school->id,
+                'subject_id' => $this->subject->id,
+                'academic_year_id' => $this->year->id,
+                'components' => [
+                    ['type' => GradeType::Daily->value, 'weight' => 0.40],
+                    ['type' => GradeType::Midterm->value, 'weight' => 0.30],
+                    ['type' => GradeType::Final->value, 'weight' => 0.30],
+                ],
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $config = GradeConfig::query()->withoutGlobalScopes()->firstOrFail();
+
+        $this->assertSame($this->school->id, $config->school_id);
+        $this->assertSame(GradeConfigStatus::Draft, $config->status);
+        $this->assertSame(1, $config->version);
+        $this->assertNotNull($config->created_by);
+    }
+
+    public function test_super_admin_must_choose_a_school(): void
+    {
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        Livewire::test(CreateGradeConfig::class)
+            ->fillForm([
+                'subject_id' => $this->subject->id,
+                'academic_year_id' => $this->year->id,
+                'components' => [
+                    ['type' => GradeType::Daily->value, 'weight' => 0.40],
+                    ['type' => GradeType::Midterm->value, 'weight' => 0.30],
+                    ['type' => GradeType::Final->value, 'weight' => 0.30],
+                ],
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['school_id']);
+
+        $this->assertSame(0, GradeConfig::query()->withoutGlobalScopes()->count());
+    }
+
+    /**
+     * Global scope tidak membatasi apa pun bagi Super Admin, jadi tanpa
+     * penyaringan per cabang mereka dapat memasangkan mapel cabang lain dengan
+     * cabang yang sedang dipilih.
+     */
+    public function test_super_admin_cannot_pair_a_subject_from_another_school(): void
+    {
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        $otherSchool = School::factory()->create();
+        $otherSubject = Subject::factory()->create(['school_id' => $otherSchool->id, 'code' => 'BIN']);
+
+        Livewire::test(CreateGradeConfig::class)
+            ->fillForm([
+                'school_id' => $this->school->id,
+                'subject_id' => $otherSubject->id,
+                'academic_year_id' => $this->year->id,
+                'components' => [
+                    ['type' => GradeType::Daily->value, 'weight' => 0.40],
+                    ['type' => GradeType::Midterm->value, 'weight' => 0.30],
+                    ['type' => GradeType::Final->value, 'weight' => 0.30],
+                ],
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['subject_id']);
+
+        $this->assertSame(0, GradeConfig::query()->withoutGlobalScopes()->count());
+    }
+
+    public function test_super_admin_cannot_pair_an_academic_year_from_another_school(): void
+    {
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        $otherSchool = School::factory()->create();
+        $otherYear = AcademicYear::factory()->create(['school_id' => $otherSchool->id]);
+
+        Livewire::test(CreateGradeConfig::class)
+            ->fillForm([
+                'school_id' => $this->school->id,
+                'subject_id' => $this->subject->id,
+                'academic_year_id' => $otherYear->id,
+                'components' => [
+                    ['type' => GradeType::Daily->value, 'weight' => 0.40],
+                    ['type' => GradeType::Midterm->value, 'weight' => 0.30],
+                    ['type' => GradeType::Final->value, 'weight' => 0.30],
+                ],
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['academic_year_id']);
+
+        $this->assertSame(0, GradeConfig::query()->withoutGlobalScopes()->count());
+    }
+
+    /**
+     * Field cabang tidak dirender untuk Admin Sekolah, sehingga nilai yang
+     * diselundupkan ke state Livewire tidak boleh ikut tersimpan.
+     */
+    public function test_school_admin_cannot_create_configuration_for_another_school(): void
+    {
+        $otherSchool = School::factory()->create();
+
+        Livewire::test(CreateGradeConfig::class)
+            // Diselundupkan lebih dulu; field ini tidak dirender untuk Admin
+            // Sekolah, sehingga hanya berupa kunci liar pada state Livewire.
+            ->set('data.school_id', $otherSchool->id)
+            ->fillForm([
+                'subject_id' => $this->subject->id,
+                'academic_year_id' => $this->year->id,
+                'components' => [
+                    ['type' => GradeType::Daily->value, 'weight' => 0.40],
+                    ['type' => GradeType::Midterm->value, 'weight' => 0.30],
+                    ['type' => GradeType::Final->value, 'weight' => 0.30],
+                ],
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $config = GradeConfig::query()->withoutGlobalScopes()->firstOrFail();
+
+        $this->assertSame($this->school->id, $config->school_id);
+        $this->assertNotSame($otherSchool->id, $config->school_id);
+    }
+
     public function test_component_weights_must_total_one(): void
     {
         Livewire::test(CreateGradeConfig::class)

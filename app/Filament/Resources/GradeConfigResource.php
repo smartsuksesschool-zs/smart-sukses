@@ -17,6 +17,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rules\Exists;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -47,19 +48,63 @@ class GradeConfigResource extends Resource
             Forms\Components\Section::make('Cakupan')
                 ->columns(2)
                 ->schema([
+                    // Super Admin tidak memiliki school_id (SchoolScope::currentSchoolId()
+                    // sengaja NULL untuk mereka), sehingga cabang harus dipilih di sini.
+                    // Pola ini mengikuti UserResource: field cabang hanya muncul bagi
+                    // Super Admin, sedangkan Admin Sekolah terikat cabangnya sendiri.
+                    Forms\Components\Select::make('school_id')
+                        ->label('Cabang Sekolah')
+                        ->relationship(
+                            name: 'school',
+                            titleAttribute: 'name',
+                            modifyQueryUsing: fn ($query) => $query->where('is_active', true),
+                        )
+                        ->searchable()
+                        ->preload()
+                        ->required()
+                        ->live()
+                        // Mapel & tahun ajaran milik cabang lama tidak berlaku lagi.
+                        ->afterStateUpdated(function (Forms\Set $set): void {
+                            $set('subject_id', null);
+                            $set('academic_year_id', null);
+                        })
+                        ->visible(fn () => Auth::user()?->isSuperAdmin())
+                        // Memindahkan konfigurasi antar cabang akan memutusnya dari
+                        // mapel dan nilai yang sudah menyalin bobotnya.
+                        ->disabledOn('edit')
+                        ->columnSpanFull()
+                        ->helperText('Konfigurasi berlaku hanya untuk cabang ini.'),
+
                     Forms\Components\Select::make('subject_id')
                         ->label('Mata Pelajaran')
-                        ->options(fn () => Subject::query()->active()->orderBy('name')
-                            ->get()->mapWithKeys(fn (Subject $s) => [$s->id => "{$s->name} ({$s->code})"]))
+                        ->options(fn (Forms\Get $get) => static::subjectOptions(
+                            static::resolveSchoolId($get('school_id')),
+                        ))
                         ->required()
                         ->searchable()
+                        // Opsi sudah disaring, tetapi payload Livewire bisa dikirim
+                        // apa adanya — pagar terakhirnya di lapisan validasi.
+                        ->exists(
+                            table: 'subjects',
+                            column: 'id',
+                            modifyRuleUsing: fn (Exists $rule, Forms\Get $get) => $rule
+                                ->where('school_id', static::resolveSchoolId($get('school_id'))),
+                        )
                         ->disabledOn('edit'),
 
                     Forms\Components\Select::make('academic_year_id')
                         ->label('Tahun Ajaran')
-                        ->options(fn () => AcademicYear::query()->orderByDesc('start_date')->pluck('name', 'id'))
+                        ->options(fn (Forms\Get $get) => static::academicYearOptions(
+                            static::resolveSchoolId($get('school_id')),
+                        ))
                         ->default(fn () => AcademicYear::current()?->id)
                         ->required()
+                        ->exists(
+                            table: 'academic_years',
+                            column: 'id',
+                            modifyRuleUsing: fn (Exists $rule, Forms\Get $get) => $rule
+                                ->where('school_id', static::resolveSchoolId($get('school_id'))),
+                        )
                         ->disabledOn('edit'),
 
                     Forms\Components\TextInput::make('version')
@@ -117,6 +162,65 @@ class GradeConfigResource extends Resource
                         ]),
                 ]),
         ]);
+    }
+
+    /**
+     * Cabang tempat konfigurasi ini akan dibuat.
+     *
+     * Nilai dari form menang lebih dulu karena hanya Super Admin yang melihat
+     * field itu, dan justru merekalah yang `school_id`-nya NULL. Bagi Admin
+     * Sekolah field tersebut tidak dirender sama sekali, sehingga cabangnya
+     * diambil dari akun — mereka tidak bisa memilih cabang lain.
+     */
+    public static function resolveSchoolId(mixed $formValue = null): ?int
+    {
+        $user = Auth::user();
+
+        // Nilai form hanya dipercaya dari Super Admin. Bagi peran lain field
+        // ini tidak pernah dirender, sehingga apa pun yang muncul di state
+        // Livewire adalah selundupan dan diabaikan sepenuhnya.
+        if ($user?->isSuperAdmin() && filled($formValue)) {
+            return (int) $formValue;
+        }
+
+        return $user?->school_id;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected static function subjectOptions(?int $schoolId): array
+    {
+        // Sengaja kosong selama cabang belum dipilih: global scope tidak
+        // membatasi apa pun bagi Super Admin, sehingga tanpa penyaringan ini
+        // daftarnya berisi mapel milik seluruh cabang.
+        if ($schoolId === null) {
+            return [];
+        }
+
+        return Subject::query()
+            ->forSchool($schoolId)
+            ->active()
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn (Subject $s) => [$s->id => "{$s->name} ({$s->code})"])
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected static function academicYearOptions(?int $schoolId): array
+    {
+        if ($schoolId === null) {
+            return [];
+        }
+
+        return AcademicYear::query()
+            ->forSchool($schoolId)
+            ->orderByDesc('start_date')
+            ->pluck('name', 'id')
+            ->all();
     }
 
     public static function table(Table $table): Table

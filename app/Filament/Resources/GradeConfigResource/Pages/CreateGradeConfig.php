@@ -22,20 +22,37 @@ class CreateGradeConfig extends CreateRecord
      */
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        // `Auth::user()`, bukan `Filament::auth()->user()`: panel admin memakai
+        // `->authGuard('web')` yang sama dengan guard bawaan aplikasi, sehingga
+        // keduanya menghasilkan pengguna yang sama. Yang dipilih adalah pola
+        // yang dipakai seluruh resource/page lain — termasuk
+        // GradeConfigResource::resolveSchoolId() yang dipanggil di bawah ini,
+        // sehingga satu alur tidak lagi memakai dua guard berbeda.
         $user = Auth::user();
-        $schoolId = $data['school_id'] ?? $user?->school_id;
 
-        $data['created_by'] = $user?->getKey();
+        if ($user === null) {
+            throw new \RuntimeException('Pengguna belum terautentikasi.');
+        }
+
+        // Super Admin memang tidak memiliki school_id — itu yang membuatnya bisa
+        // melihat seluruh cabang. Cabangnya diambil dari field "Cabang Sekolah"
+        // yang hanya dirender untuk mereka; Admin Sekolah tetap terikat akunnya.
+        $schoolId = GradeConfigResource::resolveSchoolId($data['school_id'] ?? null);
+
+        if ($schoolId === null) {
+            throw new \RuntimeException('Cabang sekolah belum ditentukan untuk konfigurasi ini.');
+        }
+
+        $data['school_id'] = $schoolId;
+        $data['created_by'] = $user->getKey();
         $data['status'] = GradeConfigStatus::Draft->value;
         $data['components'] = array_values($data['components'] ?? []);
 
-        $data['version'] = $schoolId === null
-            ? 1
-            : app(GradeConfigVersionManager::class)->nextVersionNumber(
-                (int) $schoolId,
-                (int) $data['subject_id'],
-                (int) $data['academic_year_id'],
-            );
+        $data['version'] = app(GradeConfigVersionManager::class)->nextVersionNumber(
+            (int) $schoolId,
+            (int) $data['subject_id'],
+            (int) $data['academic_year_id'],
+        );
 
         return $data;
     }
