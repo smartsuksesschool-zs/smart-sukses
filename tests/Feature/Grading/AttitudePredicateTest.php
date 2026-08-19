@@ -7,6 +7,8 @@ use App\Enums\AttitudePredicate;
 use App\Enums\GradeType;
 use App\Filament\Pages\PengaturanPenilaian;
 use App\Models\Grade;
+use App\Models\School;
+use App\Models\User;
 use App\Services\Grading\AttitudePredicateResolver;
 use App\Services\Grading\ComponentScoreAggregator;
 use Livewire\Livewire;
@@ -105,6 +107,125 @@ class AttitudePredicateTest extends GradingTestCase
         );
 
         $this->assertSame('B', $this->resolver->resolve(85.0, $this->school->fresh())?->value);
+    }
+
+    /**
+     * Baris repeater → peta predikat ke batas bawah. Kunci item repeater
+     * Filament berupa UUID, jadi dibaca lewat isinya, bukan indeksnya.
+     *
+     * @param  array<mixed, mixed>  $rows
+     * @return array<string, float>
+     */
+    protected function minimumsFrom(array $rows): array
+    {
+        return collect($rows)
+            ->mapWithKeys(fn (array $row) => [$row['predicate'] => (float) $row['minimum']])
+            ->all();
+    }
+
+    /**
+     * Super Admin adalah peran Platform Level dengan school_id = NULL
+     * (Arsitektur 3.2), sedangkan `attitude_scale` adalah konfigurasi per
+     * cabang (butir 27). Cabangnya karena itu dipilih di form.
+     */
+    public function test_super_admin_can_save_a_scale_for_the_chosen_school(): void
+    {
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        Livewire::test(PengaturanPenilaian::class)
+            ->fillForm([
+                'school_id' => $this->school->id,
+                'attitude_scale' => [
+                    ['predicate' => 'A', 'minimum' => 88],
+                    ['predicate' => 'B', 'minimum' => 78],
+                    ['predicate' => 'C', 'minimum' => 68],
+                    ['predicate' => 'D', 'minimum' => 0],
+                ],
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertEquals(
+            ['A' => 88, 'B' => 78, 'C' => 68, 'D' => 0],
+            $this->school->fresh()->attitude_scale,
+        );
+
+        // Kalkulator memakai skala baru itu, bukan rentang default.
+        $this->assertSame('B', $this->resolver->resolve(87.0, $this->school->fresh())?->value);
+    }
+
+    public function test_super_admin_must_choose_a_school_before_saving(): void
+    {
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        Livewire::test(PengaturanPenilaian::class)
+            ->fillForm([
+                'attitude_scale' => [
+                    ['predicate' => 'A', 'minimum' => 88],
+                    ['predicate' => 'B', 'minimum' => 78],
+                    ['predicate' => 'C', 'minimum' => 68],
+                    ['predicate' => 'D', 'minimum' => 0],
+                ],
+            ])
+            ->call('save')
+            ->assertHasFormErrors(['school_id']);
+
+        $this->assertNull($this->school->fresh()->attitude_scale);
+    }
+
+    public function test_switching_school_loads_that_schools_scale(): void
+    {
+        $other = School::factory()->create([
+            'attitude_scale' => ['A' => 70, 'B' => 60, 'C' => 50, 'D' => 0],
+        ]);
+
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        $page = Livewire::test(PengaturanPenilaian::class)
+            ->set('data.school_id', $other->id);
+
+        $this->assertSame(
+            ['A' => 70.0, 'B' => 60.0, 'C' => 50.0, 'D' => 0.0],
+            $this->minimumsFrom($page->get('data')['attitude_scale']),
+        );
+
+        // Cabang bawaan fixture belum menyetel apa pun → kembali ke default.
+        $page->set('data.school_id', $this->school->id);
+
+        $this->assertSame(
+            ['A' => 86.0, 'B' => 76.0, 'C' => 66.0, 'D' => 0.0],
+            $this->minimumsFrom($page->get('data')['attitude_scale']),
+        );
+    }
+
+    public function test_school_admin_cannot_save_a_scale_for_another_school(): void
+    {
+        $other = School::factory()->create();
+
+        $this->actingAs($this->admin);
+
+        // Field cabang tidak dirender untuk Admin Sekolah, sehingga nilai yang
+        // diselundupkan ke state Livewire tidak boleh dipercaya.
+        $this->assertSame(
+            $this->school->id,
+            PengaturanPenilaian::resolveSchoolId($other->id),
+        );
+
+        Livewire::test(PengaturanPenilaian::class)
+            ->fillForm([
+                'attitude_scale' => [
+                    ['predicate' => 'A', 'minimum' => 91],
+                    ['predicate' => 'B', 'minimum' => 81],
+                    ['predicate' => 'C', 'minimum' => 71],
+                    ['predicate' => 'D', 'minimum' => 0],
+                ],
+            ])
+            ->set('data.school_id', $other->id)
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertNull($other->fresh()->attitude_scale);
+        $this->assertNotNull($this->school->fresh()->attitude_scale);
     }
 
     public function test_only_school_administrators_may_open_the_settings_page(): void

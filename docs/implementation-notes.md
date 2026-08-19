@@ -534,6 +534,31 @@ mengampu mata pelajaran tersebut sudah memegang rapor terbit**
 paling dekat dengan yang bisa ditegakkan data yang ada. Konsekuensinya: satu kelas
 yang selesai lebih dulu tidak mengunci kelas lain yang masih menilai.
 
+### 37. Pemilihan cabang pada Pengaturan Penilaian untuk Super Admin
+
+| | |
+| --- | --- |
+| **Status** | Melengkapi butir 27 |
+| **Dasar** | `03-architecture/02-multi-tenant.md` — "Super Admin (school_id = NULL) melewati Global Scope"; `02-erd/02-tables-core.md` — "Super Admin mengelola tabel ini" |
+
+Butir 27 menempatkan `attitude_scale` sebagai kolom pada `schools`, yaitu konfigurasi
+**per cabang**. Halaman **Akademik → Pengaturan Penilaian** semula mengambil cabangnya dari
+`Auth::user()->school_id`, sehingga Super Admin — yang menurut Arsitektur 3.2 memang
+ber-`school_id` NULL — dapat membuka halaman itu tetapi tidak pernah bisa menyimpan.
+Padahal API 4.1 memasukkan SUPER_ADMIN ke dalam Auth Level "Admin" yang dimaksud NILAI-05.
+
+Ditambahkan Select **Cabang Sekolah** yang hanya dirender untuk Super Admin, mengikuti pola
+yang sudah dipakai `UserResource` dan `GradeConfigResource`. Admin Sekolah tidak melihat
+field itu dan tetap terikat cabang akunnya.
+
+`PengaturanPenilaian::resolveSchoolId()` **hanya mempercayai nilai form dari Super Admin**.
+Bagi peran lain field tersebut tidak pernah ada di skema, sehingga apa pun yang muncul di
+state Livewire diabaikan — inilah yang menjaga `attitude_scale` tidak tercampur antar
+cabang. Daftar cabang dibatasi `is_active = true`.
+
+Perhitungan predikat tidak tersentuh: `AttitudePredicateResolver`, rentang default, dan
+validasi urutan A > B > C > D tetap sama persis.
+
 ### 38. Format template import nilai (`POST /grades/import`)
 
 | | |

@@ -52,16 +52,11 @@ class PengaturanPenilaian extends Page implements HasForms
 
     public function mount(): void
     {
-        $scale = app(AttitudePredicateResolver::class)->scaleFor($this->school());
+        $schoolId = static::resolveSchoolId();
 
         $this->form->fill([
-            'attitude_scale' => array_map(
-                fn (AttitudePredicate $predicate) => [
-                    'predicate' => $predicate->value,
-                    'minimum' => $scale[$predicate->value] ?? AttitudePredicate::defaultScale()[$predicate->value],
-                ],
-                AttitudePredicate::cases(),
-            ),
+            'school_id' => $schoolId,
+            'attitude_scale' => static::scaleRows(static::schoolById($schoolId)),
         ]);
     }
 
@@ -72,6 +67,32 @@ class PengaturanPenilaian extends Page implements HasForms
                 Forms\Components\Section::make('Skala Predikat Sikap')
                     ->description('Batas bawah tiap predikat. Nilai sikap tidak masuk perhitungan nilai akademik dan hanya dilaporkan sebagai predikat pada rapor.')
                     ->schema([
+                        // `attitude_scale` adalah konfigurasi per cabang (butir 27),
+                        // sedangkan Super Admin memang tidak memiliki `school_id`
+                        // (Arsitektur 3.2 — "Super Admin melewati Global Scope").
+                        // Cabangnya karena itu dipilih di sini, mengikuti pola
+                        // GradeConfigResource: field hanya dirender untuk Super
+                        // Admin, sementara Admin Sekolah tetap terikat akunnya.
+                        Forms\Components\Select::make('school_id')
+                            ->label('Cabang Sekolah')
+                            ->options(fn () => School::query()
+                                ->where('is_active', true)
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                                ->all())
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->live()
+                            // Skala cabang lain tidak boleh tertinggal di form.
+                            ->afterStateUpdated(function (mixed $state, Forms\Set $set): void {
+                                $set('attitude_scale', static::scaleRows(
+                                    static::schoolById(static::resolveSchoolId($state)),
+                                ));
+                            })
+                            ->visible(fn () => Auth::user()?->isSuperAdmin())
+                            ->helperText('Skala yang disimpan hanya berlaku untuk cabang ini.'),
+
                         Forms\Components\Repeater::make('attitude_scale')
                             ->label('')
                             ->columns(2)
@@ -134,21 +155,22 @@ class PengaturanPenilaian extends Page implements HasForms
 
     public function save(): void
     {
-        $school = $this->school();
+        // getState() menjalankan validasi lebih dulu, jadi cabang yang belum
+        // dipilih dan skala yang urutannya terbalik tidak pernah sampai ke
+        // baris-baris di bawahnya.
+        $state = $this->form->getState();
+
+        $school = static::schoolById(static::resolveSchoolId($state['school_id'] ?? null));
 
         if ($school === null) {
             Notification::make()
-                ->title('Tidak ada cabang aktif')
-                ->body('Super Admin perlu masuk sebagai pengguna cabang untuk menyetel skala sikap.')
+                ->title('Cabang belum ditentukan')
+                ->body('Pilih cabang sekolah terlebih dahulu sebelum menyimpan skala predikat.')
                 ->danger()
                 ->send();
 
             return;
         }
-
-        // getState() menjalankan validasi repeater lebih dulu, jadi skala yang
-        // urutannya terbalik tidak pernah sampai ke baris di bawahnya.
-        $state = $this->form->getState();
 
         $scale = array_map(
             fn (mixed $minimum) => (float) $minimum,
@@ -170,10 +192,51 @@ class PengaturanPenilaian extends Page implements HasForms
         return app(AttitudePredicateResolver::class)->describe($this->school());
     }
 
+    /**
+     * Cabang yang skalanya sedang disetel.
+     *
+     * Nilai form hanya dipercaya dari Super Admin. Bagi peran lain field
+     * "Cabang Sekolah" tidak pernah dirender, sehingga apa pun yang muncul di
+     * state Livewire adalah selundupan dan diabaikan — inilah yang menjaga
+     * `attitude_scale` tidak tercampur antar cabang.
+     */
+    public static function resolveSchoolId(mixed $formValue = null): ?int
+    {
+        $user = Auth::user();
+
+        if ($user?->isSuperAdmin() && filled($formValue)) {
+            return (int) $formValue;
+        }
+
+        return $user?->school_id;
+    }
+
+    protected static function schoolById(?int $schoolId): ?School
+    {
+        return $schoolId === null ? null : School::query()->find($schoolId);
+    }
+
+    /**
+     * Baris repeater untuk satu cabang. `scaleFor()` sendiri sudah jatuh ke
+     * rentang default bila cabang belum menyetel apa pun.
+     *
+     * @return array<int, array{predicate: string, minimum: float}>
+     */
+    protected static function scaleRows(?School $school): array
+    {
+        $scale = app(AttitudePredicateResolver::class)->scaleFor($school);
+
+        return array_map(
+            fn (AttitudePredicate $predicate) => [
+                'predicate' => $predicate->value,
+                'minimum' => $scale[$predicate->value] ?? AttitudePredicate::defaultScale()[$predicate->value],
+            ],
+            AttitudePredicate::cases(),
+        );
+    }
+
     protected function school(): ?School
     {
-        $schoolId = Auth::user()?->school_id;
-
-        return $schoolId === null ? null : School::query()->find($schoolId);
+        return static::schoolById(static::resolveSchoolId($this->data['school_id'] ?? null));
     }
 }
