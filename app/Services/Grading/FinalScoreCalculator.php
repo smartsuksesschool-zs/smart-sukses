@@ -17,6 +17,19 @@ use Illuminate\Support\Collection;
  */
 class FinalScoreCalculator
 {
+    /**
+     * Konfigurasi yang sudah pernah dicari, dipetakan per id.
+     *
+     * NFR 1.4 — generate rapor sekelas memanggil `configUsedBy()` sekali per
+     * siswa per mata pelajaran, padahal konfigurasinya berlaku per mapel dan
+     * karena itu berulang. Instance kalkulator hidup selama satu proses
+     * generate (tidak ada binding singleton), sehingga cache ini tidak pernah
+     * bertahan lintas request maupun lintas cabang.
+     *
+     * @var array<int, GradeConfig|null>
+     */
+    protected array $configCache = [];
+
     public function __construct(
         protected ComponentScoreAggregator $aggregator,
     ) {}
@@ -171,6 +184,16 @@ class FinalScoreCalculator
             ])
             ->last()?->grade_config_id;
 
-        return $configId === null ? null : GradeConfig::query()->find($configId);
+        if ($configId === null) {
+            return null;
+        }
+
+        // array_key_exists, bukan ??=, supaya id yang memang tidak ditemukan
+        // tidak dicari ulang setiap kali.
+        if (! array_key_exists($configId, $this->configCache)) {
+            $this->configCache[$configId] = GradeConfig::query()->find($configId);
+        }
+
+        return $this->configCache[$configId];
     }
 }

@@ -664,6 +664,50 @@ Yang **tidak** ikut dibuat: export nilai ke Excel. `StudentResource` memilikinya
 SIS-05 memintanya eksplisit; tidak ada requirement setara untuk nilai di seluruh blueprint.
 Template di atas bukan export — isinya kosong dan tidak membawa satu pun data nilai.
 
+### 39. Generate rapor sekelas dimuat sekali, bukan per siswa
+
+| | |
+| --- | --- |
+| **Status** | Pemenuhan NFR, tanpa perubahan perilaku |
+| **Dasar** | `01-prd/04-non-functional-requirements.md` — "Response time API < 500ms untuk 95% request"; "Minimal 200 user konkuren pada VPS 2C/2GB" |
+
+`ReportCardGenerator::generateForClass()` semula mengambil nilai satu query per siswa
+per mata pelajaran, rapor lama satu query per siswa, dan `FinalScoreCalculator::configUsedBy()`
+mencari konfigurasi yang sama berulang kali. Diukur pada satu kelas 30 siswa × 8 mapel
+× 5 nilai:
+
+| | Query | Waktu (SQLite in-memory) |
+| --- | --- | --- |
+| Sebelum | 575 | 547 ms |
+| Sesudah | 46 | 439 ms |
+
+Angka waktunya sendiri masih optimistis — SQLite in-memory jauh lebih murah per query
+daripada MySQL melalui TCP, sehingga penurunan jumlah query-lah yang menentukan di
+produksi. 547 ms saja sudah melewati target 500 ms sebelum kelasnya penuh.
+
+Tiga perubahan, semuanya tidak menyentuh perhitungan:
+
+1. Seluruh nilai kelas diambil sekali (`gradesOf()`), dikelompokkan per siswa, lalu
+   dibagikan ke `buildFor()`. Relasi `classSubject` ikut dimuat karena
+   `GradeWeightSnapshotter` membacanya saat melengkapi snapshot kosong.
+2. Rapor yang sudah ada diambil sekali (`reportCardsOf()`); unique index
+   `(student_id, academic_year_id)` menjamin paling banyak satu per siswa.
+3. `configUsedBy()` memoisasi hasil `find()` per id. **`weightsFrom()` tidak disentuh** —
+   aturan "snapshot entri terbaru" (butir 30) masih menunggu keputusan client.
+
+`buildFor()` tetap dapat dipanggil tanpa nilai yang sudah dimuat dan akan mengambilnya
+sendiri, sehingga pemanggilan untuk satu siswa tidak bergantung pada pemanggil.
+
+Dijaga `ReportCardPublishTest::test_generating_does_not_issue_queries_per_student()`, yang
+menguji **bentuknya** — menambah siswa tidak boleh menambah query secara sebanding —
+bukan angka mutlaknya.
+
+**Yang belum dikerjakan:** bila nilai diinput sebelum ada Grade Config aktif,
+`GradeWeightSnapshotter::backfill()` masih memanggil `GradeConfig::activeFor()` sekali per
+baris nilai (2446 query pada kelas contoh di atas, turun dari 4175). Biayanya sekali
+seumur nilai — setelah snapshot tersimpan, generate berikutnya kembali ke jalur 46 query.
+Memoisasinya menunggu keputusan F-5, yang menyentuh berkas yang sama.
+
 ### 40. Facade autentikasi di halaman Filament: `Auth`, bukan `Filament::auth()`
 
 | | |

@@ -15,6 +15,7 @@ use App\Models\StudentClass;
 use App\Models\Subject;
 use App\Services\Grading\GradeConfigVersionManager;
 use App\Services\Grading\ReportCardGenerator;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 
 /**
@@ -439,6 +440,62 @@ class ReportCardPublishTest extends GradingTestCase
         $this->assertStringContainsString('MTK', $body);
         $this->assertStringContainsString(GradeType::Skill->label(), $body);
         $this->assertStringContainsString('tidak ada di Grade Config', $body);
+    }
+
+    /**
+     * NFR 1.4 — "Response time API < 500ms untuk 95% request" pada VPS 2C/2GB.
+     *
+     * Yang dijaga di sini bukan angka mutlaknya, melainkan bentuknya: menambah
+     * siswa tidak boleh menambah query secara sebanding. Yang tersisa per siswa
+     * hanyalah penulisan rapornya sendiri, yang memang tidak terhindarkan.
+     */
+    public function test_generating_does_not_issue_queries_per_student(): void
+    {
+        $this->actingAs($this->teacher);
+        $this->completeGrades();
+
+        $this->actingAs($this->homeroom);
+
+        DB::enableQueryLog();
+        $this->generator->generateForClass($this->class);
+        $withOneStudent = count(DB::getQueryLog());
+
+        $this->actingAs($this->teacher);
+
+        foreach (range(1, 4) as $ignored) {
+            $classmate = Student::factory()->create(['school_id' => $this->school->id]);
+
+            StudentClass::factory()->create([
+                'school_id' => $this->school->id,
+                'student_id' => $classmate->id,
+                'class_id' => $this->class->id,
+                'academic_year_id' => $this->year->id,
+            ]);
+
+            $this->grade(GradeType::Daily, 80, student: $classmate);
+            $this->grade(GradeType::Midterm, 75, student: $classmate);
+            $this->grade(GradeType::Final, 85, student: $classmate);
+        }
+
+        $this->actingAs($this->homeroom);
+
+        DB::flushQueryLog();
+        $this->generator->generateForClass($this->class);
+        $withFiveStudents = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        // Empat siswa tambahan boleh menambah paling banyak satu query masing-
+        // masing — penulisan rapornya sendiri. Sebelum nilai dan rapor dimuat
+        // sekali per kelas, tiap siswa menambah empat pembacaan tersendiri.
+        $this->assertLessThanOrEqual(
+            $withOneStudent + 4,
+            $withFiveStudents,
+            "Query tumbuh dari {$withOneStudent} menjadi {$withFiveStudents} untuk 4 siswa tambahan.",
+        );
+
+        // Hasilnya tetap benar, bukan sekadar sedikit query.
+        $this->assertSame(5, ReportCard::query()->count());
+        $this->assertSame(80.0, ReportCard::query()->firstOrFail()->scoreFor('MTK'));
     }
 
     /**

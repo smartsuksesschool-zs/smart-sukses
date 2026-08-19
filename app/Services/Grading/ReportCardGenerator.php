@@ -54,14 +54,20 @@ class ReportCardGenerator
         $students = $this->studentsOf($class);
         $classSubjects = $class->classSubjects()->with('subject')->get();
 
+        // NFR 1.4 — "Response time API < 500ms untuk 95% request" pada VPS
+        // 2C/2GB. Satu kelas berisi ratusan entri nilai, dan memuatnya per siswa
+        // per mata pelajaran membuat satu generate menembus target itu jauh
+        // sebelum kelasnya penuh. Seluruh nilai dan rapor kelas ini karena itu
+        // diambil sekali di luar perulangan, lalu dibagikan ke tiap siswa.
+        // Isinya persis sama dengan yang dulu diambil satu per satu.
+        $gradesByStudent = $this->gradesOf($students, $classSubjects);
+        $existingCards = $this->reportCardsOf($students, $class);
+
         $summary = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'incomplete' => [], 'ignored' => []];
 
-        DB::transaction(function () use ($students, $classSubjects, $class, &$summary): void {
+        DB::transaction(function () use ($students, $classSubjects, $class, $gradesByStudent, $existingCards, &$summary): void {
             foreach ($students as $student) {
-                $existing = ReportCard::query()
-                    ->where('student_id', $student->getKey())
-                    ->where('academic_year_id', $class->academic_year_id)
-                    ->first();
+                $existing = $existingCards->get($student->getKey());
 
                 // Rapor yang sudah terbit terkunci (NILAI-03 poin 2).
                 if ($existing?->is_published) {
@@ -70,7 +76,12 @@ class ReportCardGenerator
                     continue;
                 }
 
-                $result = $this->buildFor($student, $class, $classSubjects);
+                $result = $this->buildFor(
+                    $student,
+                    $class,
+                    $classSubjects,
+                    $gradesByStudent->get($student->getKey()) ?? collect(),
+                );
 
                 if ($result['missing'] !== []) {
                     $summary['incomplete'][$student->full_name] = $result['missing'];
@@ -116,8 +127,19 @@ class ReportCardGenerator
      * @param  Collection<int, ClassSubject>  $classSubjects
      * @return array{final_scores: array<string, float>, attitude: AttitudePredicate|null, missing: array<string, string>, ignored: array<string, array<int, string>>}
      */
-    public function buildFor(Student $student, SchoolClass $class, Collection $classSubjects): array
-    {
+    public function buildFor(
+        Student $student,
+        SchoolClass $class,
+        Collection $classSubjects,
+        ?Collection $studentGrades = null,
+    ): array {
+        // Dipanggil tanpa nilai yang sudah dimuat: ambil sendiri, sehingga
+        // pemanggilan untuk satu siswa tetap berdiri sendiri.
+        $studentGrades ??= Grade::query()
+            ->forStudent($student->getKey())
+            ->whereIn('class_subject_id', $classSubjects->pluck('id')->all())
+            ->get();
+
         $finalScores = [];
         $missing = [];
         $ignored = [];
@@ -129,10 +151,9 @@ class ReportCardGenerator
                 continue;
             }
 
-            $grades = Grade::query()
-                ->forStudent($student->getKey())
-                ->forClassSubject($classSubject->getKey())
-                ->get();
+            $grades = $studentGrades
+                ->where('class_subject_id', $classSubject->getKey())
+                ->values();
 
             // Nilai yang belum sempat mendapat snapshot bobot dilengkapi di
             // sini — backfill memutakhirkan model di memori sekaligus.
@@ -156,13 +177,11 @@ class ReportCardGenerator
             $finalScores[$code] = $result->score;
         }
 
-        $attitudeGrades = Grade::query()
-            ->forStudent($student->getKey())
-            ->whereIn('class_subject_id', $classSubjects->pluck('id')->all())
-            ->get();
-
+        // Sikap diambil dari himpunan nilai yang sama; `attitudeAverage()`
+        // sendiri yang menyaring ATTITUDE dan hanya membaca skor serta jenis
+        // penilaiannya, sehingga hasilnya identik dengan query terpisah.
         $attitude = $this->attitudeResolver->resolve(
-            $this->aggregator->attitudeAverage($attitudeGrades),
+            $this->aggregator->attitudeAverage($studentGrades),
             $class->school,
         );
 
@@ -172,6 +191,51 @@ class ReportCardGenerator
             'missing' => $missing,
             'ignored' => $ignored,
         ];
+    }
+
+    /**
+     * Seluruh nilai satu kelas, dikelompokkan per siswa.
+     *
+     * `classSubject` ikut dimuat karena GradeWeightSnapshotter membacanya saat
+     * melengkapi snapshot yang masih kosong; tanpa itu setiap baris nilai
+     * memicu satu query relasi sendiri.
+     *
+     * @param  Collection<int, Student>  $students
+     * @param  Collection<int, ClassSubject>  $classSubjects
+     * @return Collection<int, Collection<int, Grade>>
+     */
+    protected function gradesOf(Collection $students, Collection $classSubjects): Collection
+    {
+        if ($students->isEmpty() || $classSubjects->isEmpty()) {
+            return collect();
+        }
+
+        return Grade::query()
+            ->with('classSubject')
+            ->whereIn('student_id', $students->pluck('id')->all())
+            ->whereIn('class_subject_id', $classSubjects->pluck('id')->all())
+            ->get()
+            ->groupBy('student_id');
+    }
+
+    /**
+     * Rapor yang sudah ada untuk siswa-siswa ini, dipetakan per siswa.
+     * Unique index (student_id, academic_year_id) menjamin paling banyak satu.
+     *
+     * @param  Collection<int, Student>  $students
+     * @return Collection<int, ReportCard>
+     */
+    protected function reportCardsOf(Collection $students, SchoolClass $class): Collection
+    {
+        if ($students->isEmpty()) {
+            return collect();
+        }
+
+        return ReportCard::query()
+            ->whereIn('student_id', $students->pluck('id')->all())
+            ->where('academic_year_id', $class->academic_year_id)
+            ->get()
+            ->keyBy('student_id');
     }
 
     /**
