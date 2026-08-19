@@ -461,7 +461,7 @@ queue perlu dilakukan sebelum go-live.
 | --- | --- |
 | `report_cards.attend_present` / `_sick` / `_permission` / `_absent` | Tidak ada tabel absensi di antara 21 entitas ERD; "Presensi Digital" adalah Phase 2. Kolomnya tetap dibuat sesuai ERD dan tampil di PDF sebagai "—" |
 | `report_cards.rank_in_class` | Tidak ada requirement maupun rumus peringkat di seluruh blueprint |
-| Import Excel nilai (`POST /grades/import`) | Format template tidak didefinisikan dokumen; input massal sudah tersedia lewat halaman **Input Nilai** yang memetakan `POST /grades/bulk` |
+| ~~Import Excel nilai (`POST /grades/import`)~~ | **Sudah dikerjakan** — lihat butir 38 |
 | Penyajian nilai/rapor di portal siswa & ortu (NILAI-03 poin 3, NILAI-04 poin 1–2) | Sprint 7 — Portal |
 | Notifikasi ke ortu saat rapor terbit (API 4.8) | Sprint 8 — Notifikasi |
 
@@ -533,6 +533,69 @@ mengampu mata pelajaran tersebut sudah memegang rapor terbit**
 (`ReportCardGenerator::isFullyReported()`) — definisi "finalisasi semester" yang
 paling dekat dengan yang bisa ditegakkan data yang ada. Konsekuensinya: satu kelas
 yang selesai lebih dulu tidak mengunci kelas lain yang masih menilai.
+
+### 38. Format template import nilai (`POST /grades/import`)
+
+| | |
+| --- | --- |
+| **Status** | Detail yang tidak didefinisikan dokumen |
+| **Dasar** | `01-prd/02-features-phase1.md` NILAI-01 poin 2 — "Input dapat dilakukan satu per satu **atau melalui import Excel**"; `04-api/06-grading-and-reports.md` — `POST /grades/import` |
+
+Butir 32 semula mengosongkan fitur ini karena formatnya tidak ditentukan dokumen.
+Formatnya kini diturunkan dari preseden yang sudah ada di project, bukan dari keputusan
+baru:
+
+| Yang kosong | Diturunkan dari |
+| --- | --- |
+| Nama kolom | Butir 11 (`StudentsImport`) — heading row, huruf kecil dengan garis bawah, berbahasa Indonesia |
+| Kolom apa saja | API 4.8 `POST /grades/bulk` — *"untuk satu class_subject (array of {student_id, score})"* |
+| Kunci siswa | `nis`, sama seperti `StudentsImport`; memang unik per cabang (Sprint 2 butir 6) |
+| Pelaporan kegagalan | API 4.4 — *"Return: sukses + daftar error baris"* |
+| Kewenangan | `GradePolicy::import()` yang sudah ada, ditambah `gradeClassSubject()` sesuai API 4.8 baris 8 |
+| Rentang nilai | NILAI-01 poin 1 — `Grade::MIN_SCORE`…`MAX_SCORE` |
+
+Berkasnya karena itu **hanya memuat dua kolom: `nis` dan `nilai`**. Kelas-mapel, komponen,
+jenis penilaian, dan keterangan adalah konteks yang dipilih di form — mengikuti bentuk
+`POST /grades/bulk` yang juga hanya membawa `{student_id, score}` per baris. Konsekuensi
+yang disengaja: satu berkas tidak dapat diam-diam menulis nilai ke kelas atau komponen
+lain, karena tidak ada kolom di berkas yang bisa menyatakannya.
+
+Tiga hal yang berlaku sama dengan jalur input lain, tanpa kode baru:
+
+- **Snapshot bobot.** Importer menulis lewat `Grade::query()->create()`, bukan query
+  builder, sehingga hook `creating` pada `App\Models\Grade` (butir 26) berjalan apa adanya.
+- **Isolasi cabang.** Baris hanya dicocokkan terhadap siswa **aktif di kelas itu** —
+  daftar yang sama dengan yang ditampilkan halaman Input Nilai. NIS milik cabang atau
+  kelas lain dilaporkan sebagai error baris, bukan diterima.
+- **Peringatan C-6 & LOCKED.** Diekstrak dari `InputNilai` ke
+  `App\Services\Grading\ConfigurationGapWarner` supaya kedua jalur input memberi
+  peringatan yang sama. Pemindahan murni; perilakunya tidak berubah.
+
+**Berkasnya disediakan, bukan hanya dijelaskan.** API 4.8 menyebut *"Import nilai dari
+Excel **template**"* tetapi tidak menentukan isinya, sehingga templatenya dibuat sebagai
+turunan langsung dari importer: `App\Exports\GradeTemplateExport` menuliskan persis baris
+heading yang dibaca `GradesImport` — `nis`, `nilai` — dan tidak ada isi lain. Client
+mengunduhnya lewat tombol **"Unduh Template"** di halaman Nilai, berdampingan dengan
+tombol Import dan dengan kewenangan yang sama (`GradePolicy::import()`).
+
+Dua hal yang sengaja **tidak** dimasukkan ke template, karena tidak ada requirement-nya
+dan keduanya akan menjadi aturan bisnis baru:
+
+- **Baris contoh.** Baris apa pun di bawah heading akan ikut terbaca sebagai data begitu
+  berkasnya diunggah kembali.
+- **Daftar siswa kelas terpilih.** Menarik NIS sekelas ke dalam template akan membuat
+  berkasnya bergantung pada kelas — padahal justru pemisahan itu yang membuat satu berkas
+  tidak dapat menulis ke kelas lain.
+
+`Tests\Feature\Grading\GradeImportXlsxTest` menutup jalur berkas nyata: berkas `.xlsx`
+dibuat sungguhan lalu dibaca lewat `Excel::import()` tanpa `Excel::fake()`, termasuk
+round-trip template → isi → import. Yang hanya terbukti di sana: NIS yang seluruhnya angka
+ditulis Excel sebagai sel *angka*, dan tetap cocok dengan `students.nis` yang bertipe
+string.
+
+Yang **tidak** ikut dibuat: export nilai ke Excel. `StudentResource` memilikinya karena
+SIS-05 memintanya eksplisit; tidak ada requirement setara untuk nilai di seluruh blueprint.
+Template di atas bukan export — isinya kosong dan tidak membawa satu pun data nilai.
 
 ## Menjalankan test terhadap MySQL
 
