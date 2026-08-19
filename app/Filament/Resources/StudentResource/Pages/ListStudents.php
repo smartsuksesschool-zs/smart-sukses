@@ -70,40 +70,49 @@ class ListStudents extends ListRecords
 
     /**
      * Import massal; mengembalikan jumlah sukses beserta daftar error per baris.
+     *
+     * Berkas unggahan hanya perantara, jadi penghapusannya diletakkan di
+     * `finally`: berkas yang rusak membuat Excel::import melempar exception,
+     * dan Super Admin yang tidak terikat cabang keluar lebih awal — keduanya
+     * dulu meninggalkan berkas di storage/app/imports selamanya. Exception-nya
+     * sendiri sengaja tidak ditangkap; penanganan galat di luar per-baris tetap
+     * milik Filament, seperti sebelumnya.
      */
     protected function runImport(string $path): void
     {
-        $schoolId = Auth::user()?->school_id;
+        try {
+            $schoolId = Auth::user()?->school_id;
 
-        if ($schoolId === null) {
-            Notification::make()
-                ->title('Pilih cabang terlebih dahulu')
-                ->body('Super Admin tidak terikat pada satu cabang, sehingga import massal harus dijalankan oleh Admin Sekolah.')
-                ->danger()
-                ->send();
+            if ($schoolId === null) {
+                Notification::make()
+                    ->title('Pilih cabang terlebih dahulu')
+                    ->body('Super Admin tidak terikat pada satu cabang, sehingga import massal harus dijalankan oleh Admin Sekolah.')
+                    ->danger()
+                    ->send();
 
-            return;
+                return;
+            }
+
+            $import = new StudentsImport($schoolId);
+
+            Excel::import($import, Storage::disk('local')->path($path));
+
+            $notification = Notification::make()
+                ->title("{$import->imported} siswa berhasil diimport");
+
+            if ($import->errors !== []) {
+                $notification
+                    ->body(implode("\n", array_slice($import->errors, 0, 10))
+                        .(count($import->errors) > 10 ? "\n… dan ".(count($import->errors) - 10).' baris lain.' : ''))
+                    ->warning()
+                    ->persistent();
+            } else {
+                $notification->success();
+            }
+
+            $notification->send();
+        } finally {
+            Storage::disk('local')->delete($path);
         }
-
-        $import = new StudentsImport($schoolId);
-
-        Excel::import($import, Storage::disk('local')->path($path));
-
-        Storage::disk('local')->delete($path);
-
-        $notification = Notification::make()
-            ->title("{$import->imported} siswa berhasil diimport");
-
-        if ($import->errors !== []) {
-            $notification
-                ->body(implode("\n", array_slice($import->errors, 0, 10))
-                    .(count($import->errors) > 10 ? "\n… dan ".(count($import->errors) - 10).' baris lain.' : ''))
-                ->warning()
-                ->persistent();
-        } else {
-            $notification->success();
-        }
-
-        $notification->send();
     }
 }
