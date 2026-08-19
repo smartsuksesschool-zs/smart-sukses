@@ -738,6 +738,78 @@ Menutup dua baris matriks PRD 1.1.2 yang belum punya UI sama sekali: "Manajemen
 Tenant/Cabang" (hanya SUPER_ADMIN) dan "White-label Settings" (SUPER_ADMIN + SCHOOL_ADMIN),
 beserta AUTH-03 dan API 4.3. Tidak ada kolom baru — seluruhnya memakai `schools` apa adanya.
 
+### 41. White-label memakai CSS variable milik Filament, bukan `--color-primary`
+
+| | |
+| --- | --- |
+| **Status** | Mekanisme setara, hasil akhir sesuai requirement |
+| **Bertentangan dengan** | `03-architecture/02-multi-tenant.md` §3.2.3 — contoh `--color-primary` / `--color-secondary` |
+
+Dokumen mencontohkan penyuntikan `:root { --color-primary: … }` lalu semua komponen UI
+memakai `var(--color-primary)`. Itu berlaku untuk CSS yang ditulis sendiri, tetapi panel
+ini dibangun di atas Filament, yang **menghasilkan paletnya sendiri**: setiap warna
+diperluas menjadi sebelas gradasi dan ditulis sebagai `--primary-50 … --primary-950`
+berisi triplet RGB (lihat `vendor/filament/support/resources/views/assets.blade.php`).
+Menulis `--color-primary` tidak akan berpengaruh apa pun pada tombol, tab, atau badge
+Filament — variabel itu tidak dibaca siapa pun.
+
+Yang dilakukan karena itu adalah **mekanisme yang sama dengan nama variabel yang benar**:
+`App\Support\SchoolBranding::cssVariables()` menghasilkan blok `<style>` berisi
+`--primary-*` dan `--secondary-*` hasil `Color::hex()`, disuntikkan lewat render hook
+`PanelsRenderHook::HEAD_END`. Karena blok itu dirender **setelah** blok milik Filament di
+`<head>`, ia menang tanpa `!important` dan tanpa menyentuh satu pun berkas CSS terkompilasi.
+
+Yang tetap dipenuhi persis seperti dokumen: sumbernya `schools.logo_url`,
+`schools.primary_color`, `schools.secondary_color`; dibaca per request berdasarkan
+`school_id` pengguna; dan berlaku seketika tanpa deployment ulang (AUTH-03 poin 3) — hal
+terakhir inilah alasan `brandName()`, `brandLogo()`, dan render hook semuanya ditutup
+`Closure`, bukan nilai statis yang dibekukan saat panel diregistrasi.
+
+Nilai yang bukan hex 6 digit **tidak diteruskan** ke `Color::hex()` — fungsi itu melempar
+exception untuk masukan tak dikenal, yang berarti satu sel database yang rusak akan
+menggagalkan seluruh render panel. `SchoolBranding` menyaringnya lebih dulu dan jatuh ke
+warna platform.
+
+### 42. Logo cabang disimpan di disk `public`
+
+| | |
+| --- | --- |
+| **Status** | Penyimpangan yang diteruskan dari Sprint 2 & 3 |
+| **Bertentangan dengan** | `03-architecture/04-security.md` — File Upload: "disimpan di storage/ (di luar web root)" |
+
+`schools.logo_url` menyimpan path pada disk `public` (`School::LOGO_DISK`), mengikuti pola
+`students.photo_url` (Sprint 2) dan berkas PPDB (butir 17) — berkasnya dapat diakses siapa
+pun yang menebak URL-nya.
+
+Berbeda dari dua modul sebelumnya, di sini keterbukaan itu **memang dibutuhkan**: logo
+cabang ikut tampil di halaman PPDB publik yang justru tidak boleh menuntut login. Yang
+tersimpan bukan data pribadi. Pemindahan ke disk privat tetap relevan untuk foto siswa dan
+dokumen PPDB, dan tetap ditunda bersama-sama.
+
+**Format yang diterima: JPG dan PNG saja.** Tidak ada satu pun requirement di
+`smartsukses-docs/` yang mengatur format logo — seluruh penyebutan `logo` / `logo_url`
+hanya menerangkan fungsinya, tidak pernah formatnya. Yang berlaku karena itu adalah aturan
+global `03-architecture/04-security.md`: *"File Upload | Validasi MIME + ukuran | **Hanya
+JPG/PNG/PDF diperbolehkan**"*.
+
+| Format | Putusan | Alasan |
+| --- | --- | --- |
+| JPG, PNG | **Diizinkan** | Tercantum pada aturan global Security 3.4 |
+| PDF | **Tidak ditawarkan** | Diizinkan aturan global, tetapi bukan format gambar yang dapat dirender sebagai logo panel — Filament memuatnya lewat `<img>`. Ini pembatasan **lebih ketat** dari dokumen, bukan pelonggaran, sehingga tidak melanggar apa pun |
+| WEBP | **Ditolak** | Hanya diizinkan `01-prd/02-features-phase1.md` SIS-03, yang lingkupnya eksplisit *"foto profil siswa"*. Tidak dapat diperluas ke logo tanpa requirement baru |
+| SVG | **Ditolak** | Tidak disebut satu dokumen pun di seluruh blueprint |
+
+Pola yang dianut: **requirement per-fitur menang atas aturan global bila ada** — itulah yang
+membuat foto siswa sah menerima WEBP (SIS-03) dan bukti bayar sah menerima PDF (SPP-03).
+Untuk logo requirement per-fitur itu tidak ada, jadi aturan global berlaku apa adanya.
+
+Batas ukuran **2 MB**. Dokumen tidak menetapkan batas untuk logo; angka ini menyamakan diri
+dengan dua unggahan lain yang batasnya memang tertulis — foto siswa (SIS-03: 2 MB) dan
+dokumen PPDB (butir 17: 2 MB) — supaya tidak ada angka yang lahir tanpa sumber.
+
+`WhiteLabelTest` membuktikan keduanya lewat unggahan sungguhan, bukan sekadar membaca
+konfigurasi: WEBP, SVG, PDF, dan berkas 2049 KB ditolak; JPG dan PNG diterima.
+
 ### 43. Cabang tidak memiliki jalur hapus
 
 API 4.3 hanya mengenal `PATCH /admin/schools/{id}/toggle`; tidak ada `DELETE`. Menghapus

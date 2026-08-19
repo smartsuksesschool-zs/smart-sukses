@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\SetUserLocale;
+use App\Support\SchoolBranding;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -13,6 +14,7 @@ use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -29,7 +31,13 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
-            ->brandName(config('app.name'))
+            // AUTH-03 — nama, logo, dan warna mengikuti cabang pengguna. Ketiganya
+            // ditutup Closure supaya dievaluasi per request, bukan sekali saat
+            // panel diregistrasi: itulah yang membuat perubahan berlaku tanpa
+            // deployment ulang (AUTH-03 poin 3).
+            ->brandName(fn () => app(SchoolBranding::class)->brandName())
+            ->brandLogo(fn () => app(SchoolBranding::class)->logoUrl())
+            ->brandLogoHeight('2rem')
             // AUTH-01: login email + password (rate limit bawaan 5 percobaan/menit).
             ->login()
             // AUTH-04: reset password melalui email, link berlaku 60 menit.
@@ -37,11 +45,22 @@ class AdminPanelProvider extends PanelProvider
             // AUTH-05: profil pengguna (nama, dan preferensi lain).
             ->profile(isSimple: false)
             ->authGuard('web')
+            // Palet platform: dipakai tamu, Super Admin, dan cabang yang belum
+            // menyetel apa pun. Nilainya sama dengan DEFAULT kolom
+            // schools.primary_color / secondary_color (ERD 2.2, butir 4).
+            // Warna per cabang menimpanya lewat render hook di bawah.
             ->colors([
-                // Warna default white-label (ERD 2.2 schools.primary_color).
-                'primary' => Color::hex('#1B3A6B'),
-                'secondary' => Color::hex('#E07020'),
+                'primary' => Color::hex(SchoolBranding::FALLBACK_PRIMARY),
+                'secondary' => Color::hex(SchoolBranding::FALLBACK_SECONDARY),
             ])
+            // Arsitektur 3.2.3 — "inject CSS variables ke dalam <head>". Filament
+            // menuliskan paletnya sendiri sebagai --primary-50 … --primary-950 di
+            // `:root`; blok ini memakai nama variabel yang sama dan disuntikkan
+            // setelahnya, sehingga menang tanpa !important. Lihat butir 41.
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn (): string => app(SchoolBranding::class)->cssVariables(),
+            )
             ->navigationGroups([
                 NavigationGroup::make()->label('Manajemen Akses'),
             ])
