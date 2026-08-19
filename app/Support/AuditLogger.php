@@ -89,8 +89,30 @@ class AuditLogger
     }
 
     /**
-     * Mencatat aksi atas sekumpulan id pada satu kelas model — dipakai jalur
-     * mass update yang tidak memicu model event (lihat butir 46).
+     * Mencatat aksi atas satu id pada satu kelas model.
+     *
+     * Dipakai jalur write yang **tidak** memicu model event dan karena itu
+     * diinstrumentasi eksplisit: mass update (butir 46) serta perubahan peran
+     * dan izin lewat relationship Filament (butir 47). Berbeda dari `record()`,
+     * method ini tidak memeriksa daftar pengecualian — pengecualian itu milik
+     * listener otomatis, sedangkan pemanggilan di sini memang disengaja.
+     *
+     * @param  class-string<Model>  $modelClass
+     */
+    public function recordFor(string $modelClass, int|string $id, AuditAction $action, ?int $schoolId = null): AuditLog
+    {
+        return AuditLog::query()->create([
+            'school_id' => $schoolId ?? SchoolScope::currentSchoolId(),
+            'user_id' => Auth::id(),
+            'action' => $action->value,
+            'auditable_type' => $modelClass,
+            'auditable_id' => $id,
+            'ip_address' => $this->ipAddress(),
+        ]);
+    }
+
+    /**
+     * Bentuk jamak `recordFor()` — dipakai jalur mass update (butir 46).
      *
      * @param  class-string<Model>  $modelClass
      * @param  iterable<int|string>  $ids
@@ -98,14 +120,7 @@ class AuditLogger
     public function recordMany(string $modelClass, iterable $ids, AuditAction $action, ?int $schoolId = null): void
     {
         foreach ($ids as $id) {
-            AuditLog::query()->create([
-                'school_id' => $schoolId ?? SchoolScope::currentSchoolId(),
-                'user_id' => Auth::id(),
-                'action' => $action->value,
-                'auditable_type' => $modelClass,
-                'auditable_id' => $id,
-                'ip_address' => $this->ipAddress(),
-            ]);
+            $this->recordFor($modelClass, $id, $action, $schoolId);
         }
     }
 

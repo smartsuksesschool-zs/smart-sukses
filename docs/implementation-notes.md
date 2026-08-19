@@ -898,14 +898,13 @@ Yang **tidak** diaudit, beserta alasannya:
 | Dilewati | Alasan |
 | --- | --- |
 | `AuditLog` sendiri | Menulis baris audit memicu event `created` miliknya sendiri — rekursi tak terbatas |
-| `Role` & `Permission` (spatie) | **Oleh listener otomatis saja** — supaya `RolePermissionSeeder` yang membuat 8 peran dan puluhan izin tidak melahirkan puluhan baris audit di setiap seed dan setiap test |
-| Penugasan peran ke user (`model_has_roles`) | Pivot `belongsToMany` tidak memicu model event sama sekali, dan `config/permission.php` menyetel `events_enabled => false` |
+| `Role` & `Permission` (spatie) | **Oleh listener otomatis saja** — supaya `RolePermissionSeeder` yang membuat 8 peran dan puluhan izin tidak melahirkan puluhan baris audit di setiap seed dan setiap test. Jalur UI-nya diinstrumentasi terpisah; lihat butir 47 |
+| Penugasan peran ke user (`model_has_roles`) | Pivot `belongsToMany` tidak memicu model event sama sekali, dan `config/permission.php` menyetel `events_enabled => false`. Ditutup lewat instrumentasi jalur UI — butir 47 |
 | `users.last_login_at` | Ditulis `saveQuietly()` sejak Sprint 1: penandaan waktu login bukan mutasi data bisnis, dan mencatatnya akan memproduksi satu baris audit per login yang tidak menerangkan apa-apa |
 | Aksi baca | Security 3.4 menyebut CUD |
 
-**Batasan yang diketahui:** perubahan kewenangan lewat panel — peran seorang pengguna
-maupun izin sebuah peran — belum terekam listener ini. Keduanya disimpan lewat relationship
-`belongsToMany`, dan `sync()` tidak memicu model event apa pun.
+Perubahan kewenangan lewat panel **tetap terekam**, tetapi bukan oleh listener ini —
+lihat butir 47.
 
 ### 46. Dua jalur write yang tidak memicu model event
 
@@ -936,6 +935,56 @@ antrean, dan seluruh aksi Filament. Tidak ada `DB::table()` di seluruh `app/`.
 menuntut pengecualian khusus yang tidak diminta dokumen mana pun, sedangkan data yang lahir
 dari seeder tetap data yang masuk ke sistem — `user_id` dan `ip_address`-nya NULL, dan
 itulah yang membedakannya dari aksi manusia.
+
+### 47. Perubahan peran & izin diinstrumentasi di jalur UI, bukan lewat event paket
+
+| | |
+| --- | --- |
+| **Status** | Penutupan celah audit tanpa mengubah perilaku paket |
+| **Dasar** | `03-architecture/04-security.md` — Audit Log: *"Semua aksi CUD … dicatat"* |
+
+Mengubah peran seorang pengguna adalah aksi CUD yang mengubah **kewenangan**, dan justru
+itu yang paling perlu terlacak. Namun perubahan itu tidak meninggalkan jejak apa pun pada
+listener wildcard, karena dua sebab yang menumpuk:
+
+1. Field "Peran" adalah relationship `belongsToMany`; Filament menyimpannya lewat `sync()`,
+   dan `sync()` **tidak memicu model event apa pun**.
+2. Bila hanya perannya yang diubah, `save()` tidak menemukan atribut yang kotor, sehingga
+   event `updated` pada `User` pun tidak menyala.
+
+Hasilnya: sebelum butir ini, mengganti peran pengguna dari GURU menjadi WALI_KELAS tidak
+menghasilkan satu baris audit pun.
+
+**Yang tidak dilakukan:** menyalakan `events_enabled => true` pada `config/permission.php`.
+Itu akan membuat `RolePermissionSeeder` — 8 peran dan puluhan izin, dijalankan di **setiap**
+test — melahirkan puluhan baris audit yang tidak menerangkan aksi manusia mana pun. Perilaku
+paket pihak ketiga juga berubah secara global hanya untuk kebutuhan satu modul.
+
+**Yang dilakukan:** instrumentasi eksplisit pada jalur UI yang memang mengubah kewenangan —
+seluruhnya ada tiga, dan hanya tiga:
+
+| Halaman | Yang berubah | Pencatatan |
+| --- | --- | --- |
+| `UserResource\Pages\EditUser` | Peran seorang pengguna | UPDATED atas `User`, `school_id` = cabang pengguna itu |
+| `RoleResource\Pages\EditRole` | Izin sebuah peran | UPDATED atas `Role`, `school_id` NULL |
+| `RoleResource\Pages\CreateRole` | Peran baru | CREATED atas `Role`, `school_id` NULL |
+
+`school_id` NULL pada dua yang terakhir bukan kelalaian: definisi peran bersifat
+platform-wide (PRD 1.1.1) dan tidak berada di dalam cabang mana pun.
+
+**Pembuatan pengguna sengaja tidak diinstrumentasi.** `CreateUser` sudah menghasilkan satu
+baris CREATED lewat listener, dan perannya ditetapkan pada aksi yang sama — baris kedua
+hanya akan menduplikasi satu aksi manusia.
+
+**Penjagaan terhadap baris ganda.** `EditUser` mencatat hanya bila peran berubah **dan**
+`wasChanged()` bernilai false. Bila atribut pengguna ikut berubah, listener otomatis sudah
+menulis satu baris UPDATED untuk penyimpanan yang sama; satu aksi manusia cukup diwakili
+satu baris. Konsekuensi yang disengaja: baris itu tidak membedakan "atribut berubah" dari
+"peran berubah" — konsisten dengan keputusan tidak menyimpan kolom `changes` (butir 45).
+
+`AuditLogger::recordFor()` dipakai untuk jalur eksplisit ini dan sengaja **tidak** memeriksa
+daftar pengecualian: pengecualian itu milik listener otomatis, sedangkan pemanggilan di sini
+memang disengaja.
 
 ### 48. Biaya query audit: satu INSERT per aksi, tanpa pembacaan tambahan
 
