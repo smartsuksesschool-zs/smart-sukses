@@ -7,8 +7,8 @@ use App\Enums\GradeType;
 use App\Enums\PermissionName;
 use App\Models\ClassSubject;
 use App\Models\Grade;
-use App\Models\GradeConfig;
 use App\Models\Student;
+use App\Services\Grading\ConfigurationGapWarner;
 use Filament\Forms;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -201,95 +201,15 @@ class InputNilai extends Page implements HasForms
             ->success()
             ->send();
 
-        $this->warnAboutConfigurationGaps($classSubject, $state);
+        // Peringatan C-6 & LOCKED dibagi dengan jalur import Excel; lihat
+        // App\Services\Grading\ConfigurationGapWarner.
+        app(ConfigurationGapWarner::class)->warn(
+            $classSubject,
+            GradeType::tryFrom((string) ($state['grade_type'] ?? '')),
+            AssessmentType::tryFrom((string) ($state['assessment_type'] ?? '')),
+        );
 
         $this->refreshStudentRows();
-    }
-
-    /**
-     * Dua keadaan yang membuat nilai sumatif tidak ikut menghitung rapor,
-     * keduanya senyap tanpa peringatan ini:
-     *
-     *   C-6      — komponennya tidak tercantum di Grade Config yang aktif;
-     *   LOCKED   — tidak ada konfigurasi aktif sama sekali karena versi
-     *              terakhirnya sudah dikunci setelah rapor terbit.
-     *
-     * Keduanya hanya memberi tahu. Tidak ada konfigurasi yang dibuka, dibuat,
-     * atau diaktifkan otomatis — siklus DRAFT → ACTIVE → LOCKED tetap milik
-     * Admin (keputusan butir 4).
-     *
-     * @param  array<string, mixed>  $state
-     */
-    protected function warnAboutConfigurationGaps(ClassSubject $classSubject, array $state): void
-    {
-        $type = GradeType::tryFrom((string) ($state['grade_type'] ?? ''));
-
-        // Formatif memang tidak dihitung, dan sikap dilaporkan terpisah sebagai
-        // predikat — keduanya bukan kelalaian konfigurasi.
-        if ($type === null
-            || ! $type->isAcademic()
-            || ($state['assessment_type'] ?? null) !== AssessmentType::Summative->value) {
-            return;
-        }
-
-        $subjectId = (int) $classSubject->subject_id;
-        $academicYearId = (int) $classSubject->academic_year_id;
-
-        $config = GradeConfig::activeFor($subjectId, $academicYearId);
-
-        if ($config === null) {
-            $this->warnIfConfigurationIsLocked($subjectId, $academicYearId);
-
-            return;
-        }
-
-        if (in_array($type, $config->componentTypes(), true)) {
-            return;
-        }
-
-        Notification::make()
-            ->title('Komponen ini tidak masuk nilai akhir')
-            ->body(sprintf(
-                'Nilai tersimpan, tetapi komponen %s tidak ada di Grade Config %s sehingga '
-                    .'tidak ikut menghitung nilai rapor. Tambahkan komponen itu lewat versi '
-                    .'konfigurasi baru bila memang seharusnya dihitung.',
-                $type->label(),
-                $config->label(),
-            ))
-            ->warning()
-            ->persistent()
-            ->send();
-    }
-
-    /**
-     * Tidak adanya konfigurasi aktif punya dua sebab yang sangat berbeda.
-     * Mapel yang memang belum pernah dikonfigurasi bukan masalah — nilainya
-     * mendapat snapshot begitu Admin mengaktifkan konfigurasi pertama. Yang
-     * perlu diperingatkan adalah mapel yang konfigurasinya sudah LOCKED:
-     * nilai baru tersimpan tanpa bobot dan tidak akan pernah masuk rapor
-     * sampai ada versi baru yang diaktifkan. Ini persis yang dialami siswa
-     * yang masuk setelah rapor sekelas terbit.
-     */
-    protected function warnIfConfigurationIsLocked(int $subjectId, int $academicYearId): void
-    {
-        $locked = GradeConfig::lockedFor($subjectId, $academicYearId);
-
-        if ($locked === null) {
-            return;
-        }
-
-        Notification::make()
-            ->title('Grade Config sudah terkunci')
-            ->body(sprintf(
-                'Nilai tersimpan tanpa bobot karena Grade Config %s berstatus LOCKED dan '
-                    .'tidak ada versi aktif sebagai acuan. Nilai ini belum akan masuk rapor '
-                    .'sampai Admin membuat versi Grade Config baru lewat "Buat Versi Baru" '
-                    .'lalu mengaktifkannya.',
-                $locked->label(),
-            ))
-            ->warning()
-            ->persistent()
-            ->send();
     }
 
     /**
