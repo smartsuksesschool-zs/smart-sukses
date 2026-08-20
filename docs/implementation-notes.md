@@ -1872,6 +1872,126 @@ dan menggabungkan kas cabang ke dalamnya berarti mencampur dua domain yang bluep
 justru pisahkan (butir 75). Tidak ada ringkasan yang disimpan ke tabel: angkanya dihitung
 saat diminta, sehingga tidak ada snapshot yang dapat basi terhadap `student_fees`.
 
+## Sprint 6 Batch 6.4 — Export Laporan Tagihan (SPP-05)
+
+### 98. Ekspor digantung pada `financial_report.manage`, bukan `fee.*`
+
+Tiga sumber menyebut hal yang tampak berbeda:
+
+- **SPP-05**: *"Sebagai **Bendahara**, saya dapat mengekspor laporan tagihan per periode"*
+- **API 4.9** `GET /student-fees/export`: Auth Level **Admin**
+- **Matriks 1.1.2 "Laporan Keuangan"**: SUPER_ADMIN ✅, SCHOOL_ADMIN ✅, KEPALA ⭕,
+  BENDAHARA ✅, GURU/WALI ❌
+
+Ketiganya sebenarnya sejalan begitu modulnya ditentukan. Ekspor adalah pengambilan
+laporan keuangan ke luar sistem, jadi yang berlaku adalah baris "Laporan Keuangan" —
+bukan "Tagihan SPP" (`fee.*`) yang mengatur pengelolaan tagihannya, dan bukan
+`accounting.*` yang mengatur buku kas. `StudentFeePolicy::export()` karena itu memakai
+`financial_report.manage`, izin yang sudah ada dan sudah dibagikan seeder persis mengikuti
+baris matriks itu. Tidak ada izin baru.
+
+Hasilnya: Super Admin, School Admin, dan Bendahara boleh mengunduh; **Kepala Sekolah
+tidak**, karena mereka hanya memegang `financial_report.view`. Itu memang arti ⭕ pada
+baris tersebut, dan berkas yang keluar dari sistem layak dibatasi lebih ketat daripada
+tampilan di layar — sekali terunduh, ia tidak lagi tunduk pada tenant scope maupun audit
+log.
+
+`.manage` dipakai, bukan `.view`, karena `.view` juga dipegang Kepala Sekolah dan tidak
+dapat membedakan keduanya.
+
+### 99. Kolom Kelas mengikuti tahun ajaran tagihan, bukan kelas siswa saat ini
+
+`student_fees` tidak menyimpan `class_id`, dan SPP-05 meminta kolom "kelas". Godaannya
+adalah memakai penempatan terakhir siswa — dan itu salah: siswa yang naik kelas akan
+membuat laporan tagihan tahun lalu tertulis dengan rombel tahun ini, sehingga rekapitulasi
+per kelas untuk periode lampau tidak akan pernah cocok dengan kenyataannya.
+
+`student_classes` sudah menyimpan `academic_year_id` dan `status ENUM(ACTIVE,MOVED)`, jadi
+yang dipakai adalah penempatan **ACTIVE pada tahun ajaran yang sama dengan tagihannya**.
+Siswa yang pindah rombel di tengah tahun punya satu baris MOVED dan satu ACTIVE untuk
+tahun yang sama; yang tercetak yang ACTIVE.
+
+Penyaring kelas memakai asosiasi yang **sama persis**, lewat `whereColumn` yang
+mengikatkan `student_classes.academic_year_id` ke `student_fees.academic_year_id`. Kalau
+tidak, isi berkas tidak akan cocok dengan filternya: baris yang lolos filter "kelas 7A"
+bisa tercetak "8A" pada kolom kelasnya.
+
+**Gap yang dicatat, bukan ditebak:** tagihan dengan `academic_year_id` NULL — sah menurut
+ERD untuk tagihan berulang — tidak punya tahun ajaran untuk dicocokkan. Kolom kelasnya
+dibiarkan **kosong** alih-alih diisi dari tahun lain. Dalam praktik ini jarang:
+`StudentFeeGenerator` mengisi tahun ajaran aktif cabang saat jenis tagihannya tidak
+terikat (butir 53), sehingga NULL hanya muncul bila cabang belum punya tahun ajaran aktif.
+Siswa yang belum pernah ditempatkan di kelas mana pun juga tampil kosong, dengan alasan
+yang sama: tidak ada data, dan menebaknya lebih buruk daripada mengosongkannya.
+
+### 100. Periode wajib diisi
+
+AC SPP-05 menulis *"ekspor dapat difilter per kelas, periode, atau status"* — "dapat"
+membaca seperti opsional. Tetapi user story-nya sendiri berbunyi *"mengekspor laporan
+tagihan **per periode**"*, dan itu lebih spesifik tentang apa laporannya.
+
+Periode karena itu **wajib**; kelas dan status tetap opsional. Alasannya bukan sekadar
+kepatuhan teks: tanpa periode, satu klik dapat menarik seluruh riwayat tagihan cabang ke
+dalam satu berkas tanpa operator menyadarinya — dan itu justru pada layar yang tidak
+menampilkan berapa baris yang akan terunduh. Batasan yang dapat dilonggarkan nanti bila
+memang dibutuhkan; kebalikannya jauh lebih mahal.
+
+### 101. `GET /student-fees/export` belum dibuat
+
+Sama seperti `GET /finance/summary` (butir 84) dan endpoint dashboard lintas cabang
+(butir 96): project belum punya lapisan REST API sama sekali, dan mendirikan satu endpoint
+terisolasi berarti memutuskan konvensi respons, autentikasi token, dan penanganan error
+untuk satu rute.
+
+`StudentFeeReportExporter` sudah menjadi satu sumber untuk kewenangan, penyaringan, dan
+penamaan berkas, sehingga endpoint itu nanti tinggal memanggil `download()` atau `query()`
+yang sama. Tidak ada rumus maupun aturan akses yang perlu disalin.
+
+### 102. Satu cabang per berkas, dan Super Admin memilihnya
+
+SPP-05 adalah laporan cabang; tidak ada requirement yang meminta ekspor lintas cabang, dan
+KAS-03 sudah menjawab kebutuhan perbandingan antarcabang di layar (Batch 6.3).
+
+Super Admin tidak memiliki `school_id`, sehingga tanpa penanganan khusus query-nya akan
+melewati SchoolScope dan mengunduh seluruh cabang dalam satu berkas — hal yang tidak
+diminta siapa pun dan tidak terlihat sebelum berkasnya dibuka. Modal ekspor karena itu
+mewajibkan Super Admin memilih cabang, dan pilihan kelasnya mengikuti cabang itu.
+
+Bagi peran School Level field cabang tidak pernah dirender, dan `school_id` di payload
+diabaikan sepenuhnya — pola `resolveSchoolId()` yang sama dengan FeeTypeResource,
+GenerateTagihan, dan TransactionRecorder. Kelas dari cabang lain tidak perlu ditolak
+dengan pesan khusus: query-nya sudah terkunci pada cabang laporan, sehingga id asing
+menghasilkan laporan kosong, bukan kebocoran.
+
+### 103. Nominal tetap sel angka
+
+Ketiga kolom uang ditulis sebagai angka, bukan teks `"Rp 1.000.000"`. Teks membuat
+penjumlahan dan pengurutan di Excel berhenti bekerja, dan laporan tagihan memang dibuat
+untuk dihitung ulang penerimanya — itulah gunanya berkas Excel dan bukan PDF. Rupiahnya
+dipasang sebagai format sel lewat `WithColumnFormatting`, jadi tetap terbaca sebagai uang
+tanpa mengorbankan sifat angkanya.
+
+PhpSpreadsheet tidak menyediakan konstanta format rupiah (hanya USD dan EUR), sehingga
+format codenya ditulis langsung sebagai konstanta pada exporter.
+
+Kolom "sisa" memakai `StudentFee::remaining()` — helper yang sama dengan yang dipakai layar
+dan portal nanti (butir 71). Tidak ada rumus sisa kedua yang dapat menyimpang.
+
+Label status memakai bahasa Indonesia (`StudentFeeStatus::label()`), berbeda dari
+StudentsExport yang menulis nilai enum mentah. Pilihan itu disengaja: laporan tagihan
+dibaca operator keuangan dan kemungkinan diteruskan ke luar, sedangkan ekspor siswa
+(SIS-05) dirancang untuk dapat diimpor kembali lewat StudentsImport dan karena itu harus
+memakai nilai yang sama dengan yang diterima importer. Tidak ada importer untuk laporan
+tagihan.
+
+### 104. Yang sengaja belum ada pada Batch 6.4
+
+`GET /finance/export` (ekspor laporan keuangan umum — beda dari SPP-05 dan belum
+dikerjakan), `GET /finance/spp-report`, endpoint API mana pun, portal orang tua (SPP-04),
+notifikasi, dan penghapusan transaksi (butir 74). Ekspor ini juga tidak menyimpan riwayat
+unduhan: tidak ada tabel untuk itu di ERD, dan `audit_logs` mencatat CUD, bukan pembacaan
+(butir 45).
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

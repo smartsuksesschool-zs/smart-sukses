@@ -50,6 +50,25 @@ class StudentFeePolicy
     }
 
     /**
+     * SPP-05 / API 4.9 — GET /student-fees/export.
+     *
+     * Digantung pada `financial_report.manage`, bukan `fee.view` maupun
+     * `fee.manage`. Ekspor adalah pengambilan laporan keuangan ke luar sistem,
+     * sehingga modul yang berlaku adalah "Laporan Keuangan" pada matriks 1.1.2
+     * — SUPER_ADMIN ✅, SCHOOL_ADMIN ✅, KEPALA ⭕, BENDAHARA ✅.
+     *
+     * Konsekuensinya Kepala Sekolah dapat melihat daftar tagihan tetapi tidak
+     * mengunduhnya: mereka hanya memegang `financial_report.view`. Itu memang
+     * arti ⭕ pada baris tersebut, dan berkas yang keluar dari sistem adalah
+     * hal yang layak dibatasi lebih ketat daripada tampilan di layar. Lihat
+     * docs/implementation-notes.md butir 98.
+     */
+    public function export(User $user): bool
+    {
+        return $user->can(PermissionName::FinancialReportManage->value);
+    }
+
+    /**
      * API 4.9 — PATCH /student-fees/{id}/waive, Auth Level **Admin**, dan
      * API 4.1: "Auth Level: Admin = Wajib token + role SCHOOL_ADMIN /
      * SUPER_ADMIN".
