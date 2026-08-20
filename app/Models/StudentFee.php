@@ -13,8 +13,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * ERD 2.2 — student_fees. Tagihan per siswa per periode.
  *
- * Batch 5.1 baru menyediakan model & relasinya; alur generate massal (SPP-02),
- * pencatatan pembayaran (SPP-03), dan pembebasan (WAIVED) belum ada.
+ * `amount_paid` dan `status` bukan isian: keduanya turunan dari baris-baris
+ * `payments` dan hanya ditulis PaymentRecorder (SPP-03). Pembebasan tagihan
+ * (WAIVED) belum punya jalur sendiri.
  */
 class StudentFee extends Model
 {

@@ -1029,9 +1029,14 @@ Aturan yang dipakai: SECURITY/DATA INTEGRITY > konsistensi konvensi.
 SPP-01 poin 2: *"Jenis tagihan dapat dinonaktifkan tanpa menghapus histori."* Karena itu
 `fee_types` tidak punya `deleted_at`, `FeeTypeResource` tidak punya `DeleteAction` maupun
 bulk action apa pun, tidak ada halaman/route hapus, dan `FeeTypePolicy::delete()`
-mengembalikan `false` tanpa syarat — termasuk untuk Super Admin, yang biasanya lolos lewat
-`Gate::before`. Polanya sama dengan `StudentPolicy::delete()` (SIS-02 poin 2) dan
-`GradeConfigPolicy::delete()` (butir 33).
+mengembalikan `false` tanpa syarat. Polanya sama dengan `StudentPolicy::delete()`
+(SIS-02 poin 2) dan `GradeConfigPolicy::delete()` (butir 33).
+
+Perlu diluruskan: penolakan mutlak di policy **tidak** mengikat Super Admin. `Gate::before`
+pada `AppServiceProvider` mengembalikan `true` untuk setiap ability mereka dan
+mendahului policy, sehingga `can('delete', $feeType)` tetap bernilai benar bagi Super
+Admin. Yang benar-benar menutup penghapusan bagi semua peran adalah tidak adanya aksi UI
+dan tidak adanya rute — bukan policy-nya.
 
 Penonaktifan ditulis lewat `save()` pada model, bukan mass update, supaya event `updated`
 tetap terpicu dan jejak auditnya tercatat (lihat butir 46).
@@ -1141,6 +1146,165 @@ tagihannya sendiri. NULL di sini berarti "ditulis sistem", bukan data yang hilan
 Pratinjau tidak menulis apa pun, sehingga tidak menghasilkan baris audit
 `student_fees` sama sekali; retry yang seluruhnya melewati tagihan yang sudah ada
 juga tidak menambah satu baris CREATED pun.
+
+## Sprint 5 Batch 5.3 — Catat Pembayaran, Cicilan & Bukti (SPP-03)
+
+### 57. Izin pembayaran memakai `payment.*`, bukan `fee.*`
+
+PRD 1.1.2 memuat dua baris yang mudah tertukar. "Tagihan SPP" memberi KEPALA ⭕,
+sedangkan "Catat Pembayaran" memberi KEPALA **❌** — kepala sekolah boleh melihat
+tagihan tetapi tidak boleh menyentuh pembayarannya sama sekali. `PermissionName` sudah
+memisahkan keduanya sejak Sprint 1 (`fee.view`/`fee.manage` dan
+`payment.view`/`payment.manage`), dan `RolePermissionSeeder` membagikannya persis
+mengikuti dua baris itu: Bendahara dan School Admin mendapat `payment` → manage,
+Kepala Sekolah tidak mendapat `payment` sama sekali.
+
+`PaymentPolicy` karena itu memakai `payment.*`. Memakai `fee.manage` juga akan menolak
+Kepala Sekolah — mereka hanya punya `fee.view` — tetapi menolaknya karena alasan yang
+salah: matriks memisahkan kedua modul, dan menyamakannya akan membuat setiap perubahan
+kewenangan pada satu modul diam-diam mengubah modul lainnya.
+
+`StudentFeePolicy` tetap memakai `fee.*`: daftar tagihan adalah modul "Tagihan SPP".
+
+### 58. Uang dihitung dengan bcmath, bukan float
+
+`amount` dan `amount_paid` adalah `DECIMAL(12,2)` pada ERD, dan Eloquent membacanya
+sebagai string. `PaymentRecorder` mempertahankannya sebagai string di sepanjang jalur —
+`bcadd`, `bcsub`, `bccomp` dengan skala 2 — dan tidak pernah mengonversinya ke float
+untuk dibandingkan.
+
+Ini bukan kehati-hatian teoretis. Cicilan 0,10 lalu 0,20 atas tagihan 0,30 akan
+menghasilkan `0.30000000000000004` dalam aritmetika float, sehingga
+`totalPaid >= amount` bernilai benar secara kebetulan pada satu kasus dan salah pada
+kasus lain — tagihan yang sudah lunas tercatat PARTIAL, atau sebaliknya. Kasus itu
+diuji langsung (`test_decimal_installments_settle_exactly`).
+
+Satu-satunya konversi float yang tersisa ada pada pembacaan `SUM()` dari database dan
+pada normalisasi input; keduanya segera dibulatkan kembali ke dua desimal lewat
+`number_format()` sebelum masuk perhitungan.
+
+### 59. Kelebihan bayar ditolak karena blueprint tidak menetapkannya
+
+SPP-03 hanya menyebut "status tagihan otomatis berubah ke PAID/PARTIAL". Tidak ada satu
+pun dokumen yang menjelaskan apa yang terjadi bila pembayaran melebihi sisa tagihan:
+tidak ada saldo siswa, tidak ada kembalian, tidak ada kolom untuk keduanya pada ERD
+`students` maupun `student_fees`, dan tidak ada endpoint refund pada API 4.9.
+
+Ketiga tafsir yang mungkin — menerima dan menyimpan kelebihannya, menerima dan
+memotongnya, atau menolak — sama-sama tidak berdasar dokumen. Yang dipilih adalah yang
+tidak mengarang entitas baru **dan** menjaga invarian yang memang tertulis:
+`amount_paid` tidak pernah melampaui `amount`. Pembayaran yang membuat akumulasinya
+melewati nominal tagihan ditolak, dengan pesan yang menyebut sisa tagihannya, sehingga
+operator dapat mencatat jumlah yang benar.
+
+Konsekuensi yang perlu diketahui pemilik produk: bila di lapangan orang tua benar-benar
+membayar lebih, Phase 1 tidak punya tempat untuk mencatat kelebihannya. Keputusan
+produknya (saldo, kembalian tunai, atau alokasi ke tagihan periode berikutnya) belum
+diambil dan sengaja tidak diambil di sini.
+
+### 60. Tagihan WAIVED menolak pembayaran
+
+UI pembebasan tagihan belum ada — `PATCH /student-fees/{id}/waive` pada API 4.9 bukan
+lingkup batch ini — tetapi statusnya sudah ada di ERD dan `waive_reason` sudah ada di
+tabel. Blueprint tidak menjelaskan perilaku pembayaran atas tagihan yang sudah
+dibebaskan.
+
+Menerimanya berarti pembayaran diam-diam membatalkan pembebasan: status berpindah ke
+PARTIAL atau PAID sementara `waive_reason` masih terisi, dan tidak ada jejak bahwa
+pembebasan itu pernah dicabut oleh siapa pun. `PaymentRecorder` karena itu menolaknya,
+dan aksi "Catat Pembayaran" disembunyikan untuk tagihan WAIVED. Bila nanti pembebasan
+memang perlu dapat dicabut, jalurnya adalah aksi pencabutan tersendiri yang tercatat —
+bukan efek samping sebuah pembayaran.
+
+### 61. `amount_paid` dihitung ulang dari `payments`, bukan ditambahkan
+
+Akumulasi tidak dilakukan dengan `amount_paid + amount`. Setiap pencatatan menjumlahkan
+ulang seluruh baris `payments` milik tagihan itu di dalam transaksi yang sama, lalu
+menuliskan hasilnya.
+
+Bedanya muncul ketika kolom ringkasan itu pernah menyimpang — karena impor data, karena
+perbaikan manual di database, atau karena bug yang sudah diperbaiki. Penambahan akan
+meneruskan simpangan itu selamanya; penjumlahan ulang mengembalikannya pada pembayaran
+berikutnya. Riwayat `payments` adalah kebenarannya, dan `student_fees.amount_paid`
+hanyalah ringkasan yang dapat dibentuk ulang. Perilakunya diuji lewat
+`test_a_drifted_amount_paid_is_recomputed_from_the_payment_history`.
+
+Biayanya satu `SUM()` beragregat per pembayaran, di bawah lock yang memang sudah
+dipegang — bukan pembacaan tambahan yang berarti.
+
+### 62. Row lock, bukan lock aplikasi, untuk akumulasi pembayaran
+
+Penerbitan massal (butir 52) memakai `Cache::lock` karena yang dijaga adalah kombinasi
+bisnis yang belum tentu punya baris. Pembayaran berbeda: barisnya sudah ada, jadi yang
+dipakai adalah `lockForUpdate()` atas baris `student_fees`-nya, di dalam
+`DB::transaction`.
+
+Urutannya adalah keseluruhan gunanya — kunci diambil **sebelum** sisa tagihan dibaca.
+Dua pencatatan yang hampir bersamaan atas tagihan yang sama tanpa itu akan sama-sama
+membaca sisa yang sudah basi, keduanya lolos pemeriksaan "tidak melebihi sisa", dan
+akumulasinya menjadi salah (lost update). Dengan lock, yang kedua menunggu, membaca
+sisa setelah yang pertama tersimpan, lalu ditolak bila memang tidak muat.
+
+MySQL 8 adalah target produksinya dan menghasilkan `SELECT ... FOR UPDATE`. SQLite —
+yang dipakai `phpunit.xml` — tidak mengenal klausa itu dan mengabaikannya; test
+`test_the_student_fee_row_is_locked_before_its_balance_is_read` karena itu memeriksa
+grammar-nya sesuai driver yang sedang berjalan, bukan berpura-pura SQLite menjaga hal
+yang sama. Tidak ada infrastruktur baru yang ditambahkan.
+
+### 63. Bukti pembayaran di disk privat, dan jalurnya tidak dipercaya
+
+`03-architecture/04-security.md` menetapkan berkas unggahan "disimpan di storage/ (di
+luar web root)". Foto siswa dan logo cabang melanggar itu secara sadar karena keduanya
+memang ditampilkan sebagai gambar publik (butir 42); bukti pembayaran tidak. Disknya
+`local` (`storage/app/private`) tanpa `url`, sama seperti PDF rapor, dan satu-satunya
+jalan mengambilnya adalah aksi unduh yang memeriksa `PaymentPolicy::downloadProof`.
+
+Nama berkasnya dibuat Filament (UUID), bukan diambil dari nama unggahan pengguna, dan
+direktorinya dipisah per `school_id`. `PaymentRecorder` memeriksa ulang jalur yang
+dikirim: hanya berkas di dalam `payment-proofs/{school_id}` milik tagihan itu yang
+diterima, dan jalur yang memuat `..` ditolak. Tanpa pemeriksaan ini state Livewire dapat
+menunjuk berkas cabang lain — atau berkas apa pun di disk itu — dan tersimpan sebagai
+"bukti".
+
+Nama berkas unduhannya pun dibentuk dari id pembayaran, bukan dari jalur penyimpanannya,
+sehingga struktur penyimpanan tidak ikut terbaca pengguna.
+
+### 64. `payments` bersifat append-only dari UI
+
+ERD memberi `payments` sebuah `created_at` saja — tidak ada `updated_at`, tidak ada
+kolom status, tidak ada soft delete — dan API 4.9 tidak memuat `PUT /payments/{id}`
+maupun `DELETE /payments/{id}`. Tabel itu adalah riwayat.
+
+`PaymentPolicy::update()` dan `::delete()` karena itu menolak secara mutlak, dan
+riwayat pembayaran pada halaman detail tidak menyediakan aksi ubah, hapus, maupun aksi
+massal. Salah catat diselesaikan dengan pencatatan baru, bukan dengan mengubah baris
+lama — dan jalur koreksinya sendiri (pembatalan pembayaran) belum ada di dokumen mana
+pun, sehingga tidak dikarang di sini.
+
+Berlaku peringatan yang sama seperti pada `FeeTypePolicy` (butir 50): `Gate::before`
+meloloskan Super Admin untuk **setiap** ability, sehingga penolakan mutlak di policy
+tidak mengikat mereka. Yang mengikat semua peran adalah tidak adanya aksi UI dan tidak
+adanya rute — bukan policy-nya.
+
+### 65. `received_by` selalu pencatat yang sebenarnya
+
+Berbeda dari penerbitan massal, yang jejak auditnya ber-`user_id` NULL karena worker
+antrean tidak punya sesi (butir 56), pembayaran selalu dicatat oleh orang. `received_by`
+diambil dari `Auth` lewat argumen layanan dan tidak pernah dibaca dari payload — begitu
+pula `school_id` dan `student_id`, yang diturunkan dari tagihannya.
+
+Satu pembayaran normal menghasilkan dua baris audit: `Payment` CREATED dan `StudentFee`
+UPDATED. Keduanya benar — dua entity bisnis memang berubah — dan keduanya ditulis
+listener wildcard yang sudah ada, tanpa logger baru. Karena keduanya berada di dalam
+transaksi yang sama, pembayaran yang gagal tidak meninggalkan satu pun baris audit.
+
+### 66. Yang sengaja belum ada pada Batch 5.3
+
+UI pembebasan tagihan (WAIVED), portal orang tua (SPP-04), ekspor laporan (SPP-05),
+notifikasi tagihan terbit, kaitan ke buku kas `transactions` (KAS, Sprint 6), integrasi
+payment gateway (Phase 2), dan REST API. `PaymentMethod::PaymentGateway` tetap ada di
+enum dan di kolom ENUM database karena ia bagian dari ERD; yang tidak ada adalah
+kemampuan memilihnya maupun mengirimnya pada alur Phase 1.
 
 ## Menjalankan test terhadap MySQL
 

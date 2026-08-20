@@ -4,15 +4,18 @@ namespace App\Models;
 
 use App\Enums\PaymentMethod;
 use App\Models\Concerns\BelongsToSchool;
+use App\Services\Finance\PaymentRecorder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * ERD 2.2 — payments. Tabel ini hanya memiliki created_at.
  *
- * Batch 5.1 baru menyediakan model & relasinya; pencatatan pembayaran dan
- * perhitungan ulang status tagihan adalah lingkup SPP-03.
+ * Barisnya ditulis satu-satunya lewat PaymentRecorder (SPP-03) dan tidak
+ * pernah diubah maupun dihapus sesudahnya: ini riwayat, dan API 4.9 memang
+ * tidak menyediakan PUT/DELETE /payments.
  */
 class Payment extends Model
 {
@@ -61,5 +64,18 @@ class Payment extends Model
     public function receivedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'received_by');
+    }
+
+    /**
+     * Apakah bukti pembayarannya benar-benar ada di disk privat.
+     *
+     * Jalur yang tercatat tanpa berkas di baliknya lebih buruk daripada tidak
+     * ada bukti sama sekali: tombol unduh yang berujung 404 membuat operator
+     * mengira berkasnya hilang, padahal mungkin memang tidak pernah diunggah.
+     */
+    public function hasDownloadableProof(): bool
+    {
+        return filled($this->proof_url)
+            && Storage::disk(PaymentRecorder::PROOF_DISK)->exists($this->proof_url);
     }
 }
