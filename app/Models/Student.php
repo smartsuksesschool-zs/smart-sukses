@@ -83,6 +83,22 @@ class Student extends Model
     }
 
     /**
+     * ERD 2.2 (Keuangan) — tagihan per periode milik siswa ini.
+     */
+    public function studentFees(): HasMany
+    {
+        return $this->hasMany(StudentFee::class);
+    }
+
+    /**
+     * Riwayat pembayaran siswa ini (payments.student_id didenormalisasi ERD).
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    /**
      * Penempatan kelas yang sedang berlaku pada tahun ajaran aktif.
      */
     public function activeStudentClass(): HasOne

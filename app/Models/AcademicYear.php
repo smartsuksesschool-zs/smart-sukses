@@ -62,6 +62,20 @@ class AcademicYear extends Model
         return $this->hasMany(ReportCard::class);
     }
 
+    /**
+     * Jenis tagihan yang terikat tahun ajaran ini (fee_types.academic_year_id
+     * NULL berarti tagihan berulang dan tidak muncul di sini).
+     */
+    public function feeTypes(): HasMany
+    {
+        return $this->hasMany(FeeType::class);
+    }
+
+    public function studentFees(): HasMany
+    {
+        return $this->hasMany(StudentFee::class);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);

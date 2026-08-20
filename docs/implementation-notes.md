@@ -1006,6 +1006,24 @@ tidak diminta siapa pun demi satu query. Bila ambang itu kelak benar-benar terte
 yang perlu diperiksa lebih dulu adalah apakah generate rapor memang menambah penulisan baru
 — bukan angkanya.
 
+## Sprint 5 Batch 5.1 — Fondasi Keuangan & Jenis Tagihan
+
+### 49. `payments.received_by` memakai `restrictOnDelete`, bukan `cascadeOnDelete`
+
+ERD 2.2 menetapkan `payments.received_by` NOT NULL ("bendahara yang mencatat"), sehingga
+`nullOnDelete` bukan pilihan. Konvensi FK non-nullable di project ini adalah
+`cascadeOnDelete` (`class_subjects.teacher_id`, `grades.graded_by`) — tetapi di sini
+konvensi itu **tidak** diikuti: akun pengguna memang dapat dihapus lewat UserResource
+(`UserPolicy::delete()` mengizinkannya), dan dengan cascade, menghapus satu akun bendahara
+akan ikut menghapus seluruh riwayat pembayaran yang pernah ia catat.
+
+`restrictOnDelete` membuat database menolak penghapusan akun yang masih menempel pada
+riwayat pembayaran. Konsekuensinya penghapusan pengguna semacam itu akan gagal di level
+DB; itu memang hasil yang diinginkan — riwayat uang tidak boleh hilang sebagai efek
+samping merapikan daftar pengguna. Nonaktifkan akunnya (`users.is_active`), jangan hapus.
+
+Aturan yang dipakai: SECURITY/DATA INTEGRITY > konsistensi konvensi.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
