@@ -8,6 +8,7 @@ use App\Models\Payment;
 use App\Models\Scopes\SchoolScope;
 use App\Models\StudentFee;
 use App\Models\User;
+use App\Support\ProofPath;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -342,27 +343,7 @@ class PaymentRecorder
      */
     protected function resolveProofPath(mixed $value, int $schoolId): ?string
     {
-        if (is_array($value)) {
-            // FileUpload menyerahkan state-nya sebagai array berkunci hash.
-            $value = collect($value)->filter()->first();
-        }
-
-        $path = $this->stringOrNull($value);
-
-        if ($path === null) {
-            return null;
-        }
-
-        $path = str_replace('\\', '/', $path);
-        $prefix = static::proofDirectory($schoolId).'/';
-
-        if (! str_starts_with($path, $prefix) || str_contains($path, '..')) {
-            throw ValidationException::withMessages([
-                'proof_url' => 'Berkas bukti pembayaran tidak valid.',
-            ]);
-        }
-
-        return $path;
+        return ProofPath::resolve($value, static::proofDirectory($schoolId), 'proof_url');
     }
 
     /**

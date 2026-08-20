@@ -1430,6 +1430,180 @@ Pembebasan massal juga tidak ada: API 4.9 memberi `waive` sebuah `PATCH` untuk s
 dan membebaskan banyak tagihan sekaligus adalah keputusan yang layak dilakukan satu per
 satu.
 
+## Sprint 6 Batch 6.1 — Buku Kas Sekolah (KAS-01)
+
+### 73. Bendahara berwenang atas buku kas, dan itu bukan kebalikan butir 67
+
+API 4.9 memberi `POST /transactions` dan `PUT /transactions/{id}` label Auth Level
+"Admin", sama seperti `PATCH /student-fees/{id}/waive`. Kesimpulannya tetap berbeda, dan
+alasannya konsisten: KAS-01 menyebut pelakunya secara eksplisit — *"Sebagai **Bendahara**,
+saya dapat mencatat pemasukan dan pengeluaran kas sekolah"* — sedangkan pembebasan
+tagihan tidak punya satu pun user story (butir 67).
+
+Aturannya satu: user story dan matriks izin adalah sumber yang lebih spesifik daripada
+label Auth Level pada tabel API; bila keduanya diam, label itulah yang berlaku. Pola yang
+sama sudah dipakai SPP-01, SPP-02, dan SPP-03.
+
+Matriks 1.1.2 modul "Akuntansi & Kas" memberi SUPER_ADMIN ✅, SCHOOL_ADMIN ✅, KEPALA ⭕,
+GURU/WALI ❌, BENDAHARA ✅, SISWA ❌, ORTU ❌ — dan `RolePermissionSeeder` sudah membagikan
+`accounting.view` / `accounting.manage` persis mengikuti baris itu sejak Sprint 1. Tidak
+ada izin baru yang dibuat.
+
+### 74. "Soft delete" pada API 4.9 tidak punya tempat menyimpannya — konflik yang belum selesai
+
+API 4.9 memuat `DELETE /transactions/{id}` dengan keterangan "Hapus transaksi (soft
+delete)". ERD 2.2 `transactions` tidak memuat `deleted_at`, tidak memuat kolom status,
+tidak memuat flag aktif, dan tidak ada bagian blueprint mana pun yang menjelaskan
+bagaimana soft delete itu bekerja — tidak di ERD, tidak di PRD, tidak di dokumen
+arsitektur.
+
+Ketiga jalan keluar yang tersedia semuanya buruk:
+
+- **hard delete** — bukan yang diminta dokumen ("soft delete"), dan menghapus baris buku
+  kas secara permanen justru kebalikan dari maksudnya
+- **menambah `deleted_at`** — mengubah skema blueprint atas dasar satu kata di tabel API
+- **menambah status/flag sendiri** — mengarang kolom sekaligus mengarang semantiknya
+  (apakah baris yang "dihapus" masih dihitung di saldo? masih muncul di laporan?)
+
+Karena itu penghapusan **tidak diimplementasikan sama sekali** pada batch ini:
+`TransactionPolicy::delete()` menolak tanpa syarat, `TransactionResource` tidak punya
+`DeleteAction` maupun bulk action, tidak ada rute hapus, dan `TransactionRecorder` tidak
+punya method penghapusan. Skemanya dibuat persis seperti ERD.
+
+Ini dicatat sebagai **konflik blueprint yang belum selesai**, bukan sebagai keputusan
+final. Yang dibutuhkan dari pemilik produk adalah semantiknya, bukan sekadar izin
+menambah kolom: baris yang dihapus tetap dihitung di saldo kas atau tidak, tampil di
+laporan periode berjalan atau tidak, dan siapa yang boleh menghapusnya. Sampai itu ada,
+koreksi dilakukan lewat edit (`PUT`), yang memang tersedia dan terlacak di `audit_logs`.
+
+Catatan yang berlaku sama seperti pada `FeeTypePolicy` (butir 50): `Gate::before`
+meloloskan Super Admin untuk setiap ability, sehingga penolakan mutlak di policy tidak
+mengikat mereka. Yang mengikat semua peran adalah tidak adanya aksi UI dan tidak adanya
+rute.
+
+### 75. `payments` dan `transactions` tetap dua domain terpisah
+
+ERD menyebut `transactions` sebagai buku kas untuk pemasukan dan pengeluaran umum
+"**di luar** tagihan SPP". Tidak ada kolom penghubung ke `payments` di kedua arah, dan
+tidak ada endpoint rekonsiliasi di API 4.9.
+
+Karena itu mencatat pembayaran SPP **tidak** menghasilkan baris `transactions`, dan tidak
+ada relasi Eloquent antara keduanya. Godaannya nyata — KAS-02 nanti meminta "total
+penerimaan SPP bulan ini" pada dashboard yang sama — tetapi angka itu dapat dihitung dari
+`payments` langsung, tanpa menyalin uangnya ke buku kas dan tanpa mengarang aturan kapan
+sebuah pembayaran menjadi transaksi kas.
+
+Membuat kaitan otomatis sekarang berarti memutuskan pertanyaan akuntansi yang belum
+ditanyakan: apakah penerimaan SPP masuk kas pada tanggal pembayaran atau tanggal setor,
+apakah pembayaran yang dikoreksi ikut mengoreksi kas, dan apa yang terjadi pada tagihan
+yang dibebaskan. Perilakunya dijaga test (`test_recording_a_payment_creates_no_cash_book_entry`).
+
+### 76. Batas ukuran bukti transaksi mengikuti pola yang sudah ada
+
+KAS-01 hanya menyebut "bukti dapat dilampirkan (scan nota/kwitansi)" — tanpa format dan
+tanpa batas ukuran. Yang dipakai karena itu bukan angka baru:
+
+- **format** — `03-architecture/04-security.md` menetapkan secara global "hanya JPG/PNG/PDF
+  diperbolehkan"; daftarnya tidak diperluas
+- **ukuran** — 5 MB, mengikuti bukti pembayaran (SPP-03), berkas sejenis di modul yang
+  sama. Batas 2 MB pada foto siswa dan dokumen PPDB tidak dipakai karena keduanya
+  menyangkut berkas yang berbeda sifatnya
+
+Penyimpanannya mengikuti pola bukti pembayaran sepenuhnya: disk `local`
+(`storage/app/private`, di luar web root), direktori `transaction-proofs/{school_id}`,
+nama berkas UUID dari Filament, dan unduhan lewat aksi yang memeriksa
+`TransactionPolicy::downloadProof`.
+
+Pemeriksaan jalur berkasnya dipindahkan ke `App\Support\ProofPath` dan kini dipakai
+bersama oleh bukti pembayaran dan bukti transaksi. Alasannya bukan kerapian: dua salinan
+sebuah pagar keamanan cepat atau lambat akan berbeda, dan yang tertinggal justru yang
+tidak diperbaiki. Perilaku sisi pembayaran tidak berubah — 20 test bukti pembayaran dari
+Batch 5.3 tetap hijau tanpa satu pun disentuh.
+
+### 77. `category` adalah teks bebas, bukan enum
+
+ERD: *"Kategori: Gaji, Pembelian Alat, Dana BOS, Sumbangan, **dll.**"* — kata terakhir itu
+yang menentukan. Kolomnya `VARCHAR(100)`, bukan ENUM, sehingga keempat contoh itu adalah
+saran dan bukan daftar tertutup.
+
+Membuat enum atau tabel master kategori berarti memutuskan sesuatu yang tidak diminta:
+siapa yang boleh menambah kategori, apakah kategori dapat dinonaktifkan, dan apa yang
+terjadi pada transaksi lama saat kategorinya dihapus. Yang dipakai adalah `TextInput`
+biasa dengan `datalist` berisi keempat contoh sebagai saran ketik; kategori lain tetap
+diterima, dibatasi hanya oleh panjang kolomnya.
+
+### 78. Arah kas ada di `type`, bukan di tanda `amount`
+
+`amount` selalu positif untuk INCOME maupun EXPENSE. ERD memberi kolom itu
+`DECIMAL(12,2)` tanpa keterangan negatif, dan ada kolom `type` tersendiri yang menyatakan
+arahnya — menyimpan pengeluaran sebagai angka negatif akan membuat dua sumber kebenaran
+untuk hal yang sama, dan setiap penjumlahan harus memilih salah satunya.
+
+Perhitungan dan pembandingannya memakai bcmath, bukan float, mengikuti butir 58. Batas
+atasnya diperiksa eksplisit terhadap `9999999999.99`: MySQL akan menolak nilai di atas
+`DECIMAL(12,2)`, tetapi ditolak sebagai pesan validasi lebih baik daripada sebagai galat
+database.
+
+### 79. Edit tanpa `updated_at`
+
+API 4.9 menyediakan `PUT /transactions/{id}` dan `TransactionRecorder::update()`
+melayaninya, tetapi `transactions` tidak punya `updated_at` — dan kolom itu tidak
+ditambahkan. Riwayat perubahannya sudah ada di `audit_logs`, yang mencatat siapa, kapan,
+dan dari IP mana.
+
+`created_by` dan `school_id` tidak pernah ikut berubah saat edit. Yang pertama adalah
+pencatat aslinya — menimpanya dengan editor berarti kehilangan satu-satunya penanda siapa
+yang mula-mula memasukkan uang itu ke buku kas, dan blueprint tidak pernah memintanya.
+Yang kedua adalah cabang tempat uangnya bergerak; memindahkannya berarti memindahkan
+transaksi antar buku kas.
+
+### 80. Yang sengaja belum ada pada Batch 6.1
+
+Penghapusan transaksi (butir 74), dashboard ringkasan keuangan (KAS-02), dashboard lintas
+cabang (KAS-03), ekspor laporan (SPP-05 dan `GET /finance/export`), `GET /finance/summary`
+dan `/finance/spp-report`, portal orang tua (SPP-04), notifikasi, serta REST API. Saldo
+kas juga belum dihitung di mana pun: itu KAS-02, dan mendefinisikan saldo tanpa menyelesaikan
+butir 74 lebih dulu berarti menghitung angka yang belum jelas isinya.
+
+### 81. Keterangan dan nomor referensi wajib di alur kerja, tetap NULL di skema
+
+KAS-01 pada PRD 1.2.6 mencantumkan keterangan dan nomor referensi di dalam daftar
+fieldnya: *"Field: jenis (INCOME/EXPENSE), kategori, jumlah, tanggal, keterangan, no.
+referensi."* Companion database specification yang dipakai saat review menyatakan keenam
+field itu sebagai field validasi **wajib**: `type`, `category`, `amount`,
+`transaction_date`, `description`, dan `reference_number`.
+
+ERD 2.2 memberi dua kolom terakhir `NULL`.
+
+Keduanya tidak bertentangan. Nullability kolom database menyatakan apa yang **boleh
+tersimpan** — termasuk baris lama, baris hasil impor, dan baris yang ditulis jalur lain —
+sedangkan aturan validasi menyatakan apa yang **boleh dikirim seorang operator lewat alur
+KAS-01**. Yang diubah karena itu hanya lapisan validasinya; `create_transactions_table`
+tidak disentuh, dan sebuah test memastikannya (`test_the_migration_nullability_was_not_changed`)
+dengan menulis NULL ke kedua kolom lewat factory.
+
+Kewajibannya ditegakkan di dua tempat, seperti seluruh aturan tulis modul keuangan:
+`required()` pada form Filament, dan pemeriksaan ulang di `TransactionRecorder` — karena
+payload Livewire dapat dirakit sendiri dan validasi UI bukan pagar.
+
+Aturannya berlaku pada CREATE maupun EDIT: `record()` dan `update()` memakai
+`resolveAttributes()` yang sama, sehingga baris lama yang terlanjur tersimpan tanpa
+keduanya tidak dapat disimpan ulang sebelum dilengkapi.
+
+Perlu dibedakan dari `payments.reference_number`, yang sengaja tetap opsional (butir 57
+bagian referensi): pembayaran tunai memang tidak punya nomor transfer, dan SPP-03
+menyebut referensi sebagai isian form, bukan isian wajib. Buku kas berbeda — setiap
+barisnya bersandar pada nota atau kuitansi yang nomornya dapat ditelusuri, dan uang yang
+bergerak tanpa keterangan adalah persis yang membuat buku kas tidak dapat diaudit.
+
+Catatan sumber, supaya dasarnya tidak hilang: daftar fieldnya berasal dari KAS-01 di
+`smartsukses-docs/01-prd/02-features-phase1.md`, sedangkan status **wajib**-nya berasal
+dari companion database specification yang dipakai dalam review — dokumen itu sendiri
+belum ada di `smartsukses-docs/`, sehingga tidak dapat dirujuk lewat path. Ini bukan
+keputusan owner yang diberikan secara eksplisit, melainkan pembacaan spesifikasi validasi
+tersebut. Bila dokumen itu kelak masuk ke repositori, butir ini yang perlu dicocokkan
+dengannya.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
