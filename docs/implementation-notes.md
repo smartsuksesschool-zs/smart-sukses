@@ -1054,6 +1054,62 @@ bisnis tanpa dasar requirement.
 Tidak ada pula kaitan otomatis ke `transactions` (buku kas): ERD tidak memuat kolom
 penghubungnya dan KAS adalah modul Sprint 6.
 
+## Sprint 5 Batch 5.2 — Generate Tagihan Massal (SPP-02)
+
+### 53. Tahun ajaran tagihan: dari jenis tagihan, lalu tahun ajaran aktif
+
+`student_fees.academic_year_id` nullable pada ERD tanpa keterangan. Yang dipakai:
+nilai dari `fee_types.academic_year_id` bila jenis tagihannya memang terikat satu
+tahun ajaran; bila NULL ("tagihan berulang" menurut ERD), dipakai tahun ajaran
+**aktif** cabang tersebut — definisi yang sama dengan `AcademicYear::current()`
+yang berlaku di seluruh project. Bila cabang belum punya tahun ajaran aktif,
+nilainya tetap NULL, sesuai kolom yang memang nullable.
+
+Alternatifnya — selalu NULL — membuang konteks yang sudah tersedia dan akan
+mempersulit laporan per tahun ajaran (SPP-05) tanpa memberi keuntungan apa pun.
+
+### 54. Tidak ada scheduler recurrence untuk MONTHLY/YEARLY/ONCE
+
+`fee_types.frequency` menyimpan MONTHLY/YEARLY/ONCE, tetapi blueprint hanya
+mendefinisikan perilaku penerbitan untuk yang bulanan (SPP-02: "tagihan SPP
+bulanan ... due date otomatis diisi, misal tanggal 10 bulan berjalan"). Semantik
+penerbitan YEARLY dan ONCE tidak dinyatakan di mana pun.
+
+Karena itu Batch 5.2 **tidak** membuat scheduler, cron, maupun recurring billing:
+penerbitan selalu tindakan eksplisit operator, dan `period` selalu dipilih
+sendiri. YEARLY tidak diterjemahkan menjadi 12 record, dan ONCE tidak diberi
+perlakuan "berlaku selamanya" — keduanya akan menjadi aturan bisnis karangan.
+Frekuensi untuk sekarang berfungsi sebagai keterangan pada jenis tagihan;
+idempotency exact-match tetap berlaku sama untuk ketiganya.
+
+### 55. Snapshot nominal, dan mengapa penerbitan tidak memakai bulk insert
+
+Setiap `student_fees.amount` adalah salinan `fee_types.amount` pada saat
+penerbitan. Mengubah nominal jenis tagihan sesudahnya tidak menggeser tagihan
+yang sudah terbit — polanya sama dengan snapshot bobot pada `grades` (butir 34).
+
+Tagihan dibuat satu `create()` per siswa, bukan satu `DB::insert()` massal. Bulk
+insert lewat query builder tidak memicu model event sama sekali (butir 46),
+sehingga seluruh jejak audit CREATED akan hilang justru pada operasi yang paling
+banyak membuat data. Sisi **baca**-nya tetap konstan: daftar siswa aktif dan
+daftar tagihan yang sudah ada masing-masing diambil satu kali, tidak per siswa —
+dijaga `GenerateStudentFeeJobTest::test_reads_do_not_grow_with_the_number_of_students`.
+
+Konsekuensinya penerbitan untuk 500 siswa berarti 500 INSERT tagihan + 500 INSERT
+audit. Itu memang mahal, dan justru itulah alasan requirement menempatkannya di
+antrean, bukan di dalam request.
+
+### 56. Jejak audit penerbitan ber-`user_id` NULL
+
+Baris audit yang ditulis worker tidak punya pengguna: antrean berjalan tanpa
+request dan tanpa sesi. `AuditLogger` sudah dirancang untuk itu (`Auth::id()`
+menghasilkan NULL), dan `school_id`-nya tetap terisi karena diambil dari record
+tagihannya sendiri. NULL di sini berarti "ditulis sistem", bukan data yang hilang.
+
+Pratinjau tidak menulis apa pun, sehingga tidak menghasilkan baris audit
+`student_fees` sama sekali; retry yang seluruhnya melewati tagihan yang sudah ada
+juga tidak menambah satu baris CREATED pun.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
