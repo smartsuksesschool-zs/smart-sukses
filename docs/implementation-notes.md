@@ -1024,6 +1024,36 @@ samping merapikan daftar pengguna. Nonaktifkan akunnya (`users.is_active`), jang
 
 Aturan yang dipakai: SECURITY/DATA INTEGRITY > konsistensi konvensi.
 
+### 50. Jenis tagihan tidak memiliki jalur hapus sama sekali
+
+SPP-01 poin 2: *"Jenis tagihan dapat dinonaktifkan tanpa menghapus histori."* Karena itu
+`fee_types` tidak punya `deleted_at`, `FeeTypeResource` tidak punya `DeleteAction` maupun
+bulk action apa pun, tidak ada halaman/route hapus, dan `FeeTypePolicy::delete()`
+mengembalikan `false` tanpa syarat — termasuk untuk Super Admin, yang biasanya lolos lewat
+`Gate::before`. Polanya sama dengan `StudentPolicy::delete()` (SIS-02 poin 2) dan
+`GradeConfigPolicy::delete()` (butir 33).
+
+Penonaktifan ditulis lewat `save()` pada model, bukan mass update, supaya event `updated`
+tetap terpicu dan jejak auditnya tercatat (lihat butir 46).
+
+### 51. Yang sengaja belum ada pada Batch 5.1
+
+`student_fees` dan `payments` dibuat sebagai skema + model + relasi saja karena keduanya
+dependensi inti Sprint 5. Yang **belum** diimplementasikan dan bukan kelalaian:
+generate tagihan massal beserta preview-nya (SPP-02), pencatatan pembayaran dan upload
+bukti (SPP-03), transisi status PARTIAL/PAID/WAIVED, portal orang tua (SPP-04), dan
+ekspor laporan (SPP-05).
+
+Khusus `FeeFrequency::Yearly` dan `FeeFrequency::Once`: dokumen menyebut ketiga frekuensi
+pada SPP-01 dan ERD, tetapi hanya mendefinisikan perilaku penerbitan untuk yang bulanan
+(SPP-02: "tagihan SPP bulanan ... due date otomatis diisi, misal tanggal 10 bulan
+berjalan"). Semantik penerbitan YEARLY/ONCE karena itu **tidak dikarang** di batch ini —
+keduanya baru tersimpan sebagai nilai enum. Menetapkannya sekarang berarti membuat aturan
+bisnis tanpa dasar requirement.
+
+Tidak ada pula kaitan otomatis ke `transactions` (buku kas): ERD tidak memuat kolom
+penghubungnya dan KAS adalah modul Sprint 6.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
