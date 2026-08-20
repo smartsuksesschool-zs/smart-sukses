@@ -1732,6 +1732,146 @@ Dashboard lintas cabang (KAS-03), ekspor laporan (SPP-05, `GET /finance/export`)
 menyimpan hasilnya ke tabel mana pun: angkanya dihitung saat diminta, sehingga tidak ada
 snapshot yang dapat basi terhadap `transactions` dan `payments` yang menjadi sumbernya.
 
+## Sprint 6 Batch 6.3 — Keuangan Semua Cabang (KAS-03)
+
+### 90. "Total tagihan" dan "total terkumpul" — semantik yang dipilih
+
+KAS-03 hanya menyebut tiga kolom: *"total tagihan, total terkumpul, persentase lunas"*.
+Tidak ada rumusnya di mana pun — bukan di PRD, bukan di ERD, bukan di API map. Yang
+berikut adalah **keputusan implementasi**, bukan aturan yang diberikan owner.
+
+- **total tagihan** = `SUM(student_fees.amount)` untuk filter yang berlaku. Ini nominal
+  rupiah yang diterbitkan, bukan cacah record — "total tagihan" pada laporan keuangan
+  membaca sebagai uang, bukan sebagai banyaknya lembar tagihan.
+- **total terkumpul** = `SUM(student_fees.amount_paid)` atas kumpulan tagihan yang sama.
+
+`amount_paid` dipakai, bukan menjumlahkan `payments` menurut `payment_date` seperti KAS-02
+(butir 82). Bedanya disengaja dan penting: KAS-02 menjawab *"berapa uang yang masuk bulan
+ini"*, sedangkan KAS-03 menjawab *"dari tagihan yang difilter ini, berapa yang sudah
+tertagih"*. Menyaring pembayaran menurut tanggalnya akan membuat cicilan bulan berikutnya
+hilang dari tagihan Agustus, dan angka "terkumpul" tidak akan pernah mencapai "tagihan"
+walaupun seluruhnya sudah lunas.
+
+Nominal tagihan yang kemudian dibebaskan tetap masuk **total tagihan**: recordnya nyata
+dan pernah ditagihkan. Yang dikeluarkan hanyalah dari penyebut persentase (butir 91).
+
+### 91. Rumus "persentase lunas", dan mengapa bukan amount_paid / amount
+
+Juga keputusan implementasi — blueprint tidak memberi rumus matematisnya.
+
+Persentase lunas = jumlah StudentFee berstatus PAID dibagi jumlah StudentFee yang masih
+merupakan kewajiban pembayaran, dikali 100.
+
+Penyebutnya UNPAID + PARTIAL + PAID. **WAIVED dikeluarkan**: tagihan yang dibebaskan bukan
+kewajiban yang perlu dilunasi, dan memasukkannya ke penyebut membuat cabang yang banyak
+memberi keringanan terlihat buruk justru karena kebijakannya — angka yang mengukur
+kebalikan dari yang dimaksudkan. WAIVED juga tidak pernah dihitung sebagai PAID: keduanya
+status terminal yang berbeda, dan menyamakannya menyembunyikan berapa banyak uang yang
+memang tidak akan pernah masuk.
+
+Yang **tidak** dipakai adalah `amount_paid / amount`. Itu tingkat penagihan (collection
+rate), bukan proporsi tagihan yang lunas, dan keduanya dapat jauh berbeda: satu cabang
+dengan seratus tagihan yang masing-masing dicicil 99% punya collection rate 99% tetapi
+**nol** tagihan lunas. Dua pertanyaan berbeda; KAS-03 menulis "persentase lunas", dan
+itulah yang dihitung. Perilakunya diuji langsung
+(`test_a_partially_paid_fee_is_not_counted_as_paid`).
+
+Penyebut nol menghasilkan `0.00`, bukan pembagian dengan nol — dan artinya "tidak ada
+tagihan yang perlu dilunasi", bukan "gagal menagih".
+
+### 92. Filter tahun ajaran memakai nama, karena academic_years milik tiap cabang
+
+ERD menyebut `academic_years` sebagai "tahun ajaran dan semester aktif **per cabang**",
+dan tabelnya memang ber-`school_id`. Konsekuensinya satu `academic_year_id` tidak pernah
+berlaku lintas cabang: "2026/2027 Ganjil" di Cabang A dan di Cabang B adalah dua baris
+dengan id berbeda.
+
+Filter KAS-03 karena itu tidak dapat memakai `academic_year_id`. Yang dipakai adalah
+`name` — satu-satunya identitas bersama yang memang sudah ada di skema — dan setiap cabang
+dicocokkan pada baris miliknya sendiri yang bernama sama, lewat `whereHas` pada relasi
+`academicYear`. Pilihan filternya dikumpulkan sebagai `DISTINCT name` dari seluruh cabang.
+
+Tidak ada tabel pemetaan, kolom, maupun konsep "tahun ajaran global" yang dibuat —
+membuatnya berarti menambah entitas yang tidak ada di ERD dan memutuskan siapa yang
+mengelolanya.
+
+**Batas yang perlu diketahui:** pencocokan ini bergantung pada penamaan yang konsisten
+antarcabang. Cabang yang menulis "2026/2027 Ganjil" dan cabang yang menulis
+"2026/2027 Semester 1" tidak akan pernah tergabung dalam satu filter, dan tidak ada
+constraint apa pun yang mencegahnya. Kolomnya `VARCHAR(20)` tanpa unique index maupun
+format yang ditetapkan. Selama belum ada aturan penamaan, ini keterbatasan nyata dan
+bukan bug implementasi.
+
+Tagihan berulang tanpa tahun ajaran (`academic_year_id` NULL, sah menurut ERD) tidak
+muncul saat filter tahun ajaran dipakai — memang bukan bagian dari tahun ajaran mana pun.
+
+### 93. Cabang nonaktif tetap tampil selama punya data
+
+Blueprint tidak menyebut apakah cabang nonaktif ikut ditampilkan. Yang dipakai: sebuah
+cabang muncul bila **aktif** atau **punya tagihan pada filter yang berlaku**.
+
+Membuang cabang nonaktif begitu saja akan menghapus riwayat keuangannya dari laporan
+historis — cabang yang tutup Desember lalu tetap harus terlihat saat Super Admin membuka
+periode Agustus, dan total seluruh cabang akan salah tanpanya. Sebaliknya, menampilkan
+seluruh cabang nonaktif yang memang tidak pernah punya tagihan hanya menambah baris nol
+selamanya. Status aktifnya ditampilkan sebagai badge supaya angkanya dapat dibaca dengan
+konteks yang benar.
+
+Cabang aktif tanpa data tetap muncul dengan nilai nol — "tampil per cabang" berarti
+seluruh cabang yang berjalan, termasuk yang belum menerbitkan tagihan.
+
+### 94. Satu-satunya pelepasan SchoolScope pada jalur baca dashboard
+
+`CrossSchoolFinanceSummaryService` adalah satu-satunya layanan yang membaca lintas cabang,
+dan pelepasan `SchoolScope`-nya terjadi **setelah** `authorize()` memastikan pelakunya
+Super Admin.
+
+Pemeriksaannya lewat peran (`isSuperAdmin()`), bukan izin. `Gate::before` meloloskan Super
+Admin untuk setiap ability, sehingga pemeriksaan berbasis izin justru tidak dapat
+membedakan mereka dari Bendahara atau School Admin yang memegang izin keuangan yang sama —
+dan ketiganya memang memegang `financial_report.manage`. Polanya sama dengan RolePolicy.
+
+Tidak ada `school_id` yang diterima dari payload di mana pun pada jalur ini: cakupannya
+selalu seluruh cabang, dan pembatasannya adalah peran, bukan parameter. Tidak ada field
+cabang di formnya yang dapat diselundupkan.
+
+### 95. Dua query, konstan terhadap cabang maupun tagihan
+
+Agregasinya satu query `GROUP BY school_id, status` dengan `SUM`/`COUNT` — paling banyak
+empat baris per cabang, bukan satu query per cabang dan bukan seluruh `student_fees` dimuat
+ke PHP. Ditambah satu query daftar cabang: **dua query, selamanya**, diuji terhadap
+pertumbuhan jumlah cabang maupun jumlah tagihan.
+
+Pengelompokan per `status` dipilih alih-alih `SUM(CASE WHEN ...)` supaya tidak ada ekspresi
+kondisional di SQL sama sekali; `SUM`, `COUNT`, dan `GROUP BY` berlaku identik di MySQL dan
+SQLite. Total seluruh cabang di baris terakhir tabel dijumlahkan dari baris yang sudah ada
+di memori, bukan dari query ketiga.
+
+Tidak ada migration maupun index baru: penyaringannya di `school_id` (foreign key,
+ber-index), `period` (ber-index menurut ERD), dan `status` (ber-index menurut ERD).
+
+### 96. KAS-03 halaman terpisah, dan tidak menyerap KAS-02
+
+Dashboard Super Admin yang ada saat ini adalah `Filament\Pages\Dashboard` bawaan dengan
+`AccountWidget` saja — tidak ada extension point yang layak dimasuki tanpa merombaknya.
+KAS-03 karena itu menjadi halaman tersendiri, mengikuti pola navigasi yang sudah dipakai
+Generate Tagihan dan Laporan Keuangan.
+
+Halaman ini juga tidak menampilkan metric KAS-02 (saldo kas, pengeluaran, tren): keduanya
+mengukur hal berbeda dengan definisi "terkumpul" yang berbeda, dan menggabungkannya dalam
+satu layar membuat dua angka bernama mirip berdiri berdampingan tanpa cara membedakannya.
+`GET /admin/dashboard` dan `GET /admin/schools/{id}/stats` pada API map menunggu API
+implementation pass, sama seperti `GET /finance/summary` (butir 84).
+
+### 97. Yang sengaja belum ada pada Batch 6.3
+
+Ekspor laporan (SPP-05, `GET /finance/export`), `GET /finance/spp-report`, endpoint API
+mana pun, portal orang tua (SPP-04), notifikasi, dan penghapusan transaksi (butir 74).
+Buku kas KAS-01 tidak ikut dihitung di sini sama sekali — KAS-03 mengukur tagihan siswa,
+dan menggabungkan kas cabang ke dalamnya berarti mencampur dua domain yang blueprint
+justru pisahkan (butir 75). Tidak ada ringkasan yang disimpan ke tabel: angkanya dihitung
+saat diminta, sehingga tidak ada snapshot yang dapat basi terhadap `student_fees`.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
