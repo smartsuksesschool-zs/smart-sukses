@@ -1992,6 +1992,125 @@ notifikasi, dan penghapusan transaksi (butir 74). Ekspor ini juga tidak menyimpa
 unduhan: tidak ada tabel untuk itu di ERD, dan `audit_logs` mencatat CUD, bukan pembacaan
 (butir 45).
 
+## Sprint 6 Batch 6.5 — Export Buku Kas (GET /finance/export)
+
+### 105. Ekspor buku kas memakai `financial_report.manage`
+
+Sama seperti ekspor laporan tagihan (butir 98), dan dengan alasan yang sama:
+mengekspor adalah membaca laporan keuangan ke luar sistem, sehingga baris matriks yang
+berlaku "Laporan Keuangan" — bukan `accounting.*` yang mengatur pencatatan buku kasnya
+(KAS-01).
+
+Ketiga sumbernya sejalan: API 4.9.2 memberi `GET /finance/export` Auth Level **Admin**;
+matriks "Laporan Keuangan" memberi SUPER ✅, SCHOOL_ADMIN ✅, KEPALA ⭕, BENDAHARA ✅; dan
+PRD 1.1.1 menyebut tanggung jawab Bendahara sebagai *"Kelola tagihan SPP, catat
+pembayaran, akuntansi & **laporan keuangan**"* — penyebutan eksplisit yang menimpa label
+"Admin" yang lebih kasar, persis seperti pada KAS-01 (butir 73).
+
+Hasilnya Super Admin, School Admin, dan Bendahara boleh mengunduh; Kepala Sekolah tidak,
+karena mereka hanya memegang `financial_report.view`. Mereka tetap dapat membaca buku kas
+di layar. Berkas yang keluar dari sistem tidak lagi tunduk pada tenant scope maupun audit
+log, dan itu perbedaan yang layak dijaga.
+
+### 106. Isi berkasnya buku kas, bukan gabungan dengan tagihan SPP
+
+Seluruh yang dikatakan dokumen tentang fitur ini adalah **satu baris**:
+`GET /finance/export` — Admin — *"Export laporan keuangan ke Excel"*, ditambah "Export
+Excel" pada daftar deliverable Sprint 6. Tidak ada kolom, tidak ada filter, tidak ada
+struktur workbook. Yang berikut karena itu **keputusan implementasi**, bukan aturan yang
+diberikan owner.
+
+Yang menentukan pilihannya adalah **letak endpointnya**. Ia berada di bagian
+**4.9.2 Akuntansi & Kas**, tepat setelah CRUD `/transactions` dan dua endpoint ringkasan —
+sedangkan ekspor tagihan (`GET /student-fees/export`, SPP-05) berada di bagian
+**4.9.1 Tagihan & Pembayaran SPP**. Dua ekspor di dua bagian, mengikuti dua domain yang
+memang dipisahkan ERD (butir 75).
+
+Karena itu berkasnya berisi `transactions` satu cabang saja. `payments` tidak ikut, tidak
+disalin menjadi transaksi, dan tidak dijumlahkan bersama — tagihan SPP sudah punya
+ekspornya sendiri, dan menggabungkan keduanya di sini berarti mengarang aturan
+rekonsiliasi yang belum pernah dijelaskan. Perilakunya diuji
+(`test_payments_never_appear_in_the_cash_ledger`).
+
+### 107. Tujuh kolom, dan yang sengaja tidak ada
+
+Kolomnya diambil dari ERD `transactions` apa adanya: Tanggal, Jenis, Kategori, Jumlah,
+Keterangan, Nomor Referensi, Dicatat Oleh.
+
+Yang **tidak** ditambahkan: saldo berjalan, nomor jurnal, akun debit/kredit, chart of
+accounts, dan kode transaksi. Tidak satu pun ada di blueprint, dan masing-masing membawa
+keputusan akuntansi tersendiri — saldo berjalan misalnya menuntut jawaban atas saldo awal
+periode, yang tidak tersimpan di mana pun. `school_id` juga tidak menjadi kolom: berkasnya
+memang satu cabang.
+
+Nominal tetap positif untuk pemasukan maupun pengeluaran; arah kasnya dibaca dari kolom
+Jenis, persis seperti yang tersimpan (butir 78). Membalik pengeluaran menjadi negatif di
+berkas ekspor akan membuat dua representasi berbeda untuk data yang sama.
+
+### 108. `proof_url` tidak diekspor
+
+Bukti transaksi disimpan di disk privat justru supaya jalurnya tidak beredar (butir 76).
+Menuliskan jalur itu ke dalam berkas Excel akan membatalkan maksudnya: berkas ekspor
+dibuat untuk diteruskan, dan jalur penyimpanan yang ikut keluar memberi tahu penerimanya
+struktur penyimpanan internal — tanpa memberi mereka kemampuan mengunduh berkasnya, jadi
+tidak ada manfaat yang hilang.
+
+Bila kelak dibutuhkan penanda "ada bukti/tidak", kolom boolean lebih tepat daripada
+jalurnya. Itu belum diminta, jadi belum dibuat.
+
+### 109. Rentang tanggal wajib
+
+API 4.9.2 menyebut `date_from` dan `date_until` sebagai filter `GET /transactions`, dan
+`/finance/export` tidak punya daftar filternya sendiri — jadi filter yang terdekat dengan
+dokumen adalah milik `/transactions`. Ketiganya dipakai: rentang tanggal, `type`, dan
+`category`.
+
+Rentang tanggalnya dijadikan **wajib**, `type` dan `category` opsional. Alasannya sama
+dengan periode wajib pada SPP-05 (butir 100): tanpa batas waktu, satu klik dapat menarik
+seluruh riwayat buku kas cabang ke dalam satu berkas tanpa operator menyadarinya — dan
+justru pada layar yang tidak menampilkan berapa baris yang akan terunduh. Tanggal akhir
+yang mendahului tanggal mulai ditolak, bukan diam-diam menghasilkan berkas kosong.
+
+Dipakai rentang tanggal, bukan periode `YYYY-MM` seperti KAS-02, karena dokumen memang
+menyebut `date_from`/`date_until` untuk domain ini dan filter tabel Buku Kas (KAS-01)
+sudah memakai rentang tanggal. Tidak ada tahun fiskal.
+
+`category` dicocokkan **persis**, bukan `LIKE`: kolomnya teks bebas (butir 77), dan
+pencocokan parsial akan membuat filter "Gaji" ikut menarik "Gaji Honorer" tanpa operator
+memintanya. Daftar pilihannya diambil dari kategori yang benar-benar dipakai cabang itu.
+
+### 110. `GET /finance/export` belum dibuat sebagai endpoint
+
+Sama seperti `GET /finance/summary` (butir 84), endpoint dashboard lintas cabang
+(butir 96), dan `GET /student-fees/export` (butir 101): project belum punya lapisan REST
+API sama sekali.
+
+`CashLedgerExporter` sudah menjadi satu sumber untuk kewenangan, penyaringan, dan
+penamaan berkas, sehingga endpoint itu nanti tinggal memanggil `download()` atau `query()`
+yang sama.
+
+### 111. Gap soft delete KAS-01 terbawa ke ekspor
+
+Buku kas belum punya mekanisme penghapusan (butir 74), dan batch ini tidak
+menyelesaikannya. Konsekuensinya: berkas ekspor memuat seluruh baris `transactions` yang
+ada di tabel, karena memang tidak ada penanda apa pun yang menyatakan sebuah baris
+"terhapus".
+
+Tidak ada `deleted_at`, `is_active`, status, maupun aturan pengecualian yang ditambahkan
+di sini — menambahkannya berarti memutuskan diam-diam apa arti "terhapus" bagi laporan
+yang sudah terunduh, yang justru pertanyaan yang harus dijawab pemilik produk lebih dulu.
+Ketika butir 74 selesai, query ekspor ini dan agregasi KAS-02 (butir 88) adalah dua tempat
+yang perlu disesuaikan bersama.
+
+### 112. Yang sengaja belum ada pada Batch 6.5
+
+Lembar ringkasan di dalam workbook (KAS-02 sudah punya dashboard dan
+`FinanceSummaryService` sendiri; dokumen tidak meminta ringkasan ikut di berkas ekspor),
+ekspor lintas cabang (KAS-03 menjawab kebutuhan itu di layar), `GET /finance/spp-report`,
+endpoint API mana pun, portal orang tua (SPP-04), dan notifikasi. Ekspor ini juga tidak
+menyimpan riwayat unduhan: tidak ada tabel untuk itu di ERD, dan `audit_logs` mencatat
+CUD, bukan pembacaan (butir 45).
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

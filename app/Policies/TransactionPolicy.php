@@ -51,6 +51,25 @@ class TransactionPolicy
     }
 
     /**
+     * API 4.9.2 — GET /finance/export: "Export laporan keuangan ke Excel".
+     *
+     * Digantung pada `financial_report.manage`, sama seperti ekspor laporan
+     * tagihan (butir 98), dan bukan pada `accounting.*` yang mengatur
+     * pencatatan buku kasnya. Mengekspor adalah membaca laporan keuangan ke
+     * luar sistem, sehingga baris matriks yang berlaku "Laporan Keuangan" —
+     * dan PRD 1.1.1 memang menyebut "akuntansi & laporan keuangan" sebagai
+     * tanggung jawab Bendahara.
+     *
+     * Kepala Sekolah karena itu dapat membaca buku kas di layar tetapi tidak
+     * mengunduhnya: mereka hanya memegang `financial_report.view`. Lihat
+     * docs/implementation-notes.md butir 105.
+     */
+    public function export(User $user): bool
+    {
+        return $user->can(PermissionName::FinancialReportManage->value);
+    }
+
+    /**
      * Penghapusan tidak diimplementasikan sama sekali.
      *
      * API 4.9 menyebut DELETE /transactions/{id} sebagai "soft delete", tetapi
