@@ -1056,6 +1056,38 @@ penghubungnya dan KAS adalah modul Sprint 6.
 
 ## Sprint 5 Batch 5.2 — Generate Tagihan Massal (SPP-02)
 
+### 52. Idempotency penerbitan massal tanpa unique index bisnis
+
+ERD 2.2 tidak menetapkan keunikan apa pun pada `student_fees`, dan menambahkan
+unique composite berarti mengarang aturan bisnis: blueprint tidak pernah menyatakan
+seorang siswa hanya boleh punya satu tagihan per jenis per periode. Yang dibutuhkan
+di sini bukan aturan bisnis melainkan **idempotency teknis** — pengaman agar retry,
+klik ganda, dan dua permintaan identik tidak melipatgandakan tagihan.
+
+Tiga lapis, semuanya memakai stack yang sudah ada:
+
+1. **Gerbang pratinjau di UI.** Tombol Terbitkan baru hidup setelah pratinjau, dan
+   pratinjau dilupakan begitu penerbitan dikirim — klik kedua harus melalui
+   pratinjau lagi. Diperiksa di `generate()`, bukan hanya lewat tombol yang
+   dinonaktifkan, karena permintaan Livewire bisa dikirim langsung.
+2. **`ShouldBeUnique` pada job**, dengan `uniqueId()` = `school:feeType:period`.
+   Dua permintaan identik yang masih menunggu di antrean dilipat menjadi satu.
+3. **Lock aplikasi + pelewatan kombinasi yang sudah ada** di
+   `StudentFeeGenerator::generate()`. Lock memakai cache driver `database` yang
+   sudah dipakai project (tabel `cache_locks` sudah ada sejak migration bawaan
+   Laravel), sehingga tidak ada infrastruktur baru. Di dalam lock, kombinasi
+   `school_id + student_id + fee_type_id + period` yang sudah ada dilewati.
+
+Lapis 3 yang menutup celah baca-lalu-tulis antara dua worker yang memproses
+kombinasi sama secara bersamaan — lapis 1 dan 2 hanya mengurangi peluangnya.
+
+**Batasnya perlu diketahui:** tanpa constraint database, jaminannya berlaku
+selama seluruh penerbitan melewati `StudentFeeGenerator`. Penulisan `student_fees`
+lewat jalur lain (mis. seeder atau perintah artisan yang ditulis kemudian) tidak
+ikut terlindungi. Bila kelak requirement menyatakan keunikan itu memang aturan
+bisnis, unique index adalah tempat yang benar untuk menegakkannya — dan saat itu
+lock ini boleh dilepas.
+
 ### 53. Tahun ajaran tagihan: dari jenis tagihan, lalu tahun ajaran aktif
 
 `student_fees.academic_year_id` nullable pada ERD tanpa keterangan. Yang dipakai:
