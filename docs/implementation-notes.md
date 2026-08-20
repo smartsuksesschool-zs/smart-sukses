@@ -1306,6 +1306,130 @@ payment gateway (Phase 2), dan REST API. `PaymentMethod::PaymentGateway` tetap a
 enum dan di kolom ENUM database karena ia bagian dari ERD; yang tidak ada adalah
 kemampuan memilihnya maupun mengirimnya pada alur Phase 1.
 
+## Sprint 5 Batch 5.4 — Pembebasan Tagihan (WAIVED)
+
+### 67. Pembebasan tagihan adalah kewenangan Admin Sekolah, bukan Bendahara
+
+Seluruh yang dikatakan blueprint tentang pembebasan ada di tiga baris:
+
+- ERD 2.2 — `student_fees.status` memuat `WAIVED`
+- ERD 2.2 — `waive_reason` VARCHAR(200) NULL, "alasan dibebaskan (jika status WAIVED)"
+- API 4.9 — `PATCH /student-fees/{id}/waive`, Auth Level **Admin**, "bebaskan tagihan
+  dengan alasan (status → WAIVED)"
+
+PRD 1.2.6 tidak memuat user story pembebasan sama sekali, dan matriks 1.1.2 tidak punya
+baris "Pembebasan Tagihan". Yang tersisa karena itu adalah label Auth Level-nya, dan
+API 4.1 mendefinisikannya persis: *"Auth Level: Admin = Wajib token + role SCHOOL_ADMIN /
+SUPER_ADMIN"*.
+
+Kewenangannya karena itu **tidak** digantung pada `fee.manage`. Izin itu juga dipegang
+BENDAHARA, dan menggantungkan pembebasan padanya berarti memberi Bendahara wewenang yang
+tidak pernah diberikan dokumen mana pun kepada mereka.
+
+Ini berbeda dari SPP-01, SPP-02, dan SPP-03. Ketiganya juga berlabel "Admin" di API 4.9,
+tetapi masing-masing punya user story yang menyebut Bendahara secara eksplisit ("Sebagai
+Bendahara, saya dapat membuat jenis tagihan baru / men-generate tagihan / mencatat
+pembayaran"), dan user story adalah sumber yang lebih spesifik. Untuk pembebasan tidak
+ada yang menimpa label itu, sehingga label itulah yang berlaku.
+
+Polanya sudah ada di project: `GradeConfigPolicy` menolak menggantungkan konfigurasi
+bobot pada `grade.manage` dengan alasan yang sama persis — izin itu juga dipegang Guru,
+sedangkan NILAI-05 menyebut Admin Sekolah. `StudentFeePolicy::waive()` mengikuti idiom
+itu (`hasRole(SchoolAdmin)`; Super Admin lolos lewat `Gate::before`), sehingga tidak ada
+izin baru dan `RolePermissionSeeder` — yang bentuknya hanya `{modul}.view` /
+`{modul}.manage` — tidak perlu disesuaikan.
+
+Arahnya juga yang lebih aman. Mencatat pembayaran berarti mengakui uang yang masuk;
+membebaskan tagihan berarti memutuskan uang itu tidak akan pernah masuk. Bendahara tetap
+memegang seluruh kewenangan lainnya di modul keuangan.
+
+### 68. Tagihan yang sudah menerima pembayaran tidak dapat dibebaskan
+
+Blueprint tidak menjelaskan apa yang terjadi bila tagihan yang sudah dibayar sebagian
+atau lunas dibebaskan, dan — yang menentukan — tidak menyediakan apa pun untuk
+menyelesaikan akibatnya: tidak ada endpoint refund pada API 4.9, tidak ada kolom saldo
+atau kredit siswa pada ERD, tidak ada tabel pembalikan, dan `payments` tidak punya kolom
+status yang dapat menandai sebuah pembayaran sebagai batal.
+
+Ketiga tafsir yang mungkin sama-sama merusak sesuatu:
+
+- menerima dan membiarkan `amount_paid` tetap terisi → tagihan berstatus DIBEBASKAN
+  padahal uangnya sudah diterima, dan laporan penerimaan menjadi tidak dapat dijelaskan
+- menerima dan menolkan `amount_paid` → angka yang tidak cocok dengan riwayat
+  `payments`, yang justru merupakan sumber kebenarannya (butir 61)
+- menerima dan menghapus `payments`-nya → menghapus jejak uang yang benar-benar diterima
+
+Yang dipilih adalah menolak: pembebasan hanya sah bagi tagihan berstatus UNPAID yang
+belum menerima satu rupiah pun. Riwayat pembayaran tidak pernah disentuh oleh percobaan
+pembebasan, dan tidak ada refund, kredit, maupun pembalikan yang dikarang.
+
+Pemeriksaannya tidak hanya membaca kolom ringkasan `amount_paid` tetapi juga keberadaan
+baris `payments`. Bila ringkasan itu pernah menyimpang menjadi nol, yang tidak boleh
+terjadi adalah pembebasan yang lolos karena angka yang salah.
+
+Konsekuensi operasionalnya perlu diketahui pemilik produk: bila di lapangan sebuah
+tagihan yang sudah dicicil memang harus dibebaskan, Phase 1 belum punya jalurnya.
+Keputusan produknya — apakah uangnya dikembalikan, dialihkan ke periode berikutnya, atau
+pembayarannya dibatalkan dengan jejak tersendiri — belum diambil dan sengaja tidak
+diambil di sini.
+
+### 69. Pembebasan bukan keadaan yang dapat dimasuki dua kali
+
+Tagihan yang sudah WAIVED menolak pembebasan berikutnya, dan alasan yang sudah tercatat
+tidak ditimpa. Pembebasan kedua atas tagihan yang sama tidak menambah apa pun kecuali
+menghapus jejak keputusan pertama — sedangkan `waive_reason` justru satu-satunya
+penjelasan mengapa tagihan itu tidak akan pernah tertagih.
+
+Blueprint juga tidak menyediakan pencabutan pembebasan: tidak ada endpoint unwaive, dan
+tidak ada alur yang mengembalikan tagihan WAIVED ke UNPAID. Karena itu tidak dibuat.
+Bila nanti pencabutan memang dibutuhkan, jalurnya adalah aksi tersendiri yang tercatat —
+bukan efek samping dari pembayaran (butir 60) maupun dari pembebasan kedua.
+
+### 70. Satu baris terkunci menyelesaikan lomba waive vs payment
+
+`StudentFeeWaiver` dan `PaymentRecorder` mengunci baris `student_fees` yang sama dengan
+`lockForUpdate()` di dalam `DB::transaction`, dan keduanya membaca keadaan tagihan
+**setelah** kunci itu dipegang.
+
+Akibatnya lomba antara "bebaskan" dan "catat pembayaran" selalu berakhir pada satu
+keadaan yang konsisten, tanpa koordinasi tambahan:
+
+- pembebasan menang → pembayaran menunggu, membaca status WAIVED, lalu ditolak guard
+  Batch 5.3 (butir 60)
+- pembayaran menang → pembebasan menunggu, melihat `amount_paid` sudah terisi beserta
+  baris `payments`-nya, lalu ditolak guard butir 68
+
+Tidak ada keadaan di mana pembayaran masuk ke tagihan yang sudah dibebaskan. Tidak ada
+infrastruktur baru: kunci yang dipakai adalah kunci baris database yang sudah ada.
+
+MySQL 8 adalah target produksinya dan menghasilkan `SELECT ... FOR UPDATE`. SQLite —
+yang dipakai `phpunit.xml` — tidak mengenal klausa itu; test memeriksa grammar sesuai
+driver yang sedang berjalan, dan menguji kedua arah guard-nya secara berurutan alih-alih
+berpura-pura menjalankan dua koneksi paralel.
+
+### 71. Sisa tagihan pindah ke model, bukan disalin
+
+`remaining()` sekarang milik `StudentFee`; `PaymentRecorder::remainingFor()` tetap ada
+sebagai pembungkus yang meneruskan ke sana. Alasannya bukan kerapian: konsumen
+berikutnya adalah portal orang tua (SPP-04), dan dua rumus sisa tagihan yang dihitung di
+dua tempat cepat atau lambat akan berbeda.
+
+Ditambahkan pula `scopeForStudent()` dan `scopeWithBillingDetail()` — keduanya murni
+pemilihan dan eager load, tanpa aturan bisnis. Tidak ada tabel, kolom, snapshot, rute,
+maupun view portal yang dibuat: SPP-04 bukan lingkup batch ini. Yang dipastikan hanya
+bahwa seluruh data yang nanti dibutuhkannya — siswa, jenis tagihan, periode, nominal,
+terbayar, sisa, jatuh tempo, status, alasan pembebasan, dan riwayat pembayaran beserta
+tanggal/metode/referensi/pencatatnya — sudah dapat dibaca dari model yang ada.
+
+### 72. Yang sengaja belum ada pada Batch 5.4
+
+Pencabutan pembebasan, refund, kredit/saldo siswa, pembalikan pembayaran, portal orang
+tua (SPP-04), ekspor laporan (SPP-05), notifikasi tagihan, buku kas `transactions`
+(Sprint 6), dashboard keuangan, integrasi payment gateway (Phase 2), dan REST API.
+Pembebasan massal juga tidak ada: API 4.9 memberi `waive` sebuah `PATCH` untuk satu id,
+dan membebaskan banyak tagihan sekaligus adalah keputusan yang layak dilakukan satu per
+satu.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

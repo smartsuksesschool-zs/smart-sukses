@@ -172,12 +172,14 @@ class PaymentRecorder
 
     /**
      * Sisa tagihan yang masih boleh dibayar.
+     *
+     * Perhitungannya milik model — di sanalah portal orang tua (SPP-04) nanti
+     * membacanya juga — sehingga tidak ada dua rumus sisa tagihan yang dapat
+     * berbeda.
      */
     public static function remainingFor(StudentFee $studentFee): string
     {
-        $remaining = bcsub((string) $studentFee->amount, (string) $studentFee->amount_paid, self::SCALE);
-
-        return bccomp($remaining, '0', self::SCALE) < 0 ? '0.00' : $remaining;
+        return $studentFee->remaining();
     }
 
     /**

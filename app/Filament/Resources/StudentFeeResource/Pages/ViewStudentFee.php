@@ -21,6 +21,8 @@ class ViewStudentFee extends ViewRecord
                 // sinyal ini tabel riwayatnya tetap menampilkan keadaan sebelum
                 // pembayaran barusan sampai halaman dimuat ulang.
                 ->after(fn () => $this->dispatch(StudentFeeResource::PAYMENT_RECORDED_EVENT)),
+
+            StudentFeeResource::waivePageAction(),
         ];
     }
 }

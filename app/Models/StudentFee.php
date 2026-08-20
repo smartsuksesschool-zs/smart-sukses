@@ -71,4 +71,42 @@ class StudentFee extends Model
     {
         return $query->where('period', $period);
     }
+
+    public function scopeForStudent(Builder $query, int $studentId): Builder
+    {
+        return $query->where('student_id', $studentId);
+    }
+
+    /**
+     * Sisa tagihan sebagai string desimal, tidak pernah negatif.
+     *
+     * Turunan dari dua kolom yang sudah ada — sengaja bukan kolom ketiga yang
+     * bisa menyimpang dari keduanya. Perhitungannya memakai bcmath: nominal
+     * `DECIMAL(12,2)` dibaca Eloquent sebagai string dan tidak boleh melewati
+     * float (docs/implementation-notes.md butir 58).
+     */
+    public function remaining(): string
+    {
+        $remaining = bcsub((string) $this->amount, (string) $this->amount_paid, 2);
+
+        return bccomp($remaining, '0', 2) < 0 ? '0.00' : $remaining;
+    }
+
+    public function isWaived(): bool
+    {
+        return $this->status === StudentFeeStatus::Waived;
+    }
+
+    /**
+     * Muatan yang dibutuhkan tampilan detail tagihan: siswa, jenis tagihannya,
+     * dan seluruh riwayat pembayaran beserta pencatatnya.
+     *
+     * Disediakan di model, bukan di satu Resource Filament, karena konsumen
+     * berikutnya adalah portal orang tua (SPP-04) yang membutuhkan bentuk data
+     * yang sama persis. Tidak ada aturan bisnis di sini — hanya eager load.
+     */
+    public function scopeWithBillingDetail(Builder $query): Builder
+    {
+        return $query->with(['student', 'feeType', 'payments.receivedBy']);
+    }
 }

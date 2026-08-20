@@ -44,6 +44,21 @@ enum StudentFeeStatus: string
     }
 
     /**
+     * Hanya tagihan yang belum menerima satu pun pembayaran yang dapat
+     * dibebaskan.
+     *
+     * Blueprint tidak mengatur pembebasan atas tagihan yang sudah dibayar
+     * sebagian maupun lunas, dan tidak menyediakan refund/reversal untuk
+     * mengembalikan uangnya — lihat docs/implementation-notes.md butir 68.
+     * WAIVED sendiri bukan keadaan yang dapat dimasuki dua kali: alasan
+     * pembebasan yang sudah tercatat tidak ditimpa diam-diam.
+     */
+    public function canBeWaived(): bool
+    {
+        return $this === self::Unpaid;
+    }
+
+    /**
      * @return array<string, string>
      */
     public static function options(): array

@@ -9,6 +9,7 @@ use App\Models\FeeType;
 use App\Models\Payment;
 use App\Models\StudentFee;
 use App\Services\Finance\PaymentRecorder;
+use App\Services\Finance\StudentFeeWaiver;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Infolists;
@@ -143,6 +144,7 @@ class StudentFeeResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 static::recordPaymentAction(),
+                static::waiveAction(),
             ])
             // Tagihan tidak dihapus dan tidak diubah massal.
             ->bulkActions([])
@@ -186,11 +188,20 @@ class StudentFeeResource extends Resource
                     Infolists\Components\TextEntry::make('remaining')
                         ->label('Sisa Tagihan')
                         ->money('IDR')
-                        ->state(fn (StudentFee $record): string => PaymentRecorder::remainingFor($record)),
+                        ->state(fn (StudentFee $record): string => $record->remaining()),
+                ]),
+
+            // Bagiannya sendiri, dan hanya untuk tagihan yang memang
+            // dibebaskan: alasan pembebasan adalah penjelasan mengapa tagihan
+            // ini tidak akan pernah tertagih, bukan catatan tambahan pada
+            // nominalnya.
+            Infolists\Components\Section::make('Pembebasan Tagihan')
+                ->visible(fn (StudentFee $record): bool => $record->isWaived() || filled($record->waive_reason))
+                ->schema([
                     Infolists\Components\TextEntry::make('waive_reason')
                         ->label('Alasan Pembebasan')
-                        ->columnSpanFull()
-                        ->visible(fn (StudentFee $record): bool => filled($record->waive_reason)),
+                        ->placeholder('—')
+                        ->columnSpanFull(),
                 ]),
         ]);
     }
@@ -352,8 +363,109 @@ class StudentFeeResource extends Resource
     public static function canRecordPaymentFor(StudentFee $record): bool
     {
         return (Auth::user()?->can('create', Payment::class) ?? false)
-            && $record->status !== StudentFeeStatus::Waived
-            && bccomp(PaymentRecorder::remainingFor($record), '0', 2) > 0;
+            && ! $record->isWaived()
+            && bccomp($record->remaining(), '0', 2) > 0;
+    }
+
+    /**
+     * API 4.9 — PATCH /student-fees/{id}/waive.
+     *
+     * Formnya hanya satu isian: alasannya. Status tidak pernah dipilih manual —
+     * "status → WAIVED" adalah akibat aksinya, bukan masukan yang bisa dikirim
+     * pengguna.
+     */
+    public static function waiveAction(): Tables\Actions\Action
+    {
+        return static::configureWaiveAction(Tables\Actions\Action::make('waive'));
+    }
+
+    public static function waivePageAction(): Actions\Action
+    {
+        return static::configureWaiveAction(Actions\Action::make('waive'));
+    }
+
+    /**
+     * @template T of Tables\Actions\Action|Actions\Action
+     *
+     * @param  T  $action
+     * @return T
+     */
+    protected static function configureWaiveAction(Tables\Actions\Action|Actions\Action $action): Tables\Actions\Action|Actions\Action
+    {
+        return $action
+            ->label('Bebaskan Tagihan')
+            ->icon('heroicon-o-hand-raised')
+            ->color('gray')
+            ->modalHeading('Bebaskan Tagihan')
+            ->modalDescription('Tagihan akan berstatus DIBEBASKAN dan tidak akan tertagih lagi. '
+                .'Nominal, riwayat pembayaran, dan jejak auditnya tidak berubah.')
+            ->modalSubmitActionLabel('Bebaskan')
+            ->requiresConfirmation()
+            // Disembunyikan bila tidak berwenang atau keadaannya tidak
+            // memungkinkan — tetapi pagarnya ada di StudentFeeWaiver, yang
+            // memeriksa keduanya lagi di jalur tulis.
+            ->visible(fn (StudentFee $record): bool => static::canWaive($record))
+            ->form(static::waiveFormSchema())
+            ->action(fn (StudentFee $record, array $data) => static::handleWaive($record, $data));
+    }
+
+    /**
+     * Satu isian saja. Status tidak pernah menjadi field: "status → WAIVED"
+     * adalah akibat aksinya, dan menyediakannya sebagai masukan berarti
+     * membiarkan pengguna memilih status tagihan secara sembarang.
+     *
+     * @return array<int, Forms\Components\Component>
+     */
+    public static function waiveFormSchema(): array
+    {
+        return [
+            Forms\Components\Textarea::make('waive_reason')
+                ->label('Alasan Pembebasan')
+                ->required()
+                // ERD: `waive_reason` VARCHAR(200).
+                ->maxLength(StudentFeeWaiver::REASON_MAX_LENGTH)
+                ->rows(3)
+                ->helperText('Maksimal '.StudentFeeWaiver::REASON_MAX_LENGTH.' karakter. '
+                    .'Alasan ini tersimpan permanen pada tagihannya.'),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public static function handleWaive(StudentFee $record, array $data): void
+    {
+        $user = Auth::user();
+
+        if ($user === null) {
+            return;
+        }
+
+        app(StudentFeeWaiver::class)->waive($record->getKey(), $data['waive_reason'] ?? null, $user);
+
+        $record->refresh();
+
+        Notification::make()
+            ->title('Tagihan dibebaskan')
+            ->body(sprintf(
+                'Tagihan %s untuk %s berstatus %s.',
+                $record->period,
+                $record->student?->full_name ?? 'siswa',
+                $record->status->label(),
+            ))
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Pembebasan hanya masuk akal untuk tagihan yang belum menerima uang, dan
+     * hanya bagi peran yang memang berwenang (API 4.9: Admin).
+     */
+    public static function canWaive(StudentFee $record): bool
+    {
+        return (Auth::user()?->can('waive', $record) ?? false)
+            && $record->status->canBeWaived()
+            && bccomp((string) $record->amount_paid, '0', 2) <= 0;
     }
 
     /**
