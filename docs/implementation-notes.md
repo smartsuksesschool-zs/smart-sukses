@@ -2111,6 +2111,53 @@ endpoint API mana pun, portal orang tua (SPP-04), dan notifikasi. Ekspor ini jug
 menyimpan riwayat unduhan: tidak ada tabel untuk itu di ERD, dan `audit_logs` mencatat
 CUD, bukan pembacaan (butir 45).
 
+## Register Keputusan Implementasi — Disetujui untuk Phase 1
+
+### 113. Sembilan keputusan fallback yang sudah disetujui, dan statusnya
+
+Butir-butir sebelumnya mencatat sejumlah perilaku sebagai *fallback* karena blueprint
+tidak menetapkannya, dan menandainya perlu dikonfirmasi. Konfirmasi itu sudah datang:
+kesembilan keputusan berikut **disetujui untuk Phase 1** dan tidak lagi menunggu
+persetujuan siapa pun.
+
+Yang perlu dijaga ketelitiannya: ini tetap **keputusan implementasi**, bukan isi
+blueprint. Bila kelak ada bagian blueprint yang secara eksplisit lebih spesifik, bagian
+itulah yang menang — persis seperti sebelumnya.
+
+| # | Keputusan | Butir | Status kode |
+|---|---|---|---|
+| 1 | Pembayaran melebihi sisa tagihan ditolak; tidak ada saldo/kredit siswa | 59 | Sudah sesuai |
+| 2a | Pembayaran atas tagihan WAIVED ditolak | 60 | Sudah sesuai |
+| 2b | Tagihan PARTIAL/PAID tidak dapat dibebaskan; tidak ada refund/reversal | 68, 69 | Sudah sesuai |
+| 3 | Persentase lunas = PAID / (UNPAID + PARTIAL + PAID) × 100; WAIVED di luar penyebut | 91 | Sudah sesuai |
+| 4 | Saldo kas periode lampau = posisi sampai akhir bulan terpilih | 82 | Sudah sesuai |
+| 5 | Ekspor Excel keuangan = ledger `transactions` satu cabang; tanpa lembar ringkasan dan tanpa saldo berjalan | 106, 107 | Sudah sesuai |
+| 6 | Kepala Sekolah view-only atas laporan keuangan; tidak dapat mengekspor | 98, 105 | Sudah sesuai |
+| 7 | SPP dan Buku Kas tetap dua domain terpisah; Payment tidak membuat Transaction; tanpa rekonsiliasi otomatis Phase 1 | 75 | Sudah sesuai |
+| 8 | YEARLY/ONCE diterbitkan eksplisit oleh operator; tanpa scheduler maupun aturan recurrence | 51, 54 | Sudah sesuai |
+| 9 | **Bukti pembayaran boleh dilampirkan setelah Payment dibuat; bukti yang sudah ada tidak ditimpa diam-diam** | 64 | **Belum — lihat bawah** |
+
+Delapan yang pertama menegaskan perilaku yang memang sudah berjalan; tidak ada kode yang
+berubah karenanya. Nilainya ada pada statusnya: keputusan-keputusan itu tidak lagi
+menggantung, sehingga tidak perlu ditanyakan ulang di setiap batch dan tidak boleh
+diam-diam diubah.
+
+Keputusan **9 adalah satu-satunya yang mengubah perilaku.** Saat ini `payments` bersifat
+append-only sepenuhnya (butir 64): `PaymentPolicy::update()` menolak tanpa syarat dan
+tidak ada satu pun jalur UI untuk menyentuh baris yang sudah tercatat. Konsekuensinya
+alur yang wajar terjadi di lapangan — pembayaran transfer dicatat hari ini, scan
+buktinya baru tiba besok — tidak punya jalan keluar sama sekali.
+
+Persetujuan ini melonggarkan append-only itu **pada satu kolom saja**, `proof_url`, dan
+hanya ke satu arah: dari kosong menjadi terisi. Nominal, metode, tanggal, dan pencatatnya
+tetap tidak dapat diubah, karena tidak satu pun dari itu yang diminta longgar. Larangan
+menimpa bukti yang sudah ada adalah bagian dari keputusannya, bukan tambahan: mengganti
+bukti secara diam-diam menghapus dokumen yang mungkin sudah pernah dipakai
+mempertanggungjawabkan uang.
+
+Implementasinya belum dikerjakan pada saat butir ini ditulis; ia menjadi lingkup batch
+tersendiri. Sampai batch itu selesai, butir 64 tetap menggambarkan perilaku yang berjalan.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
