@@ -1604,6 +1604,134 @@ keputusan owner yang diberikan secara eksplisit, melainkan pembacaan spesifikasi
 tersebut. Bila dokumen itu kelak masuk ke repositori, butir ini yang perlu dicocokkan
 dengannya.
 
+## Sprint 6 Batch 6.2 — Laporan Keuangan Bulanan (KAS-02)
+
+### 82. Saldo kas adalah posisi, bukan pergerakan bulan itu
+
+AC KAS-02 berbunyi: *"Dashboard keuangan menampilkan: saldo kas, total penerimaan SPP
+bulan ini, total pengeluaran bulan ini."* Perhatikan letak keterangan "bulan ini" — ia
+melekat pada penerimaan SPP dan pengeluaran, tetapi **tidak** pada saldo kas.
+
+Itu bukan kelalaian penulisan melainkan sifat angkanya. Kas yang tersisa dari bulan
+sebelumnya tetap ada di brankas; menghitung "saldo" sebagai `income - expense` bulan
+berjalan saja akan menghasilkan angka yang berubah drastis setiap tanggal 1 dan tidak
+pernah cocok dengan uang yang benar-benar ada.
+
+Yang **tidak** ditetapkan dokumen adalah tanggal potongnya. Fallback yang dipakai: posisi
+sampai **akhir periode terpilih** — seluruh INCOME dikurangi seluruh EXPENSE dengan
+`transaction_date <= akhir bulan terpilih`. Konsekuensinya memilih bulan lampau
+menampilkan saldo sebagaimana adanya saat itu, bukan saldo hari ini, dan itulah yang
+membuat ringkasan bulan lalu tetap dapat dibaca ulang tanpa berubah.
+
+Saldo hanya membaca `transactions`. Penerimaan SPP **tidak** ditambahkan ke dalamnya:
+blueprint tidak menjelaskan kapan uang SPP masuk buku kas (butir 75), dan menjumlahkannya
+di sini berarti mengarang aturan rekonsiliasi sekaligus berisiko menghitung ganda begitu
+Bendahara benar-benar mencatat setorannya sebagai transaksi INCOME.
+
+### 83. Tren memakai dua seri yang datanya memang ada
+
+AC hanya menyebut "grafik tren 6 bulan terakhir" tanpa menetapkan serinya. Yang dipakai
+adalah dua seri terkecil yang pasti didukung data: pemasukan dan pengeluaran
+`transactions` per bulan.
+
+Tidak ada proyeksi, persentase pertumbuhan, garis saldo berjalan, maupun seri turunan
+lain — semuanya akan menjadi angka yang tidak pernah diminta siapa pun dan tidak dapat
+diverifikasi terhadap dokumen. Test `test_the_trend_carries_no_invented_series` menjaga
+bentuk keluarannya tetap persis empat kunci per bulan.
+
+Enam bulannya selalu utuh: bulan terpilih dan lima sebelumnya, berurutan lama → baru,
+dan bulan tanpa transaksi bernilai `0.00` alih-alih hilang dari sumbu — sumbu yang
+melompati bulan kosong membuat tren terbaca lebih mulus daripada kenyataannya.
+
+### 84. `GET /finance/summary` belum dibuat, dan itu disengaja
+
+API 4.9 memuat `GET /finance/summary` (Auth Level "Auth", filter `year` dan `month`).
+Endpoint itu **tidak** dibuat pada batch ini karena project belum punya lapisan REST API
+sama sekali: `routes/api.php` tidak ada, tidak ada satu pun rute ber-prefix `api`, tidak
+ada controller API, dan Sanctum belum dipakai untuk token. Membuat satu endpoint terisolasi
+berarti mendirikan lapisan baru — konvensi respons, autentikasi token, penanganan error,
+versioning — hanya untuk satu rute.
+
+`FinanceSummaryService` sudah dirancang menjadi sumber rumusnya, sehingga endpoint itu
+nanti tinggal memanggilnya. Tidak ada rumus yang perlu disalin, dan karena itu tidak ada
+kemungkinan angka API berbeda dari angka dashboard. Seluruh endpoint API diselesaikan
+bersama pada API implementation pass tersendiri.
+
+### 85. KAS-02 memakai `financial_report.view`, bukan `accounting.*`
+
+Tiga sumber menunjuk arah yang sama:
+
+- **KAS-02** menyebut penggunanya "Kepala Sekolah / Admin"
+- **Matriks 1.1.2 baris "Laporan Keuangan"** — SUPER_ADMIN ✅, SCHOOL_ADMIN ✅,
+  KEPALA ⭕, GURU/WALI ❌, BENDAHARA ✅, SISWA ❌, ORTU ❌
+- **Roadmap Sprint 6** menyebut "Dashboard Bendahara"
+
+Bendahara mendapat akses bukan karena ia sudah memegang KAS-01 — itu argumen yang salah,
+dan `accounting.*` adalah izin pencatatan buku kas, bukan izin membaca laporannya.
+Dasarnya adalah baris matriks "Laporan Keuangan" yang memang memberi Bendahara ✅, dan
+roadmap yang menyebut dashboard itu miliknya. KAS-02 adalah laporan, jadi izinnya
+`financial_report.view` — izin yang sudah ada dan sudah dibagikan RolePermissionSeeder
+persis mengikuti baris matriks itu sejak Sprint 1. Tidak ada izin baru.
+
+Dipakai `.view`, bukan `.manage`: dashboard ini hanya membaca. Kepala Sekolah yang
+ber-⭕ karena itu tetap masuk, sesuai kalimat KAS-02 yang justru menyebut mereka lebih
+dulu.
+
+### 86. Super Admin wajib memilih cabang — KAS-02 bukan KAS-03
+
+KAS-02 adalah ringkasan satu cabang; KAS-03 (*"ringkasan keuangan semua cabang dalam satu
+dashboard"*) adalah user story tersendiri yang belum dikerjakan.
+
+Super Admin tidak memiliki `school_id`, sehingga tanpa penanganan khusus query-nya akan
+melewati SchoolScope dan menjumlahkan seluruh cabang — menjadi KAS-03 secara diam-diam,
+dengan angka yang tidak pernah dirancang (total tagihan, terkumpul, persentase lunas per
+cabang) dan tanpa cara membedakan cabang mana yang bermasalah. Karena itu halaman ini
+menampilkan pemilih cabang untuk Super Admin dan tidak menghitung apa pun sampai satu
+cabang dipilih.
+
+Bagi peran School Level pemilih itu tidak pernah dirender, dan nilainya di state Livewire
+diabaikan sepenuhnya — pola `resolveSchoolId()` yang sama dengan FeeTypeResource dan
+GenerateTagihan.
+
+### 87. Agregat SQL per rentang, bukan percabangan driver
+
+Seluruh angka dihitung dengan `SUM(amount)` yang dikelompokkan per `type`, sehingga tiap
+query mengembalikan paling banyak dua baris — bukan seluruh transaksi cabang itu. Jumlah
+query karenanya tetap sama berapa pun banyaknya record, dan itu diuji
+(`test_the_query_count_stays_constant_as_data_grows`): satu agregat saldo, satu penerimaan
+SPP, satu pengeluaran periode, dan satu per bulan tren — sembilan, selamanya.
+
+Menghitung keenam bulan tren dalam **satu** query memerlukan ekstraksi bulan yang berbeda
+antar driver (`DATE_FORMAT` di MySQL, `strftime` di SQLite). Project ini belum pernah
+memakai SQL spesifik driver, dan memasang percabangannya demi menghemat lima query adalah
+pertukaran yang buruk: satu query agregat per bulan tetap konstan terhadap volume data,
+sedangkan percabangan driver menambah jalur kode yang hanya teruji di salah satu database.
+`SUM()` dan `GROUP BY` sendiri ditulis apa adanya karena keduanya berlaku sama di kedua
+driver.
+
+Tidak ada migration maupun index baru: penyaringan berjalan di `school_id` (foreign key,
+ber-index), `type` (ber-index menurut ERD), dan rentang tanggal.
+
+### 88. Gap soft delete KAS-01 terbawa ke sini
+
+Buku kas belum punya mekanisme penghapusan (butir 74), dan batch ini tidak
+menyelesaikannya. Konsekuensinya untuk KAS-02: seluruh baris `transactions` yang ada di
+tabel ikut terhitung, karena memang tidak ada penanda apa pun yang menyatakan sebuah baris
+"terhapus".
+
+Tidak ada `deleted_at`, `is_active`, status, maupun filter transaksi terhapus yang
+ditambahkan — menambahkannya di sini berarti memutuskan diam-diam apa arti "terhapus"
+bagi saldo kas, yang justru pertanyaan yang harus dijawab pemilik produk lebih dulu.
+Ketika butir 74 selesai, saldo dan tren adalah dua tempat pertama yang perlu disesuaikan.
+
+### 89. Yang sengaja belum ada pada Batch 6.2
+
+Dashboard lintas cabang (KAS-03), ekspor laporan (SPP-05, `GET /finance/export`),
+`GET /finance/spp-report`, endpoint `GET /finance/summary` (butir 84), portal orang tua
+(SPP-04), notifikasi, dan penghapusan transaksi (butir 74/88). Ringkasan ini juga tidak
+menyimpan hasilnya ke tabel mana pun: angkanya dihitung saat diminta, sehingga tidak ada
+snapshot yang dapat basi terhadap `transactions` dan `payments` yang menjadi sumbernya.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
