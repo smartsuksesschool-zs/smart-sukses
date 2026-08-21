@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FeeTypeController;
 use App\Http\Controllers\Api\FinanceExportController;
 use App\Http\Controllers\Api\FinanceReportController;
+use App\Http\Controllers\Api\ParentPortalController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\StudentFeeController;
 use App\Http\Controllers\Api\TransactionController;
@@ -77,6 +78,13 @@ Route::prefix('v1')->group(function (): void {
         Route::get('finance/spp-report', [FinanceReportController::class, 'sppReport']);
         Route::get('finance/export', [FinanceExportController::class, 'cashLedger']);
 
+        // --------------------------------------------- 4.11 Parent Portal
+        // Auth Level "Auth" pada API map; perannya sendiri ditegakkan
+        // ParentPortalService, sama seperti pada laporan keuangan (butir 148).
+        Route::get('parent/children', [ParentPortalController::class, 'children']);
+        Route::get('parent/children/{studentId}/summary', [ParentPortalController::class, 'summary'])
+            ->whereNumber('studentId');
+
         // ------------------------------------------------- 4.3 Super Admin
         // Satu-satunya kelompok yang memang lintas cabang. Pagarnya berlapis:
         // `auth_level:super` di sini, dan pemeriksaan yang sama di dalam
@@ -90,9 +98,13 @@ Route::prefix('v1')->group(function (): void {
 });
 
 /*
-| Seluruh endpoint yang dulu ditunda kini ada. Yang tersisa dari API 4.3 dan
-| 4.4 — GET/POST/PUT/PATCH /admin/schools serta seluruh /users — memang belum
-| dibuat, tetapi keduanya bukan deliverable Sprint 6: keduanya milik manajemen
-| tenant dan pengguna, yang di panel sudah berjalan lewat SchoolResource dan
-| UserResource. Lihat butir 145.
+| Yang tersisa dari API 4.3 dan 4.4 — GET/POST/PUT/PATCH /admin/schools serta
+| seluruh /users — memang belum dibuat; keduanya milik manajemen tenant dan
+| pengguna, yang di panel sudah berjalan lewat SchoolResource dan UserResource.
+| Lihat butir 145, 146.
+|
+| Dari API 4.11, Batch 7.1 baru membuat dua endpoint orang tua. Sisanya —
+| /parent/children/{id}/grades, /fees, /schedule, serta seluruh /teacher dan
+| /student — menyusul pada batch Sprint 7 berikutnya, dan sengaja tidak
+| didaftarkan sebagai placeholder (butir 155).
 */
