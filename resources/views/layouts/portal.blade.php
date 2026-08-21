@@ -206,6 +206,67 @@
 
         .portal-error { color: var(--color-danger); font-size: .875rem; margin-top: .375rem; }
 
+
+        /* Navigasi portal. Menggulung ke samping hanya bila memang tidak muat,
+           dan tidak pernah mendorong badan halaman melebar. */
+        .portal-nav {
+            background: var(--color-surface);
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .portal-nav__inner {
+            max-width: 60rem;
+            margin: 0 auto;
+            display: flex;
+            gap: .25rem;
+            padding: 0 .5rem;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .portal-nav a {
+            display: inline-flex;
+            align-items: center;
+            min-height: 2.75rem;
+            padding: 0 .875rem;
+            white-space: nowrap;
+            text-decoration: none;
+            color: var(--color-muted);
+            border-bottom: 2px solid transparent;
+        }
+
+        .portal-nav a[aria-current="page"] {
+            color: var(--color-primary);
+            border-bottom-color: var(--color-primary);
+            font-weight: 600;
+        }
+
+        .portal-table { width: 100%; border-collapse: collapse; }
+
+        .portal-table th,
+        .portal-table td {
+            text-align: left;
+            padding: .5rem 0;
+            border-bottom: 1px solid var(--color-border);
+            font-size: .9375rem;
+        }
+
+        .portal-badge {
+            display: inline-block;
+            padding: .125rem .5rem;
+            border-radius: 999px;
+            font-size: .75rem;
+            font-weight: 600;
+            border: 1px solid var(--color-border);
+        }
+
+        .portal-badge--danger { background: #fdecea; border-color: #f5c2bd; color: #8c1d18; }
+        .portal-badge--warning { background: #fff4e5; border-color: #ffd8a8; color: #8a5300; }
+        .portal-badge--success { background: #e7f6ec; border-color: #b7e0c4; color: #1b5e2f; }
+        .portal-badge--muted { background: #eef0f4; color: var(--color-muted); }
+
+        .portal-scroll { overflow-x: auto; }
+
         .portal-centered {
             max-width: 24rem;
             margin: 3rem auto;
@@ -237,6 +298,28 @@
                 @endauth
             </div>
         </header>
+    @endunless
+
+    @unless ($bare)
+        @auth
+            {{--
+                Navigasi portal. Hanya halaman yang benar-benar ada; tidak ada
+                tautan mati. Notifikasi milik Sprint 8 dan karena itu belum
+                muncul di sini (butir 168).
+            --}}
+            <nav class="portal-nav">
+                <div class="portal-nav__inner">
+                    <a href="{{ route('portal.dashboard') }}"
+                       @if (request()->routeIs('portal.dashboard')) aria-current="page" @endif>Ringkasan</a>
+                    <a href="{{ route('portal.grades') }}"
+                       @if (request()->routeIs('portal.grades')) aria-current="page" @endif>Nilai</a>
+                    <a href="{{ route('portal.fees') }}"
+                       @if (request()->routeIs('portal.fees')) aria-current="page" @endif>Tagihan</a>
+                    <a href="{{ route('portal.schedule') }}"
+                       @if (request()->routeIs('portal.schedule')) aria-current="page" @endif>Jadwal</a>
+                </div>
+            </nav>
+        @endauth
     @endunless
 
     <main class="portal-main">

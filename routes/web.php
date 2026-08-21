@@ -1,7 +1,11 @@
 <?php
 
+use App\Http\Controllers\Portal\ReportCardDownloadController;
 use App\Http\Middleware\EnsureParentPortalAccess;
 use App\Livewire\Portal\ParentDashboard;
+use App\Livewire\Portal\ParentFees;
+use App\Livewire\Portal\ParentGrades;
+use App\Livewire\Portal\ParentSchedule;
 use App\Livewire\Portal\PortalLogin;
 use App\Livewire\Ppdb\RegistrationForm;
 use App\Livewire\Ppdb\SchoolList;
@@ -46,6 +50,15 @@ Route::prefix('portal')->name('portal.')->group(function () {
      */
     Route::middleware(EnsureParentPortalAccess::class)->group(function () {
         Route::get('/', ParentDashboard::class)->name('dashboard');
+        Route::get('/nilai', ParentGrades::class)->name('grades');
+        Route::get('/tagihan', ParentFees::class)->name('fees');
+        Route::get('/jadwal', ParentSchedule::class)->name('schedule');
+
+        // NILAI-04 poin 3. Kepemilikan anak dan status terbitnya rapor
+        // diperiksa di controller lewat pagar Batch 7.1 (butir 162).
+        Route::get('/nilai/{studentId}/rapor/{reportCardId}', ReportCardDownloadController::class)
+            ->whereNumber(['studentId', 'reportCardId'])
+            ->name('report-card');
     });
 
     // Logout memakai POST supaya tidak dapat dipicu lewat tautan atau

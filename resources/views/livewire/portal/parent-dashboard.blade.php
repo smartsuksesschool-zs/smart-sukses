@@ -12,20 +12,7 @@
             </p>
         </div>
     @else
-        {{-- PORTAL-01 poin 2 — berpindah antar profil anak. Dengan satu anak,
-             pemilihnya tidak perlu muncul sama sekali. --}}
-        @if ($children->count() > 1)
-            <div class="portal-child-switcher" role="group" aria-label="Pilih anak">
-                @foreach ($children as $child)
-                    <button
-                        type="button"
-                        class="portal-child-button"
-                        aria-pressed="{{ $selectedChildId === $child->id ? 'true' : 'false' }}"
-                        wire:click="selectChild({{ $child->id }})"
-                    >{{ $child->full_name }}</button>
-                @endforeach
-            </div>
-        @endif
+        @include('livewire.portal.partials.child-switcher')
 
         @if ($summary)
             @php($child = $summary['child'])

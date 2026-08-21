@@ -2,10 +2,9 @@
 
 namespace App\Livewire\Portal;
 
-use App\Models\Student;
+use App\Livewire\Portal\Concerns\SelectsChild;
 use App\Services\Portal\ParentPortalService;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
@@ -23,48 +22,7 @@ use Livewire\Component;
  */
 class ParentDashboard extends Component
 {
-    /**
-     * Anak yang sedang dilihat.
-     *
-     * Disimpan sebagai id di state komponen Livewire, bukan dibaca dari query
-     * string: apa pun yang dikirim akan diperiksa ulang terhadap daftar anak
-     * milik orang tua ini sebelum dipakai (butir 156).
-     */
-    public ?int $selectedChildId = null;
-
-    public function mount(): void
-    {
-        $this->selectedChildId = $this->children()->first()?->getKey();
-    }
-
-    /**
-     * Berpindah profil anak — PORTAL-01 poin 2.
-     *
-     * Id yang tidak ada di daftar anak miliknya diabaikan sepenuhnya, dan
-     * pilihannya tetap pada anak sebelumnya. Tidak ada pesan yang membedakan
-     * "anak orang lain" dari "anak tidak ada": keduanya sama-sama bukan
-     * urusannya.
-     */
-    public function selectChild(int $studentId): void
-    {
-        if ($this->children()->contains(fn (Student $child) => $child->getKey() === $studentId)) {
-            $this->selectedChildId = $studentId;
-        }
-    }
-
-    /**
-     * Anak-anak milik orang tua ini.
-     *
-     * Diambil sekali per request lalu ditahan: dashboard membacanya beberapa
-     * kali (pemilih, ringkasan, judul) dan tidak boleh menghasilkan query
-     * berulang.
-     *
-     * @return Collection<int, Student>
-     */
-    public function children(): Collection
-    {
-        return once(fn () => app(ParentPortalService::class)->children(Auth::user()));
-    }
+    use SelectsChild;
 
     /**
      * Ringkasan anak terpilih, atau NULL bila orang tua ini belum punya anak
