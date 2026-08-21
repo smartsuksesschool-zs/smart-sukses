@@ -217,11 +217,24 @@ class StudentFeeBillingDataTest extends TestCase
             );
         }
 
-        $this->assertFalse(
-            collect(app('router')->getRoutes())->contains(
-                fn ($route) => str_contains($route->uri(), 'portal') || str_contains($route->uri(), 'orang-tua'),
-            ),
-            'Batch ini tidak boleh menambah rute portal orang tua.',
+        // Portal orang tua akhirnya dibuat pada Sprint 7, dan rutenya memang
+        // ada sekarang. Yang dijaga karena itu bergeser: portal hanya membaca
+        // tagihan, dan tidak boleh membawa satu pun jalur tulis keuangan
+        // sendiri (butir 154).
+        $writeMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
+
+        $billingWriteRoutes = collect(app('router')->getRoutes())
+            ->filter(fn ($route) => str_starts_with($route->uri(), 'portal'))
+            ->filter(fn ($route) => array_intersect($writeMethods, $route->methods()) !== [])
+            // Keluar dari portal memang POST, dan tidak menyentuh keuangan.
+            ->reject(fn ($route) => $route->getName() === 'portal.logout')
+            ->map(fn ($route) => $route->uri())
+            ->all();
+
+        $this->assertSame(
+            [],
+            $billingWriteRoutes,
+            'Portal orang tua tidak boleh punya jalur tulis apa pun.',
         );
     }
 }
