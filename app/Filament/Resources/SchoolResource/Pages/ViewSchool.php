@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\SchoolResource\Pages;
 
 use App\Filament\Resources\SchoolResource;
+use App\Filament\Resources\SchoolResource\Widgets\SchoolStatsOverview;
 use Filament\Actions;
 use Filament\Resources\Pages\ViewRecord;
 
@@ -19,5 +20,26 @@ class ViewSchool extends ViewRecord
         return [
             Actions\EditAction::make(),
         ];
+    }
+
+    /**
+     * API 4.3 — GET /admin/schools/{id}/stats, ditampilkan di halaman yang
+     * sudah ada alih-alih sebagai dashboard baru.
+     *
+     * @return array<int, class-string>
+     */
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            SchoolStatsOverview::class,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getWidgetData(): array
+    {
+        return ['record' => $this->record];
     }
 }
