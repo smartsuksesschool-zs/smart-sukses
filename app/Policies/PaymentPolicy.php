@@ -53,6 +53,25 @@ class PaymentPolicy
     }
 
     /**
+     * Melampirkan bukti pada pembayaran yang sudah tercatat.
+     *
+     * Ability tersendiri, bukan pelonggaran `update()` — yang tetap menolak
+     * tanpa syarat. Yang diizinkan hanya mengisi `proof_url` yang masih kosong;
+     * keadaan itu diperiksa PaymentProofAttacher, bukan di sini, supaya "tidak
+     * berwenang" dan "sudah ada buktinya" tidak tertukar menjadi satu pesan.
+     *
+     * Kewenangannya mengikuti SPP-03: yang boleh melengkapi bukti adalah yang
+     * boleh mencatat pembayarannya — Super Admin, School Admin, dan Bendahara.
+     * Kepala Sekolah tidak, sesuai baris "Catat Pembayaran" pada matriks yang
+     * memberi mereka ❌ (butir 57).
+     */
+    public function attachProof(User $user, Payment $payment): bool
+    {
+        return $user->can(PermissionName::PaymentManage->value)
+            && $this->sharesTenant($user, $payment);
+    }
+
+    /**
      * Bukti pembayaran disimpan di disk privat; yang boleh mengunduhnya persis
      * yang boleh melihat pembayarannya.
      */

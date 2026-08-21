@@ -5,7 +5,10 @@ namespace App\Filament\Resources\StudentFeeResource\RelationManagers;
 use App\Enums\PaymentMethod;
 use App\Filament\Resources\StudentFeeResource;
 use App\Models\Payment;
+use App\Services\Finance\PaymentProofAttacher;
 use App\Services\Finance\PaymentRecorder;
+use Filament\Forms;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -82,6 +85,7 @@ class PaymentsRelationManager extends RelationManager
             ->headerActions([])
             ->actions([
                 static::downloadProofAction(),
+                static::attachProofAction(),
             ])
             ->bulkActions([])
             // Cicilan terbaru di atas. `created_at` dipakai, bukan
@@ -102,6 +106,61 @@ class PaymentsRelationManager extends RelationManager
      * isi berkasnya, kepada pengguna yang memang berwenang melihat pembayaran
      * ini di cabangnya sendiri.
      */
+    /**
+     * Melengkapi bukti pada pembayaran yang sudah tercatat.
+     *
+     * Keputusan implementasi Phase 1 yang disetujui (butir 113 nomor 9). Hanya
+     * muncul bila pembayarannya memang **belum** punya bukti: bukti yang sudah
+     * ada tidak dapat diganti, dan tidak ada aksi "Ganti Bukti" — baris yang
+     * sudah lengkap hanya menawarkan Unduh Bukti.
+     *
+     * Formnya satu isian saja. Nominal, metode, tanggal, referensi, dan catatan
+     * tidak dapat disentuh dari sini maupun dari mana pun (butir 119).
+     */
+    public static function attachProofAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('attachProof')
+            ->label('Lampirkan Bukti')
+            ->icon('heroicon-o-paper-clip')
+            ->color('gray')
+            ->modalHeading('Lampirkan Bukti Pembayaran')
+            ->modalDescription('Hanya berkas buktinya yang ditambahkan. Nominal, metode, dan tanggal pembayaran tidak berubah.')
+            ->modalSubmitActionLabel('Lampirkan')
+            ->visible(fn (Payment $record): bool => blank($record->proof_url)
+                && (Auth::user()?->can('attachProof', $record) ?? false))
+            ->form([
+                Forms\Components\FileUpload::make('proof')
+                    ->label('Bukti Pembayaran')
+                    ->required()
+                    // Disk privat, aturan yang sama dengan pengunggahan saat
+                    // pencatatan pembayaran.
+                    ->disk(PaymentRecorder::PROOF_DISK)
+                    ->directory(fn (Payment $record): string => PaymentRecorder::proofDirectory((int) $record->school_id))
+                    ->visibility('private')
+                    ->acceptedFileTypes(PaymentRecorder::PROOF_MIME_TYPES)
+                    ->maxSize(PaymentRecorder::PROOF_MAX_KILOBYTES)
+                    ->helperText('JPG/PNG/PDF, maksimal 5 MB.'),
+            ])
+            ->action(function (Payment $record, array $data): void {
+                $user = Auth::user();
+
+                if ($user === null) {
+                    return;
+                }
+
+                app(PaymentProofAttacher::class)->attachStoredPath(
+                    $record->getKey(),
+                    $data['proof'] ?? null,
+                    $user,
+                );
+
+                Notification::make()
+                    ->title('Bukti pembayaran dilampirkan')
+                    ->success()
+                    ->send();
+            });
+    }
+
     public static function downloadProofAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('downloadProof')
