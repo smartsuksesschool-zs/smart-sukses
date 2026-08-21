@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FeeTypeController;
 use App\Http\Controllers\Api\FinanceExportController;
+use App\Http\Controllers\Api\FinanceReportController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\StudentFeeController;
 use App\Http\Controllers\Api\TransactionController;
@@ -70,6 +71,9 @@ Route::prefix('v1')->group(function (): void {
         // (butir 129).
         Route::delete('transactions/{id}', [TransactionController::class, 'destroy'])->whereNumber('id');
 
+        // ------------------------------------------- 4.9.2 Laporan keuangan
+        Route::get('finance/summary', [FinanceReportController::class, 'summary']);
+        Route::get('finance/spp-report', [FinanceReportController::class, 'sppReport']);
         Route::get('finance/export', [FinanceExportController::class, 'cashLedger']);
     });
 });
@@ -77,11 +81,10 @@ Route::prefix('v1')->group(function (): void {
 /*
 | Sengaja BELUM didaftarkan, dan tidak sebagai placeholder:
 |
-|   GET    /finance/summary       — `income` tingkat-atas belum dihitung
-|   GET    /finance/spp-report    — `tunggakan` belum dihitung
 |   GET    /admin/dashboard       — field-nya belum ada di service mana pun
 |   GET    /admin/schools/{id}/stats — idem
 |
-| Lihat butir 125. DELETE /transactions/{id}, yang dulu juga ada di daftar ini,
-| sudah dibuat pada Batch 6.7 (butir 128).
+| Lihat butir 125. Tiga endpoint lain yang dulu ada di daftar ini —
+| DELETE /transactions/{id}, GET /finance/summary, GET /finance/spp-report —
+| sudah dibuat pada Batch 6.7 (butir 128, 134, 135).
 */

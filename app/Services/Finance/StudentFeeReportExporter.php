@@ -10,6 +10,7 @@ use App\Models\SchoolClass;
 use App\Models\Scopes\SchoolScope;
 use App\Models\StudentFee;
 use App\Models\User;
+use App\Support\Finance\SchoolContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Gate;
@@ -163,45 +164,15 @@ class StudentFeeReportExporter
     }
 
     /**
-     * Cabang yang diekspor.
-     *
-     * Nilai dari form hanya dipercaya bila pelakunya Super Admin — merekalah
-     * satu-satunya peran yang `school_id`-nya NULL (Arsitektur 3.2.2) dan
-     * karena itu wajib memilih cabang. Bagi peran School Level, apa pun yang
-     * muncul di payload adalah selundupan dan diabaikan sepenuhnya.
+     * Cabang yang diekspor — aturannya di App\Support\Finance\SchoolContext,
+     * satu tempat yang dipakai bersama seluruh operasi keuangan satu-cabang
+     * (butir 133).
      *
      * @throws ValidationException
      */
     protected function resolveSchoolId(mixed $formValue, User $actor): int
     {
-        if (! $actor->isSuperAdmin()) {
-            if ($actor->school_id === null) {
-                throw ValidationException::withMessages([
-                    'school_id' => 'Akun Anda belum terhubung ke cabang mana pun.',
-                ]);
-            }
-
-            return (int) $actor->school_id;
-        }
-
-        if (blank($formValue) || ! is_numeric($formValue)) {
-            throw ValidationException::withMessages([
-                'school_id' => 'Cabang sekolah wajib dipilih.',
-            ]);
-        }
-
-        $exists = School::query()
-            ->withoutGlobalScope(SchoolScope::class)
-            ->whereKey((int) $formValue)
-            ->exists();
-
-        if (! $exists) {
-            throw ValidationException::withMessages([
-                'school_id' => 'Cabang sekolah tidak ditemukan.',
-            ]);
-        }
-
-        return (int) $formValue;
+        return SchoolContext::resolve($formValue, $actor);
     }
 
     /**

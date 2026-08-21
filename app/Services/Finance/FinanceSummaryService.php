@@ -64,6 +64,59 @@ class FinanceSummaryService
     }
 
     /**
+     * API 4.9.2 — GET /finance/summary: "Ringkasan keuangan: total income,
+     * expense, saldo per bulan. Filter: year, month".
+     *
+     * Angkanya **bukan** angka KAS-02 yang diberi nama lain. Dashboard cabang
+     * menampilkan *penerimaan SPP* bulan ini, yang dibaca dari `payments`;
+     * endpoint ini meminta *income*, dan income buku kas adalah `transactions`
+     * bertipe INCOME. Menyamakan keduanya berarti mencampur dua jalur yang
+     * ERD-nya sengaja pisah (butir 75) — dan menjumlahkan penerimaan SPP ke
+     * sini akan menghitung uang yang sama dua kali begitu ia disetor ke kas.
+     * Lihat butir 134.
+     *
+     * `balance` memakai tanggal potong yang sudah disetujui untuk saldo kas:
+     * posisi sampai akhir bulan terpilih, bukan selisih bulan itu saja
+     * (butir 82). Konsekuensinya `income - expense` bulan berjalan tidak selalu
+     * sama dengan `balance`, dan memang tidak seharusnya sama.
+     *
+     * @return array{
+     *     school_id: int,
+     *     year: int,
+     *     month: int,
+     *     period: string,
+     *     income: string,
+     *     expense: string,
+     *     balance: string
+     * }
+     *
+     * @throws ValidationException
+     */
+    public function monthlySummary(int $schoolId, int $year, int $month): array
+    {
+        $start = $this->periodStart(sprintf('%04d-%02d', $year, $month));
+        $end = $start->endOfMonth();
+
+        // Satu query agregat untuk bulan terpilih, satu lagi untuk posisi
+        // kumulatif. Dua-duanya `GROUP BY type`, jadi jumlah query tetap sama
+        // berapa pun banyaknya transaksi.
+        $monthly = $this->transactionTotals(
+            $schoolId,
+            fn ($query) => $this->withinDates($query, 'transaction_date', $start, $end),
+        );
+
+        return [
+            'school_id' => $schoolId,
+            'year' => (int) $start->format('Y'),
+            'month' => (int) $start->format('n'),
+            'period' => $start->format('Y-m'),
+            'income' => $monthly[TransactionType::Income->value],
+            'expense' => $monthly[TransactionType::Expense->value],
+            'balance' => $this->cashBalance($schoolId, $end),
+        ];
+    }
+
+    /**
      * Saldo kas: posisi sampai akhir periode terpilih, bukan pergerakan kas
      * pada bulan itu saja.
      *

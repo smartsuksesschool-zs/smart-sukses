@@ -757,8 +757,6 @@ class FinanceApiTest extends TestCase
     public static function deferredEndpoints(): array
     {
         return [
-            'finance summary' => ['api/v1/finance/summary'],
-            'spp report' => ['api/v1/finance/spp-report'],
             'admin dashboard' => ['api/v1/admin/dashboard'],
             'school stats' => ['api/v1/admin/schools/{id}/stats'],
         ];
