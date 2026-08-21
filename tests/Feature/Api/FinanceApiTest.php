@@ -8,6 +8,7 @@ use App\Enums\RoleName;
 use App\Enums\StudentFeeStatus;
 use App\Enums\TransactionType;
 use App\Jobs\GenerateStudentFees;
+use App\Models\AcademicYear;
 use App\Models\FeeType;
 use App\Models\School;
 use App\Models\Student;
@@ -15,9 +16,12 @@ use App\Models\StudentFee;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Finance\PaymentRecorder;
+use App\Services\Finance\StudentFeeGenerator;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -923,5 +927,136 @@ class FinanceApiTest extends TestCase
         $this->asUser($orphan)->getJson('/api/v1/transactions')
             ->assertOk()
             ->assertJsonCount(0, 'data');
+    }
+
+    // ------------------------------------------- generate-bulk end to end
+
+    /**
+     * Pratinjau saja tidak membuktikan apa pun: yang harus terbukti adalah
+     * bahwa penerbitan sungguhan benar-benar tercapai. Job yang didorong
+     * endpoint diambil lalu dijalankan seperti worker menjalankannya — tanpa
+     * sesi sama sekali — dan hasilnya dibandingkan dengan pratinjau yang
+     * sudah diterima pemanggil.
+     */
+    public function test_generate_bulk_reaches_actual_generation_when_the_worker_runs(): void
+    {
+        Queue::fake();
+
+        AcademicYear::factory()->create([
+            'school_id' => $this->schoolA->id,
+            'is_active' => true,
+        ]);
+
+        Student::factory()->count(3)->create(['school_id' => $this->schoolA->id]);
+        Student::factory()->count(2)->create(['school_id' => $this->schoolB->id]);
+
+        $feeType = $this->feeTypeIn($this->schoolA, ['amount' => '150000']);
+
+        $body = $this->asUser($this->userIn($this->schoolA, RoleName::SchoolAdmin))
+            ->postJson('/api/v1/student-fees/generate-bulk', [
+                'fee_type_id' => $feeType->id,
+                'period' => '2026-08',
+                'due_date' => '2026-08-10',
+            ])->assertStatus(202);
+
+        $body->assertJsonPath('data.preview.will_be_billed', 3);
+
+        $queued = null;
+
+        Queue::assertPushed(GenerateStudentFees::class, function (GenerateStudentFees $job) use (&$queued): bool {
+            $queued = $job;
+
+            return true;
+        });
+
+        // Cabang dan kombinasi dibawa job sebagai skalar, bukan diwarisi sesi.
+        $this->assertSame($this->schoolA->id, $queued->schoolId);
+        $this->assertSame($feeType->id, $queued->feeTypeId);
+        $this->assertSame('2026-08', $queued->period);
+        $this->assertSame('2026-08-10', $queued->dueDate);
+
+        $this->becomeAWorker();
+
+        $queued->handle(app(StudentFeeGenerator::class));
+
+        $created = StudentFee::query()->withoutGlobalScopes()->get();
+
+        // Persis sebanyak pratinjau, dan tidak satu pun milik cabang lain.
+        $this->assertCount(3, $created);
+        $this->assertSame([$this->schoolA->id], $created->pluck('school_id')->unique()->values()->all());
+        $this->assertSame(['150000.00'], $created->pluck('amount')->unique()->values()->all());
+
+        // Retry worker maupun permintaan kedua tidak menerbitkan baris kedua.
+        $queued->handle(app(StudentFeeGenerator::class));
+
+        $this->assertSame(3, StudentFee::query()->withoutGlobalScopes()->count());
+    }
+
+    /**
+     * Pratinjau yang basi tidak mungkin terjadi di jalur API: pratinjau dan
+     * antrean dihitung dari satu isian yang sama dalam satu request, sehingga
+     * tidak ada jeda tempat isian bisa berubah — itulah yang dijaga
+     * `previewSignature` pada halaman panel yang dua langkah.
+     */
+    public function test_the_preview_describes_exactly_the_run_that_was_queued(): void
+    {
+        Queue::fake();
+
+        AcademicYear::factory()->create([
+            'school_id' => $this->schoolA->id,
+            'is_active' => true,
+        ]);
+
+        $feeType = $this->feeTypeIn($this->schoolA);
+
+        Student::factory()->count(2)->create(['school_id' => $this->schoolA->id]);
+
+        $admin = $this->userIn($this->schoolA, RoleName::SchoolAdmin);
+
+        $first = $this->asUser($admin)->postJson('/api/v1/student-fees/generate-bulk', [
+            'fee_type_id' => $feeType->id,
+            'period' => '2026-08',
+            'due_date' => '2026-08-10',
+        ])->assertStatus(202);
+
+        $first->assertJsonPath('data.preview.will_be_billed', 2);
+        $first->assertJsonPath('data.preview.already_billed', 0);
+
+        $queued = null;
+
+        Queue::assertPushed(GenerateStudentFees::class, function (GenerateStudentFees $job) use (&$queued): bool {
+            $queued = $job;
+
+            return true;
+        });
+
+        $this->becomeAWorker();
+        $queued->handle(app(StudentFeeGenerator::class));
+
+        // Permintaan kedua melihat keadaan yang sudah berubah, dan pratinjau
+        // keduanya melaporkannya apa adanya.
+        $second = $this->asUser($admin)->postJson('/api/v1/student-fees/generate-bulk', [
+            'fee_type_id' => $feeType->id,
+            'period' => '2026-08',
+            'due_date' => '2026-08-10',
+        ])->assertStatus(202);
+
+        $second->assertJsonPath('data.preview.will_be_billed', 0);
+        $second->assertJsonPath('data.preview.already_billed', 2);
+    }
+
+    /**
+     * Meninggalkan konteks request sepenuhnya.
+     *
+     * Melupakan guard saja tidak cukup: header Authorization request terakhir
+     * masih menempel pada container, sehingga Sanctum akan me-resolve ulang
+     * pengguna yang sama. Worker sungguhan tidak punya request itu.
+     */
+    protected function becomeAWorker(): void
+    {
+        $this->app->instance('request', Request::create('/', 'GET'));
+        $this->app['auth']->forgetGuards();
+
+        $this->assertFalse(Auth::check());
     }
 }

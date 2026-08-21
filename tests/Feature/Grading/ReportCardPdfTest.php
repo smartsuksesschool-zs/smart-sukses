@@ -11,6 +11,7 @@ use App\Models\ReportCard;
 use App\Models\School;
 use App\Services\Grading\ReportCardGenerator;
 use App\Services\Grading\ReportCardPdfRenderer;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -315,5 +316,71 @@ class ReportCardPdfTest extends GradingTestCase
 
         Livewire::test(ListReportCards::class)
             ->assertTableActionHidden('pdfFromStorage', $reportCard->fresh());
+    }
+
+    /**
+     * Worker antrean tidak membawa sesi. Test lain menjalankan `handle()`
+     * selagi guru masih terautentikasi dari langkah penyiapan, sehingga
+     * SchoolScope di sana kebetulan menyaring ke cabang yang benar — bukan
+     * keadaan yang dihadapi worker sungguhan. Di sini sesinya dilepas dulu.
+     */
+    public function test_the_job_writes_the_pdf_without_an_authenticated_session(): void
+    {
+        Storage::fake(ReportCard::PDF_DISK);
+
+        $reportCard = $this->publishedReportCard();
+
+        $this->forgetSession();
+        $this->assertFalse(Auth::check());
+
+        (new GenerateReportCardPdf($reportCard->getKey(), $this->school->id))
+            ->handle(app(ReportCardPdfRenderer::class));
+
+        $reportCard->refresh();
+
+        $expected = "rapor/{$this->school->id}/rapor_{$reportCard->getKey()}.pdf";
+
+        $this->assertSame($expected, $reportCard->pdf_path);
+        $this->assertSame(ReportCardPdfStatus::Ready, $reportCard->pdf_status);
+        Storage::disk(ReportCard::PDF_DISK)->assertExists($expected);
+        $this->assertStringStartsWith(
+            '%PDF',
+            Storage::disk(ReportCard::PDF_DISK)->get($expected),
+        );
+    }
+
+    /**
+     * Melepas SchoolScope di dalam job tidak boleh menjadi pintu lintas
+     * cabang: pagarnya adalah `school_id` yang dibawa job, dan itu tetap
+     * berlaku justru ketika tidak ada sesi yang bisa membatasi apa pun.
+     */
+    public function test_without_a_session_the_job_still_refuses_another_tenant(): void
+    {
+        Storage::fake(ReportCard::PDF_DISK);
+
+        $reportCard = $this->publishedReportCard();
+        $otherSchool = School::factory()->create();
+
+        $this->forgetSession();
+        $this->assertFalse(Auth::check());
+
+        (new GenerateReportCardPdf($reportCard->getKey(), $otherSchool->id))
+            ->handle(app(ReportCardPdfRenderer::class));
+
+        $reportCard->refresh();
+
+        $this->assertNull($reportCard->pdf_path);
+        $this->assertNotSame(ReportCardPdfStatus::Ready, $reportCard->pdf_status);
+        $this->assertSame([], Storage::disk(ReportCard::PDF_DISK)->allFiles());
+    }
+
+    /**
+     * `actingAs` menaruh user pada guard yang sudah ter-resolve; melupakannya
+     * membuat pemanggilan berikutnya benar-benar berjalan tanpa pengguna.
+     */
+    protected function forgetSession(): void
+    {
+        Auth::logout();
+        $this->app['auth']->forgetGuards();
     }
 }
