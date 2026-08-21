@@ -7,6 +7,7 @@ use App\Enums\RoleName;
 use App\Models\ReportCard;
 use App\Models\SchoolClass;
 use App\Models\User;
+use App\Support\StudentVisibility;
 
 /**
  * PRD 1.1.2 — Modul "Generate Rapor":
@@ -29,7 +30,14 @@ class ReportCardPolicy
     public function view(User $user, ReportCard $reportCard): bool
     {
         return $user->can(PermissionName::ReportCardView->value)
-            && $this->sharesTenant($user, $reportCard);
+            && $this->sharesTenant($user, $reportCard)
+            // ORANG_TUA dan SISWA sama-sama memegang `report_card.view`
+            // (matriks PRD 1.1.2: ORTU ⭕, SISWA ⭕), sehingga tanpa batasan
+            // ini keduanya lolos untuk seluruh rapor cabangnya. Belum ada rute
+            // yang membuka celah itu hari ini, tetapi rute pertama yang
+            // melakukannya tidak boleh menemukan pagar yang bolong
+            // (butir 170).
+            && StudentVisibility::allows($user, $reportCard->student);
     }
 
     /**

@@ -151,19 +151,43 @@ class GradingRbacTest extends GradingTestCase
         $this->assertFalse(InputNilai::canAccess());
     }
 
-    public function test_student_and_parent_may_read_report_cards_only(): void
+    /**
+     * Matriks: SISWA ⭕ dan ORTU ⭕ pada "Generate Rapor"; keduanya ❌ pada
+     * "Input Nilai".
+     *
+     * Izin modulnya memang ada, tetapi sejak butir 170 izin itu tidak lagi
+     * berarti "seluruh rapor cabang": siswa hanya berhak atas rapornya
+     * sendiri, dan orang tua hanya atas rapor anaknya. Yang diuji di sini
+     * karena itu keduanya — izin modulnya tetap dipegang, dan barisnya
+     * dibatasi.
+     */
+    public function test_student_and_parent_may_read_only_their_own_report_card(): void
     {
-        // Matriks: SISWA ⭕ dan ORTU ⭕ pada "Generate Rapor"; keduanya ❌ pada
-        // "Input Nilai".
         $reportCard = $this->reportCard();
+        $student = $reportCard->student;
 
-        foreach ([RoleName::Siswa, RoleName::OrangTua] as $role) {
-            $user = User::factory()->forSchool($this->school)->withRole($role)->create();
+        $studentUser = User::factory()->forSchool($this->school)->withRole(RoleName::Siswa)->create();
+        $parentUser = User::factory()->forSchool($this->school)->withRole(RoleName::OrangTua)->create();
 
-            $this->assertTrue($user->can('viewAny', ReportCard::class), $role->value);
-            $this->assertTrue($user->can('view', $reportCard), $role->value);
-            $this->assertFalse($user->can('publish', $reportCard), $role->value);
-            $this->assertFalse($user->can('create', Grade::class), $role->value);
+        // Sebelum ditautkan, keduanya memegang izin modulnya tetapi tidak
+        // berhak atas baris ini.
+        foreach ([$studentUser, $parentUser] as $user) {
+            $this->assertTrue($user->can('viewAny', ReportCard::class));
+            $this->assertFalse($user->can('view', $reportCard));
+        }
+
+        $student->forceFill([
+            'user_id' => $studentUser->getKey(),
+            'parent_user_id' => $parentUser->getKey(),
+        ])->save();
+
+        $reportCard->refresh();
+
+        foreach ([$studentUser, $parentUser] as $user) {
+            $this->assertTrue($user->can('view', $reportCard));
+            // Membaca tetap tidak berarti boleh menerbitkan atau menilai.
+            $this->assertFalse($user->can('publish', $reportCard));
+            $this->assertFalse($user->can('create', Grade::class));
         }
     }
 

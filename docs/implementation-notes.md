@@ -3150,6 +3150,55 @@ sementara tetap ditolak masuk (butir 158) dan diarahkan ke alur "lupa kata sandi
 surel. Perlindungannya sengaja tidak dilonggarkan pada batch ini; yang belum ada adalah
 kenyamanannya, dan itu pekerjaan fitur tersendiri.
 
+### 170. Izin modul + cabang tidak cukup untuk peran yang hanya berhak atas satu siswa
+
+Ditemukan pada pemeriksaan sebelum push Batch 7.2. Satu kebocoran nyata, satu laten, dan
+keduanya berakar pada hal yang sama.
+
+`SchoolScope` menjawab pertanyaan "cabang mana", dan itu memang memadai untuk peran yang
+memang melihat seluruh siswa cabangnya: admin sekolah, kepala sekolah, bendahara, guru.
+Untuk dua peran ia tidak memadai, karena matriks PRD 1.1.2 memberi keduanya izin baca
+modul:
+
+- **ORANG_TUA** memegang `fee.view` (Tagihan SPP: ORTU ⭕) dan `report_card.view`
+  (Generate Rapor: ORTU ⭕);
+- **SISWA** memegang `report_card.view` (Generate Rapor: SISWA ⭕).
+
+Pemeriksaan `izin + sharesTenant` karena itu meloloskan keduanya ke **seluruh record
+cabang itu** — bukan hanya milik anaknya sendiri.
+
+**Yang nyata**, dan terbukti lewat probe: `GET /api/v1/student-fees` mengembalikan seluruh
+tagihan cabang kepada orang tua mana pun. Orang tua satu anak melihat tagihan anak orang
+lain; `?student_id=<anak orang lain>` menunjuk langsung ke sana; dan
+`GET /api/v1/student-fees/{id}` menjawab 200 untuk tagihan anak orang lain. Hanya lintas
+cabang yang tertahan, karena itulah bagian yang memang dijaga SchoolScope.
+
+**Yang laten**: `ReportCardPolicy::view()` — dan `downloadPdf()` yang mendelegasikan
+kepadanya — bernilai true bagi orang tua untuk setiap rapor di cabangnya, dan bagi siswa
+untuk rapor siswa lain. Tidak ada rute yang membukanya hari ini: satu-satunya konsumennya
+panel, dan kedua peran itu tidak dapat memasuki panel (butir 147). Tetapi Batch 7.2 baru
+saja membuka jalur baca portal, dan rute pertama yang kelak mengeksposnya tidak boleh
+menemukan pagar yang bolong.
+
+Aturannya ditulis sekali di `App\Support\StudentVisibility` dan dipakai dua bentuk, karena
+dua keadaan itu memang berbeda: policy menjawab tentang **satu record**, sedangkan endpoint
+daftar harus **menyaring baris** sebelum dikembalikan — policy tidak dapat melakukan yang
+kedua. Peran yang tidak dibatasi melewati keduanya tanpa perubahan sama sekali, dan itu
+dikunci test: admin sekolah, bendahara, kepala sekolah, guru, wali kelas, dan Super Admin
+berperilaku persis seperti sebelumnya.
+
+Tagihan milik anak orang lain kini menjadi **404**, bukan 403: barisnya disaring sebelum
+pencarian, sehingga keberadaannya tidak terkonfirmasi — konvensi yang sama dengan record
+cabang lain (butir 116).
+
+`GET /api/v1/payments` tidak diubah. ORANG_TUA tidak memegang izin pembayaran sama sekali
+dan endpointnya memang sudah menjawab 403; keadaan itu sekarang dikunci test supaya tidak
+diam-diam terbuka di kemudian hari tanpa pagar barisnya ikut dipikirkan.
+
+Perlu dicatat juga apa yang **tidak** ditemukan: rute `GET /report-cards/{id}/pdf` yang
+disebut API 4.8 tidak pernah didaftarkan di aplikasi ini. Satu-satunya jalur PDF di luar
+panel adalah rute portal Batch 7.2, dan `admin/report-cards` tetap panel-only.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

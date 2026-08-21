@@ -11,6 +11,7 @@ use App\Models\StudentFee;
 use App\Services\Finance\StudentFeeGenerator;
 use App\Services\Finance\StudentFeeWaiver;
 use App\Support\Api\ApiResponse;
+use App\Support\StudentVisibility;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -42,6 +43,12 @@ class StudentFeeController extends Controller
 
         $query = StudentFee::query()
             ->with(['student', 'feeType'])
+            // Policy hanya menjawab satu record; daftar harus disaring
+            // barisnya. ORANG_TUA memegang `fee.view` dan tanpa ini akan
+            // menerima seluruh tagihan cabangnya, termasuk milik anak orang
+            // lain — juga lewat `?student_id=` (butir 170). Peran yang tidak
+            // dibatasi melewatinya tanpa perubahan.
+            ->tap(fn ($builder) => StudentVisibility::constrain($builder, $request->user()))
             ->when($filters['student_id'] ?? null, fn ($q, $v) => $q->forStudent((int) $v))
             ->when($filters['status'] ?? null, fn ($q, $v) => $q->where('status', $v))
             ->when($filters['period'] ?? null, fn ($q, $v) => $q->forPeriod($v))
@@ -61,10 +68,15 @@ class StudentFeeController extends Controller
      * Tagihan cabang lain tersaring SchoolScope sehingga menjadi 404, bukan
      * 403 (butir 116).
      */
-    public function show(int $id): JsonResponse
+    public function show(Request $request, int $id): JsonResponse
     {
         $studentFee = StudentFee::query()
             ->withBillingDetail()
+            // Disaring sebelum dicari, bukan hanya diperiksa sesudahnya:
+            // tagihan anak orang lain menjadi 404, sehingga keberadaannya
+            // tidak terkonfirmasi — konvensi yang sama dengan record cabang
+            // lain (butir 116, 170).
+            ->tap(fn ($builder) => StudentVisibility::constrain($builder, $request->user()))
             ->findOrFail($id);
 
         $this->authorize('view', $studentFee);

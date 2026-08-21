@@ -6,6 +6,7 @@ use App\Enums\PermissionName;
 use App\Enums\RoleName;
 use App\Models\StudentFee;
 use App\Models\User;
+use App\Support\StudentVisibility;
 
 /**
  * PRD 1.1.2 — modul "Tagihan SPP", izin yang sama dengan FeeTypePolicy:
@@ -23,10 +24,19 @@ class StudentFeePolicy
         return $user->can(PermissionName::FeeView->value);
     }
 
+    /**
+     * Izin modul dan cabang saja tidak cukup di sini.
+     *
+     * ORANG_TUA memegang `fee.view` menurut matriks PRD 1.1.2 (Tagihan SPP:
+     * ORTU ⭕), sehingga pemeriksaan izin + cabang meloloskan mereka ke
+     * **seluruh** tagihan cabang itu — termasuk tagihan anak orang lain.
+     * Batasan barisnya karena itu ikut diperiksa di sini (butir 170).
+     */
     public function view(User $user, StudentFee $studentFee): bool
     {
         return $user->can(PermissionName::FeeView->value)
-            && $this->sharesTenant($user, $studentFee);
+            && $this->sharesTenant($user, $studentFee)
+            && StudentVisibility::allows($user, $studentFee->student);
     }
 
     public function create(User $user): bool
