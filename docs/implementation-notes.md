@@ -2369,6 +2369,232 @@ Perbaikannya berlaku ke seluruh aplikasi, bukan hanya API. Seluruh 983 test teta
 sesudahnya, yang juga menunjukkan tidak ada bagian sistem yang diam-diam bergantung pada
 perilaku lama.
 
+## Sprint 6 Batch 6.7 — Soft Delete Transaksi, Finance Summary, Laporan SPP
+
+### 128. `deleted_at` pada `transactions`: konflik yang akhirnya ditutup, dan atas dasar apa
+
+API 4.9.2 menyebut `DELETE /transactions/{id}` sebagai *"Hapus transaksi (soft delete)"*.
+ERD 2.2 `transactions` tidak memuat `deleted_at`, tidak memuat status, dan tidak memuat
+flag aktif. Seluruh dokumen hanya menyebut frasa "soft delete" **satu kali**, yaitu pada
+baris tabel API itu — tidak ada bagian lain yang menjelaskan mekanismenya.
+
+Sampai Batch 6.6 konflik ini dibiarkan terbuka dan penghapusan tidak dibuat sama sekali
+(butir 74): menghapus permanen bukan yang diminta dokumen, dan menambah kolom untuk
+menandainya berarti mengarang skema.
+
+Yang menutupnya sekarang adalah **keputusan implementasi Phase 1**, bukan temuan baru di
+dalam blueprint dan bukan keputusan owner: satu kolom `deleted_at` ditambahkan secara
+aditif, dan Laravel `SoftDeletes` dipakai apa adanya. Dasarnya, kata "soft delete" pada
+API sudah menyebut *jenis* penghapusannya — yang hilang hanya tempat menyimpannya, dan
+kolom nullable adalah bentuk paling kecil yang memenuhinya tanpa menambah kosakata baru.
+
+Yang sengaja **tidak** dilakukan:
+
+- tidak ada status `VOID`/`CANCELLED` yang dikarang,
+- tidak ada `deleted_by` maupun `void_reason` — keduanya tidak diminta dokumen mana pun,
+  dan siapa yang menghapus sudah tercatat di `audit_logs`,
+- tidak ada `forceDelete`,
+- tidak ada UI maupun endpoint restore pada Phase 1.
+
+Migrasinya aditif dan aman terhadap data yang sudah ada: kolomnya nullable tanpa nilai
+bawaan, sehingga seluruh baris lama langsung berarti "belum dihapus".
+
+### 129. Yang boleh menghapus lebih sempit daripada yang boleh mencatat
+
+`DELETE /transactions/{id}` berlabel Auth Level **Admin**, dan API 4.1 mendefinisikannya
+sebagai "wajib token + role SCHOOL_ADMIN / SUPER_ADMIN".
+
+Untuk `POST` dan `PUT` label itu **tertimpa** user story KAS-01 yang menyebut pelakunya
+secara eksplisit — *"Sebagai **Bendahara**, saya dapat mencatat pemasukan dan pengeluaran
+kas sekolah"* — sehingga keduanya digantung pada `accounting.manage` (butir 78). Untuk
+`DELETE` tidak ada yang menimpanya: KAS-01 bicara tentang *mencatat*, dan tidak ada satu
+pun user story penghapusan di PRD 1.2. Labelnya karena itu berlaku apa adanya.
+
+Ada ketegangan yang perlu disebut jujur: PRD 1.1.2 memberi Bendahara ✅ pada modul
+"Akuntansi & Kas", dan ✅ di sana didefinisikan sebagai akses penuh "(create, update,
+delete)". Baris matriks itu berlaku untuk satu modul secara umum, sedangkan Auth Level
+melekat pada satu endpoint — dan yang spesifik menang atas yang umum. Menghapus baris buku
+kas juga destruktif satu arah selama tidak ada restore. Hasilnya:
+
+| Peran | create | update | delete |
+| --- | --- | --- | --- |
+| SUPER_ADMIN | ✅ | ✅ | ✅ |
+| SCHOOL_ADMIN | ✅ | ✅ | ✅ |
+| BENDAHARA | ✅ | ✅ | ❌ |
+| KEPALA_SEKOLAH | ❌ | ❌ | ❌ |
+| GURU/WALI/SISWA/ORTU | ❌ | ❌ | ❌ |
+
+Ini keputusan implementasi, bukan kutipan blueprint. `accounting.manage` sengaja tidak
+diperluas maupun dipecah: menambah izin baru hanya untuk satu tombol akan membuat matriks
+PRD dan daftar izin tidak lagi sebangun. Yang dipakai adalah pola yang sudah ada pada
+pembebasan tagihan (butir 67) — policy memeriksa peran langsung untuk satu ability.
+
+### 130. Transaksi cabang lain: konvensi yang sama dengan `update()`
+
+`TransactionRecorder::delete()` mencari dulu, baru memeriksa izin. Transaksi cabang lain
+karena itu tidak pernah sampai ke pemeriksaan izin dan keberadaannya tidak terkonfirmasi.
+
+Jalur ini mengembalikan **422** lewat `ValidationException`, bukan 404 — persis seperti
+`PUT /transactions/{id}` yang sudah ada sejak Batch 6.6. Butir 116 menetapkan 404 untuk
+jalur baca yang mengandalkan `SchoolScope` (`findOrFail`), sedangkan jalur tulis
+`transactions` memakai `findWithinTenant()` yang memang melempar ValidationException.
+Konsistensi antar-method pada rute yang sama dinilai lebih penting daripada menyeragamkan
+kode status lintas rute; keduanya sama-sama tidak membocorkan keberadaan record.
+
+### 131. Tidak ada restore, dan tidak ada hapus massal
+
+Phase 1 tidak punya jalan kembali: tidak ada halaman "trashed", tidak ada aksi restore,
+tidak ada endpoint restore. `TransactionPolicy::restore()` dan `forceDelete()` tetap
+ditulis dan tetap `false`, supaya bila suatu saat halaman trashed bawaan Filament
+dipasang, ia tidak diam-diam mewarisi izin.
+
+Penghapusan massal juga tidak ditambahkan. Yang diminta API adalah menghapus satu
+transaksi; satu klik yang menghapus seluruh halaman buku kas adalah kesalahan yang jauh
+lebih mahal, dan tidak ada dokumen yang memintanya.
+
+### 132. Bukti transaksi tidak ikut dihapus
+
+`deleted_at` terisi, `proof_url` tidak disentuh, dan berkas notanya tetap ada di disk.
+
+Nota adalah dokumen sumber, dan transaksi yang dihapus karena salah catat justru sering
+perlu ditelusuri kembali lewat buktinya. Menghapus berkasnya juga akan membuat
+penghapusan tidak lagi *soft* — datanya tinggal separuh.
+
+### 133. `SchoolContext`: aturan cabang yang tadinya disalin
+
+Aturan "payload hanya dipercaya bila pelakunya Super Admin" sudah dipakai sejak SPP-05,
+tetapi disalin utuh di `StudentFeeReportExporter` dan `CashLedgerExporter`. Batch ini
+menambah dua pembaca lagi, dan menyalinnya untuk keempat kalinya berarti empat tempat yang
+harus berubah bersamaan setiap kali aturannya bergeser.
+
+Aturannya dipindahkan ke `App\Support\Finance\SchoolContext`. Perilakunya tidak berubah
+sedikit pun — kedua exporter tetap punya method dengan nama yang sama dan kini
+mendelegasikan ke sana, dan seluruh test keduanya tetap hijau tanpa satu pun disesuaikan.
+
+### 134. `income` pada `/finance/summary` bukan "penerimaan SPP"
+
+API 4.9.2: *"Ringkasan keuangan: total income, expense, saldo per bulan. Filter: year,
+month"*.
+
+`FinanceSummaryService` yang dipakai KAS-02 sudah menghitung `spp_received`, dan godaannya
+adalah memakai angka itu sebagai `income`. Itu keliru. KAS-02 meminta "total penerimaan
+SPP bulan ini", yang dibaca dari `payments`; endpoint ini meminta *income*, dan income buku
+kas adalah `transactions` bertipe INCOME. ERD memisahkan keduanya (butir 75), dan
+menjumlahkan penerimaan SPP ke sini akan menghitung uang yang sama dua kali begitu ia
+disetor ke kas.
+
+Definisi Phase 1:
+
+- `income` = `SUM(amount)` `transactions` INCOME yang `transaction_date`-nya di dalam bulan
+  terpilih dan belum dihapus,
+- `expense` = idem untuk EXPENSE,
+- `balance` = seluruh INCOME dikurangi seluruh EXPENSE **sejak awal riwayat sampai akhir
+  bulan terpilih**, mengikuti tanggal potong saldo kas yang sudah disetujui (butir 82).
+
+Konsekuensinya `income - expense` bulan berjalan tidak selalu sama dengan `balance`, dan
+memang tidak seharusnya sama: yang satu pergerakan bulan itu, yang lain posisi.
+
+Filter publiknya `year` dan `month` persis seperti API. Service bekerja dengan `period`
+`YYYY-MM` di dalam, tetapi nama internal tidak pernah menjadi kontrak publik (butir 123) —
+`?period=2026-08` ditolak 422.
+
+### 135. Tunggakan: definisinya tidak ada di dokumen mana pun
+
+API 4.9.2: *"Laporan SPP: total tagihan, terkumpul, tunggakan per periode"*. Kata
+"tunggakan" muncul dua kali di seluruh dokumen — di sini dan pada `/admin/schools/{id}/stats`
+— dan tidak pernah didefinisikan. Yang berikut karena itu keputusan implementasi Phase 1.
+
+Untuk setiap periode:
+
+- `total_billed` = `SUM(student_fees.amount)`,
+- `total_collected` = `SUM(student_fees.amount_paid)`,
+- `arrears` = `SUM(amount - amount_paid)` **hanya** untuk status UNPAID dan PARTIAL.
+
+`total_billed - total_collected` sengaja **tidak** dipakai sebagai tunggakan. Rumus buta itu
+benar selama semua tagihan masih tertagih, tetapi menjadi salah begitu ada WAIVED: tagihan
+yang dibebaskan memang tidak akan pernah dibayar, dan menghitung selisihnya sebagai
+tunggakan berarti melaporkan uang yang secara sadar direlakan sebagai piutang.
+
+Perlakuan WAIVED:
+
+- **tidak** dihitung sebagai tunggakan,
+- **tetap** masuk `total_billed` sebagai nominal historis yang pernah diterbitkan —
+  menghapusnya akan membuat laporan lama berubah surut setiap kali ada pembebasan baru,
+- cicilan yang terlanjur masuk sebelum dibebaskan **tetap** dihitung pada
+  `total_collected`, karena uangnya benar-benar diterima.
+
+PAID otomatis tidak menyumbang tunggakan karena sisanya nol. Rumus agregatnya sengaja
+sejajar dengan `StudentFee::remaining()` dan diuji agar keduanya selalu menghasilkan angka
+yang sama — yang berbeda hanya tempat menghitungnya (SQL vs PHP), bukan aturannya.
+
+### 136. Bentuk dan filter `/finance/spp-report`
+
+API tidak menyebutkan satu pun filter untuk endpoint ini, dan tidak menetapkan bentuk
+responsnya. Fallback Phase 1:
+
+- `period=YYYY-MM` opsional — nama dan format yang sudah menjadi kontrak `student_fees`
+  pada endpoint tetangganya, bukan istilah baru,
+- tanpa `period`, seluruh periode yang benar-benar punya tagihan dikembalikan berurutan
+  dari yang terbaru,
+- hasilnya dibatasi `SppReportService::MAX_PERIODS` (60 periode ≈ lima tahun) dan respons
+  membawa `truncated` supaya pemanggil tahu ia sedang melihat potongan.
+
+Paginasi bergaya `meta` sengaja tidak dipakai: yang dipaginasi di endpoint lain adalah
+daftar record, sedangkan ini agregat per periode yang jumlah barisnya sudah kecil menurut
+sifatnya. Tidak ada pemetaan ke tahun ajaran — `student_fees.period` sudah `YYYY-MM` dan
+dokumen tidak meminta pengelompokan lain.
+
+Seluruh laporannya satu query agregat (`SUM` + `CASE WHEN` + `GROUP BY period`) yang
+berlaku sama di MySQL maupun SQLite, sehingga jumlah query tidak tumbuh mengikuti banyaknya
+tagihan maupun banyaknya periode.
+
+### 137. "Auth Level: Auth" bukan berarti semua peran boleh membaca laporan keuangan
+
+`/finance/summary` dan `/finance/spp-report` keduanya berlabel **Auth** pada API map. Label
+itu menyatakan *token wajib*, bukan *boleh dibaca siapa saja yang punya token* — kalau
+dibaca begitu, Guru dan Siswa akan mendapat laporan keuangan cabang hanya karena berhasil
+login.
+
+Yang menentukan adalah PRD 1.1.2 baris **Laporan Keuangan**: SUPER_ADMIN ✅,
+SCHOOL_ADMIN ✅, KEPALA ⭕, BENDAHARA ✅, GURU/WALI ❌, SISWA ❌, ORTU ❌. Keduanya karena
+itu digantung pada `financial_report.view`, ability yang sama dengan halaman Laporan
+Keuangan di panel — sehingga API dan panel tidak dapat berbeda pendapat tentang siapa yang
+berhak.
+
+Keduanya juga laporan **satu cabang**. Super Admin wajib memilih cabang persis seperti pada
+ekspor, dan tidak pernah diam-diam menerima gabungan seluruh cabang; yang lintas cabang
+adalah KAS-03, domain yang berbeda.
+
+### 138. Soft delete menulis satu baris audit, bukan dua
+
+`SoftDeletes::runSoftDelete()` mengisi `deleted_at` lewat query builder, bukan lewat
+`save()` pada model. Akibatnya event `updated` tidak ikut terpicu dan listener audit
+wildcard hanya menerima `deleted` — satu baris DELETED, bukan UPDATED + DELETED.
+
+Ini perilaku Laravel, bukan sesuatu yang perlu dipasang, tetapi diuji secara eksplisit
+karena kalau suatu saat berubah, jejak auditnya akan mulai berlipat tanpa ada yang
+menyadarinya.
+
+### 139. Hari terakhir bulan yang diam-diam hilang
+
+Ditemukan saat membangun `/finance/summary`, dan ini **bug nyata yang sudah ada sejak
+KAS-02**, bukan sesuatu yang dibawa Batch 6.7.
+
+`transaction_date` dan `payment_date` bertipe DATE menurut ERD, tetapi cast `date` Eloquent
+menyimpannya sebagai `Y-m-d H:i:s`. Baris bertanggal 31 karena itu tersimpan sebagai
+`2026-08-31 00:00:00`, dan `whereBetween('transaction_date', ['2026-08-01', '2026-08-31'])`
+menganggapnya **lebih besar** daripada batas atas. Seluruh transaksi dan pembayaran pada
+hari terakhir bulan hilang dari totalnya, tanpa error dan tanpa selisih yang mencolok.
+
+Yang terdampak: `expenses` dan `trend` pada KAS-02, `spp_received` pada KAS-02, dan
+`monthlySummary` yang baru. Saldo kas tidak terdampak karena sudah memakai `whereDate()`,
+begitu pula buku kas dan ekspornya yang memakai scope `betweenDates` — scope itu memang
+sudah benar sejak awal.
+
+Perbaikannya memakai `whereDate()` di kedua ujung rentang, sama seperti scope yang sudah
+benar itu. Ditambahkan test yang menjaga hari pertama dan hari terakhir bulan tetap ikut
+terhitung, sekaligus memastikan bulan tetangga tetap di luar.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
