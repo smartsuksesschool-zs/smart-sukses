@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\FeeTypeController;
 use App\Http\Controllers\Api\FinanceExportController;
 use App\Http\Controllers\Api\FinanceReportController;
 use App\Http\Controllers\Api\ParentPortalController;
+use App\Http\Controllers\Api\ParentPortalDetailController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\StudentFeeController;
 use App\Http\Controllers\Api\TransactionController;
@@ -84,6 +85,12 @@ Route::prefix('v1')->group(function (): void {
         Route::get('parent/children', [ParentPortalController::class, 'children']);
         Route::get('parent/children/{studentId}/summary', [ParentPortalController::class, 'summary'])
             ->whereNumber('studentId');
+        Route::get('parent/children/{studentId}/grades', [ParentPortalDetailController::class, 'grades'])
+            ->whereNumber('studentId');
+        Route::get('parent/children/{studentId}/fees', [ParentPortalDetailController::class, 'fees'])
+            ->whereNumber('studentId');
+        Route::get('parent/children/{studentId}/schedule', [ParentPortalDetailController::class, 'schedule'])
+            ->whereNumber('studentId');
 
         // ------------------------------------------------- 4.3 Super Admin
         // Satu-satunya kelompok yang memang lintas cabang. Pagarnya berlapis:
@@ -103,8 +110,8 @@ Route::prefix('v1')->group(function (): void {
 | pengguna, yang di panel sudah berjalan lewat SchoolResource dan UserResource.
 | Lihat butir 145, 146.
 |
-| Dari API 4.11, Batch 7.1 baru membuat dua endpoint orang tua. Sisanya —
-| /parent/children/{id}/grades, /fees, /schedule, serta seluruh /teacher dan
-| /student — menyusul pada batch Sprint 7 berikutnya, dan sengaja tidak
-| didaftarkan sebagai placeholder (butir 155).
+| Dari API 4.11, seluruh endpoint orang tua kini ada. Yang tersisa —
+| /teacher/dashboard, /teacher/classes, dan seluruh /student — menyusul pada
+| batch Sprint 7 berikutnya, dan sengaja tidak didaftarkan sebagai placeholder
+| (butir 155).
 */

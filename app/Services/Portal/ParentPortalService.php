@@ -2,18 +2,26 @@
 
 namespace App\Services\Portal;
 
+use App\Enums\DayOfWeek;
 use App\Enums\RoleName;
+use App\Enums\StudentClassStatus;
 use App\Enums\StudentFeeStatus;
 use App\Models\AcademicYear;
 use App\Models\Grade;
+use App\Models\ReportCard;
+use App\Models\Schedule;
+use App\Models\SchoolClass;
 use App\Models\Scopes\SchoolScope;
 use App\Models\Student;
+use App\Models\StudentClass;
 use App\Models\StudentFee;
 use App\Models\User;
 use App\Services\Grading\FinalScoreCalculator;
+use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
@@ -118,6 +126,322 @@ class ParentPortalService
             'attendance' => $this->attendance(),
             'pending_fees' => $this->pendingFees($child),
         ];
+    }
+
+    /**
+     * NILAI-04 / API 4.11 — "Nilai lengkap anak per tahun ajaran aktif".
+     *
+     * Dua hal hidup berdampingan di sini, dan itu memang bunyi user story-nya:
+     * nilai real-time **selalu** terlihat ("tampil segera setelah guru
+     * menyimpan"), sedangkan rapor final hanya muncul setelah wali kelas
+     * menerbitkannya. Yang satu tidak menggantikan yang lain — rapor yang
+     * terbit tidak menyembunyikan komponen nilainya, dan komponen nilai tidak
+     * menggantikan angka rapor (butir 160).
+     *
+     * @return array{
+     *     child: Student,
+     *     academic_year: AcademicYear|null,
+     *     subjects: array<int, array<string, mixed>>,
+     *     report_card: ReportCard|null
+     * }
+     *
+     * @throws AuthorizationException|ModelNotFoundException
+     */
+    public function grades(User $parent, int $studentId): array
+    {
+        $child = $this->child($parent, $studentId);
+        $year = $this->activeAcademicYear((int) $child->school_id);
+
+        if ($year === null) {
+            // Cabang tanpa tahun ajaran aktif: respons tetap sah dan kosong,
+            // bukan 500 dan bukan tahun ajaran lain yang dipilihkan diam-diam
+            // (butir 153).
+            return [
+                'child' => $child,
+                'academic_year' => null,
+                'subjects' => [],
+                'report_card' => null,
+            ];
+        }
+
+        return [
+            'child' => $child,
+            'academic_year' => $year,
+            'subjects' => $this->subjectGrades($child, (int) $year->getKey()),
+            'report_card' => $this->publishedReportCard($child, (int) $year->getKey()),
+        ];
+    }
+
+    /**
+     * Rincian nilai per mata pelajaran pada satu tahun ajaran.
+     *
+     * Satu query untuk seluruh nilai anak, lalu dikelompokkan di memori.
+     * Menambah mata pelajaran atau menambah ulangan tidak menambah query.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function subjectGrades(Student $child, int $academicYearId): array
+    {
+        $grades = Grade::query()
+            ->withoutGlobalScope(SchoolScope::class)
+            ->where('school_id', $child->school_id)
+            ->where('student_id', $child->getKey())
+            ->where('academic_year_id', $academicYearId)
+            ->with('classSubject.subject')
+            ->orderBy('graded_at')
+            ->orderBy('id')
+            ->get();
+
+        return $grades
+            ->filter(fn (Grade $grade) => $grade->classSubject?->subject !== null)
+            ->groupBy(fn (Grade $grade) => $grade->classSubject->subject->getKey())
+            ->map(function ($subjectGrades) {
+                $subject = $subjectGrades->first()->classSubject->subject;
+                $result = $this->finalScore->calculate($this->asEloquentCollection($subjectGrades));
+
+                return [
+                    'subject_id' => $subject->getKey(),
+                    'subject_code' => $subject->code,
+                    'subject_name' => $subject->name,
+                    'final_score' => $result->score,
+                    'is_complete' => $result->isComplete,
+                    // Rincian komponen dipertahankan apa adanya: jenis penilaian
+                    // dan sifat formatif/sumatifnya adalah perbedaan yang
+                    // bermakna bagi pembacanya, dan meringkasnya menjadi satu
+                    // angka akan menghilangkan alasan angka itu terbentuk
+                    // (butir 161).
+                    'components' => $subjectGrades
+                        ->map(fn (Grade $grade) => [
+                            'id' => $grade->getKey(),
+                            'grade_type' => $grade->grade_type?->value,
+                            'grade_type_label' => $grade->grade_type?->label(),
+                            'assessment_type' => $grade->assessment_type?->value,
+                            'assessment_type_label' => $grade->assessment_type?->label(),
+                            'score' => $grade->score === null ? null : (float) $grade->score,
+                            'description' => $grade->description,
+                            'graded_at' => $grade->graded_at?->toIso8601String(),
+                        ])
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->sortBy('subject_name')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Rapor anak pada tahun ajaran itu — hanya bila sudah diterbitkan.
+     *
+     * NILAI-04 poin 2: "Rapor final hanya tampil setelah Wali Kelas
+     * menerbitkan". Rapor draf tidak pernah keluar lewat portal, dalam bentuk
+     * apa pun (butir 162).
+     */
+    protected function publishedReportCard(Student $child, int $academicYearId): ?ReportCard
+    {
+        return ReportCard::query()
+            ->withoutGlobalScope(SchoolScope::class)
+            ->where('school_id', $child->school_id)
+            ->where('student_id', $child->getKey())
+            ->where('academic_year_id', $academicYearId)
+            ->published()
+            ->with('schoolClass')
+            ->first();
+    }
+
+    /**
+     * Rapor yang boleh diunduh orang tua ini.
+     *
+     * Kepemilikan diputuskan di sini, bukan oleh ReportCardPolicy. Policy itu
+     * memberi ORANG_TUA `report_card.view` untuk **seluruh cabang** —
+     * memadai bagi peran panel yang memang melihat semua siswa, tetapi jauh
+     * terlalu longgar bagi orang tua, yang hanya boleh melihat rapor anaknya
+     * sendiri. Karena itu anaknya diresolusi lebih dulu lewat pagar Batch 7.1,
+     * dan rapornya wajib milik anak itu serta sudah terbit (butir 162).
+     *
+     * @throws AuthorizationException|ModelNotFoundException
+     */
+    public function publishedReportCardFor(User $parent, int $studentId, int $reportCardId): ReportCard
+    {
+        $child = $this->child($parent, $studentId);
+
+        return ReportCard::query()
+            ->withoutGlobalScope(SchoolScope::class)
+            ->where('school_id', $child->school_id)
+            ->where('student_id', $child->getKey())
+            ->published()
+            ->with(['student', 'schoolClass', 'academicYear', 'school'])
+            ->findOrFail($reportCardId);
+    }
+
+    /**
+     * SPP-04 / API 4.11 — "Semua tagihan anak + status + riwayat bayar".
+     *
+     * @return array{child: Student, fees: EloquentCollection<int, StudentFee>}
+     *
+     * @throws AuthorizationException|ModelNotFoundException
+     */
+    public function fees(User $parent, int $studentId): array
+    {
+        $child = $this->child($parent, $studentId);
+
+        return [
+            'child' => $child,
+            'fees' => StudentFee::query()
+                ->withoutGlobalScope(SchoolScope::class)
+                ->where('school_id', $child->school_id)
+                ->where('student_id', $child->getKey())
+                // Scope yang sudah ada sejak Batch 5.4, memang disiapkan untuk
+                // konsumen berikutnya: siswa, jenis tagihan, dan seluruh
+                // riwayat pembayarannya dimuat sekaligus.
+                ->withBillingDetail()
+                // SPP-04 poin 1 — "tampil dalam daftar per periode". Yang
+                // terbaru lebih dulu karena itu yang sedang berjalan; `id`
+                // sebagai pemutus supaya dua tagihan pada periode yang sama
+                // selalu berurutan tetap (butir 163).
+                ->orderByDesc('period')
+                ->orderByDesc('due_date')
+                ->orderByDesc('id')
+                ->get(),
+        ];
+    }
+
+    /**
+     * API 4.11 — "Jadwal pelajaran kelas anak hari ini & minggu ini".
+     *
+     * @return array{
+     *     child: Student,
+     *     academic_year: AcademicYear|null,
+     *     current_class: SchoolClass|null,
+     *     today: int,
+     *     lessons: array<int, array<string, mixed>>
+     * }
+     *
+     * @throws AuthorizationException|ModelNotFoundException
+     */
+    public function schedule(User $parent, int $studentId): array
+    {
+        $child = $this->child($parent, $studentId);
+        $year = $this->activeAcademicYear((int) $child->school_id);
+        $class = $year === null ? null : $this->currentClass($child, (int) $year->getKey());
+
+        return [
+            'child' => $child,
+            'academic_year' => $year,
+            'current_class' => $class,
+            'today' => $this->todayDayOfWeek(),
+            'lessons' => $class === null ? [] : $this->lessonsFor($child, $class),
+        ];
+    }
+
+    /**
+     * Kelas anak pada tahun ajaran aktif.
+     *
+     * Sengaja **bukan** baris StudentClass terakhir: anak yang pernah pindah
+     * kelas punya beberapa baris, dan yang terakhir belum tentu yang berlaku
+     * pada tahun ajaran yang sedang berjalan. Yang dipakai penempatan berstatus
+     * ACTIVE pada tahun ajaran aktif — dan bila tidak ada, hasilnya NULL, bukan
+     * kelas lama yang sudah selesai (butir 164).
+     */
+    protected function currentClass(Student $child, int $academicYearId): ?SchoolClass
+    {
+        $placement = StudentClass::query()
+            ->withoutGlobalScope(SchoolScope::class)
+            ->where('school_id', $child->school_id)
+            ->where('student_id', $child->getKey())
+            ->where('academic_year_id', $academicYearId)
+            ->where('status', StudentClassStatus::Active->value)
+            ->with('schoolClass')
+            ->latest('id')
+            ->first();
+
+        return $placement?->schoolClass;
+    }
+
+    /**
+     * Seluruh jadwal mingguan kelas itu, terurut hari lalu jam.
+     *
+     * Satu query, dengan mata pelajaran dan gurunya ikut dimuat: jumlah query
+     * tidak tumbuh mengikuti banyaknya jam pelajaran.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function lessonsFor(Student $child, SchoolClass $class): array
+    {
+        return Schedule::query()
+            ->withoutGlobalScope(SchoolScope::class)
+            ->where('school_id', $child->school_id)
+            ->whereHas(
+                'classSubject',
+                fn ($query) => $query
+                    ->withoutGlobalScope(SchoolScope::class)
+                    ->where('class_id', $class->getKey()),
+            )
+            ->with(['classSubject.subject', 'classSubject.teacher'])
+            ->orderBy('day_of_week')
+            ->orderBy('start_time')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Schedule $schedule) => [
+                'id' => $schedule->getKey(),
+                'day_of_week' => $schedule->day_of_week?->value,
+                'day_label' => $schedule->day_of_week?->label(),
+                'start_time' => $this->clock($schedule->start_time),
+                'end_time' => $this->clock($schedule->end_time),
+                'subject_name' => $schedule->classSubject?->subject?->name,
+                'subject_code' => $schedule->classSubject?->subject?->code,
+                // Nama guru saja. Surel, nomor telepon, dan id akunnya bukan
+                // urusan orang tua (butir 165).
+                'teacher_name' => $schedule->classSubject?->teacher?->name,
+                'room' => $schedule->room,
+            ])
+            ->all();
+    }
+
+    /**
+     * Hari ini menurut zona waktu aplikasi, dalam penomoran ERD
+     * (1 = Senin … 7 = Minggu).
+     *
+     * `Carbon::dayOfWeek` menomori Minggu sebagai 0, jadi konversinya
+     * dilakukan sekali di sini alih-alih ditebar ke pemanggil (butir 165).
+     */
+    protected function todayDayOfWeek(): int
+    {
+        $day = (int) CarbonImmutable::now()->dayOfWeek;
+
+        return $day === 0 ? DayOfWeek::Sunday->value : $day;
+    }
+
+    protected function clock(mixed $time): ?string
+    {
+        if (blank($time)) {
+            return null;
+        }
+
+        return substr((string) $time, 0, 5);
+    }
+
+    protected function activeAcademicYear(int $schoolId): ?AcademicYear
+    {
+        return AcademicYear::query()
+            ->withoutGlobalScope(SchoolScope::class)
+            ->where('school_id', $schoolId)
+            ->active()
+            ->first();
+    }
+
+    /**
+     * `groupBy` pada koleksi Eloquent mengembalikan koleksi biasa; kalkulator
+     * nilai meminta koleksi Eloquent.
+     *
+     * @param  \Illuminate\Support\Collection<int, Grade>|EloquentCollection<int, Grade>  $grades
+     * @return EloquentCollection<int, Grade>
+     */
+    protected function asEloquentCollection($grades): EloquentCollection
+    {
+        return $grades instanceof EloquentCollection
+            ? $grades
+            : new EloquentCollection($grades->all());
     }
 
     /**
