@@ -65,6 +65,10 @@ Route::prefix('v1')->group(function (): void {
         Route::get('transactions', [TransactionController::class, 'index']);
         Route::post('transactions', [TransactionController::class, 'store']);
         Route::put('transactions/{id}', [TransactionController::class, 'update'])->whereNumber('id');
+        // "Soft delete": kewenangannya lebih sempit daripada create/update dan
+        // ditegakkan TransactionPolicy::delete(), bukan oleh middleware di sini
+        // (butir 129).
+        Route::delete('transactions/{id}', [TransactionController::class, 'destroy'])->whereNumber('id');
 
         Route::get('finance/export', [FinanceExportController::class, 'cashLedger']);
     });
@@ -73,11 +77,11 @@ Route::prefix('v1')->group(function (): void {
 /*
 | Sengaja BELUM didaftarkan, dan tidak sebagai placeholder:
 |
-|   DELETE /transactions/{id}     — "soft delete" tanpa kolom di ERD (butir 74)
 |   GET    /finance/summary       — `income` tingkat-atas belum dihitung
 |   GET    /finance/spp-report    — `tunggakan` belum dihitung
 |   GET    /admin/dashboard       — field-nya belum ada di service mana pun
 |   GET    /admin/schools/{id}/stats — idem
 |
-| Lihat butir 125.
+| Lihat butir 125. DELETE /transactions/{id}, yang dulu juga ada di daftar ini,
+| sudah dibuat pada Batch 6.7 (butir 128).
 */

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -22,10 +23,17 @@ use Illuminate\Support\Facades\Storage;
  *
  * Tabel ini hanya memiliki `created_at`; riwayat perubahannya ada di
  * `audit_logs`.
+ *
+ * `deleted_at` adalah satu-satunya kolom di luar ERD, ditambahkan supaya
+ * DELETE /transactions/{id} dapat berarti "soft delete" seperti bunyi API 4.9.2
+ * tanpa satu baris buku kas pun benar-benar hilang. Konsekuensinya melekat pada
+ * seluruh query: SoftDeletingScope menyaring transaksi terhapus di mana pun ia
+ * dibaca — buku kas, saldo, tren, ringkasan, dan ekspor — tanpa satu pun
+ * pemanggil perlu mengingatnya (butir 128, 130).
  */
 class Transaction extends Model
 {
-    use BelongsToSchool, HasFactory;
+    use BelongsToSchool, HasFactory, SoftDeletes;
 
     public const UPDATED_AT = null;
 

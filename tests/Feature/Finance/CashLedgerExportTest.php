@@ -554,9 +554,18 @@ class CashLedgerExportTest extends TestCase
         $this->assertSame([], $this->dataRows($this->filters()));
     }
 
+    /**
+     * Batch 6.7 menambahkan `deleted_at` sebagai satu-satunya kolom di luar
+     * ERD, untuk memenuhi kata "soft delete" pada API 4.9.2 (butir 128). Yang
+     * dijaga test ini karena itu bukan lagi "tidak ada kolom tambahan",
+     * melainkan bahwa tambahannya berhenti di situ: tidak ada status VOID,
+     * flag aktif, maupun kaitan ke `payments` yang dikarang.
+     */
     public function test_no_schema_or_payment_transaction_relation_was_added(): void
     {
-        foreach (['deleted_at', 'is_active', 'status', 'voided_at', 'payment_id'] as $column) {
+        $this->assertTrue(Schema::hasColumn('transactions', 'deleted_at'));
+
+        foreach (['is_active', 'status', 'voided_at', 'payment_id'] as $column) {
             $this->assertFalse(Schema::hasColumn('transactions', $column));
         }
 

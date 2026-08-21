@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Enums\PermissionName;
+use App\Enums\RoleName;
 use App\Models\Transaction;
 use App\Models\User;
 
@@ -70,18 +71,59 @@ class TransactionPolicy
     }
 
     /**
-     * Penghapusan tidak diimplementasikan sama sekali.
+     * API 4.9.2 — DELETE /transactions/{id}, Auth Level **Admin**, dan
+     * API 4.1: "Auth Level: Admin = Wajib token + role SCHOOL_ADMIN /
+     * SUPER_ADMIN".
      *
-     * API 4.9 menyebut DELETE /transactions/{id} sebagai "soft delete", tetapi
-     * ERD `transactions` tidak memuat `deleted_at`, status, maupun flag aktif,
-     * dan tidak ada bagian blueprint yang menjelaskan mekanismenya. Menghapus
-     * baris buku kas secara permanen bukan yang diminta dokumen, dan menambah
-     * kolom untuk menandainya berarti mengarang skema — jadi keduanya tidak
-     * dilakukan. Lihat docs/implementation-notes.md butir 74.
+     * Kewenangannya sengaja **tidak** digantung pada `accounting.manage`,
+     * berbeda dari `create` dan `update` di atas. Izin itu juga dipegang
+     * Bendahara, dan yang menimpa label "Admin" pada pencatatan adalah user
+     * story KAS-01 yang menyebut Bendahara secara eksplisit — story itu bicara
+     * tentang *mencatat* pemasukan dan pengeluaran, tidak tentang menghapusnya.
+     * Tidak ada satu pun user story penghapusan di PRD, sehingga label "Admin"
+     * di API tidak tertimpa apa pun. Polanya sama dengan pembebasan tagihan
+     * (butir 67).
+     *
+     * PRD 1.1.2 memberi Bendahara ✅ pada modul "Akuntansi & Kas", dan ✅ di
+     * sana didefinisikan sebagai akses penuh termasuk delete. Baris matriks itu
+     * umum untuk satu modul, sedangkan Auth Level pada satu endpoint bersifat
+     * spesifik — dan yang spesifik menang. Menghapus baris buku kas juga
+     * destruktif satu arah: tidak ada UI restore pada Phase 1. Ini keputusan
+     * implementasi, bukan kutipan blueprint; lihat butir 129.
      */
     public function delete(User $user, Transaction $transaction): bool
     {
+        return $this->isSchoolAdministrator($user)
+            && $this->sharesTenant($user, $transaction);
+    }
+
+    /**
+     * Mengembalikan transaksi yang sudah dihapus tidak ada pada Phase 1 —
+     * tidak lewat panel, tidak lewat API. Ability-nya tetap ditulis di sini,
+     * dan tetap `false`, supaya penambahan halaman "trashed" bawaan Filament
+     * di kemudian hari tidak diam-diam mendapat izin (butir 131).
+     */
+    public function restore(User $user, Transaction $transaction): bool
+    {
         return false;
+    }
+
+    /**
+     * Penghapusan permanen tidak pernah menjadi bagian dari kontrak apa pun:
+     * yang diminta API adalah soft delete, dan buku kas yang benar-benar
+     * lenyap adalah kebalikan dari jejak audit yang diminta Security 3.4.
+     */
+    public function forceDelete(User $user, Transaction $transaction): bool
+    {
+        return false;
+    }
+
+    /**
+     * SUPER_ADMIN sudah lolos lebih dulu lewat Gate::before.
+     */
+    protected function isSchoolAdministrator(User $user): bool
+    {
+        return $user->hasRole(RoleName::SchoolAdmin->value);
     }
 
     /**

@@ -11,13 +11,16 @@ use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -211,9 +214,12 @@ class TransactionResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                static::deleteAction(),
             ])
-            // Tidak ada aksi hapus, termasuk secara massal: mekanisme soft
-            // delete-nya belum ada di blueprint (butir 74).
+            // Tetap tidak ada penghapusan massal. Yang diminta API adalah
+            // menghapus satu transaksi; satu klik yang menghapus sekaligus
+            // seluruh halaman buku kas adalah kesalahan yang jauh lebih mahal,
+            // dan tidak ada satu pun dokumen yang memintanya (butir 131).
             ->bulkActions([])
             // `id` sebagai pemutus: banyak transaksi berbagi tanggal yang sama,
             // dan tanpa urutan yang tetap paginasinya dapat menampilkan baris
@@ -221,6 +227,53 @@ class TransactionResource extends Resource
             ->defaultSort(fn (Builder $query): Builder => $query
                 ->orderByDesc('transaction_date')
                 ->orderByDesc('id'));
+    }
+
+    /**
+     * API 4.9.2 — DELETE /transactions/{id}: "hapus transaksi (soft delete)".
+     *
+     * Tombolnya hanya muncul bagi yang benar-benar berwenang, dan itu lebih
+     * sempit daripada yang boleh mencatat: Bendahara mencatat dan mengoreksi,
+     * Admin Sekolah yang menghapus (butir 129). Penyembunyian tombol bukan
+     * proteksinya — TransactionRecorder::delete() memeriksa ulang izin yang
+     * sama pada jalur yang benar-benar mengubah data.
+     *
+     * Penghapusannya melalui service, bukan `DeleteAction` bawaan, supaya
+     * jalur panel dan jalur API menghapus dengan aturan yang sama persis.
+     */
+    protected static function deleteAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('softDelete')
+            ->label('Hapus')
+            ->icon('heroicon-m-trash')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalHeading('Hapus transaksi kas')
+            ->modalDescription(
+                'Transaksi tidak akan lagi muncul di buku kas, saldo, laporan, maupun ekspor. '
+                .'Datanya tetap tersimpan untuk keperluan audit, tetapi tidak ada cara '
+                .'mengembalikannya sendiri dari halaman ini.'
+            )
+            ->modalSubmitActionLabel('Hapus transaksi')
+            ->visible(fn (Transaction $record): bool => Auth::user()?->can('delete', $record) ?? false)
+            ->action(function (Transaction $record): void {
+                try {
+                    app(TransactionRecorder::class)->delete($record->getKey(), Auth::user());
+                } catch (AuthorizationException|ValidationException $e) {
+                    Notification::make()
+                        ->title('Transaksi tidak dapat dihapus')
+                        ->body($e->getMessage())
+                        ->danger()
+                        ->send();
+
+                    return;
+                }
+
+                Notification::make()
+                    ->title('Transaksi dihapus')
+                    ->success()
+                    ->send();
+            });
     }
 
     public static function infolist(Infolist $infolist): Infolist

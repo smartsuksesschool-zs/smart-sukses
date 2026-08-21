@@ -568,20 +568,31 @@ class TransactionRecorderTest extends TestCase
     // --------------------------------------------------------------- delete
 
     /**
-     * API 4.9 menyebut "soft delete", tetapi ERD tidak menyediakan kolomnya.
-     * Sampai mekanismenya dijelaskan, tidak ada penghapusan sama sekali.
+     * Penghapusan ada sejak Batch 6.7, dan kewenangannya lebih sempit daripada
+     * pencatatan: Bendahara mencatat dan mengoreksi, Admin Sekolah yang
+     * menghapus (butir 129). Perilaku lengkapnya diuji di
+     * DeleteTransactionTest; yang dijaga di sini adalah batas kewenangannya
+     * tepat pada service yang sama dengan pencatatan.
      */
-    public function test_nobody_may_delete_a_transaction(): void
+    public function test_only_administrators_may_delete_a_transaction(): void
     {
         $transaction = $this->record();
 
-        foreach ([RoleName::Bendahara, RoleName::SchoolAdmin, RoleName::KepalaSekolah] as $role) {
+        foreach ([RoleName::Bendahara, RoleName::KepalaSekolah] as $role) {
             $user = User::factory()->forSchool($this->schoolA)->withRole($role)->create();
 
             $this->assertFalse($user->can('delete', $transaction));
         }
 
-        $this->assertFalse(method_exists(TransactionRecorder::class, 'delete'));
+        $schoolAdmin = User::factory()->forSchool($this->schoolA)
+            ->withRole(RoleName::SchoolAdmin)->create();
+
+        $this->assertTrue($schoolAdmin->can('delete', $transaction));
+
+        app(TransactionRecorder::class)->delete($transaction->getKey(), $schoolAdmin);
+
+        // Soft delete: barisnya tetap ada, hanya tidak lagi terbaca.
         $this->assertDatabaseCount('transactions', 1);
+        $this->assertNull(Transaction::query()->find($transaction->getKey()));
     }
 }

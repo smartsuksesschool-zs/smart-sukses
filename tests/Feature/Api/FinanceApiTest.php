@@ -11,6 +11,7 @@ use App\Jobs\GenerateStudentFees;
 use App\Models\AcademicYear;
 use App\Models\FeeType;
 use App\Models\School;
+use App\Models\Scopes\SchoolScope;
 use App\Models\Student;
 use App\Models\StudentFee;
 use App\Models\Transaction;
@@ -690,18 +691,64 @@ class FinanceApiTest extends TestCase
     }
 
     /**
-     * "Soft delete" pada API map belum punya kolom di ERD (butir 74); rutenya
-     * tidak didaftarkan sama sekali, bukan sebagai placeholder.
+     * Rutenya ada sejak Batch 6.7, dan yang berwenang memakainya lebih sempit
+     * daripada yang berwenang mencatat: Bendahara memegang `accounting.manage`
+     * tetapi tidak menghapus (butir 129).
      */
-    public function test_the_delete_route_is_absent(): void
+    public function test_the_delete_route_exists_but_not_for_bendahara(): void
     {
         $transaction = $this->transactionIn($this->schoolA);
 
         $this->asUser($this->bendaharaA)
             ->deleteJson("/api/v1/transactions/{$transaction->id}")
-            ->assertStatus(405);
+            ->assertStatus(403);
 
+        $this->assertNull($transaction->fresh()->deleted_at);
+    }
+
+    public function test_a_school_admin_soft_deletes_through_the_api(): void
+    {
+        $transaction = $this->transactionIn($this->schoolA);
+
+        $this->asUser($this->userIn($this->schoolA, RoleName::SchoolAdmin))
+            ->deleteJson("/api/v1/transactions/{$transaction->id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $transaction->id);
+
+        // Barisnya tetap ada; yang berubah hanya `deleted_at`.
         $this->assertDatabaseCount('transactions', 1);
+        $this->assertNotNull(Transaction::withTrashed()->find($transaction->id)?->deleted_at);
+        $this->assertNull(Transaction::withoutGlobalScope(SchoolScope::class)->find($transaction->id));
+    }
+
+    public function test_a_deleted_transaction_disappears_from_the_api_listing(): void
+    {
+        $kept = $this->transactionIn($this->schoolA, ['category' => 'Tetap']);
+        $removed = $this->transactionIn($this->schoolA, ['category' => 'Dihapus']);
+
+        $this->asUser($this->userIn($this->schoolA, RoleName::SchoolAdmin))
+            ->deleteJson("/api/v1/transactions/{$removed->id}")
+            ->assertOk();
+
+        $body = $this->asUser($this->bendaharaA)->getJson('/api/v1/transactions')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        $this->assertSame($kept->id, $body->json('data.0.id'));
+    }
+
+    public function test_a_transaction_from_another_branch_cannot_be_deleted(): void
+    {
+        $foreign = $this->transactionIn($this->schoolB);
+
+        // Konvensi yang sama dengan PUT pada rute yang sama: keberadaannya
+        // tidak dikonfirmasi, dan pesannya tidak membedakan "bukan milik Anda"
+        // dari "tidak ada" (butir 130).
+        $this->asUser($this->userIn($this->schoolA, RoleName::SchoolAdmin))
+            ->deleteJson("/api/v1/transactions/{$foreign->id}")
+            ->assertStatus(422);
+
+        $this->assertNull($foreign->fresh()->deleted_at);
     }
 
     /**

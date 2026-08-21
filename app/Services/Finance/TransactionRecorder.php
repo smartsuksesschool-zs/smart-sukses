@@ -23,9 +23,10 @@ use Illuminate\Validation\ValidationException;
  * sehingga jalur lain (perintah artisan, REST API Phase 2) tidak dapat
  * melewatinya.
  *
- * Tidak ada penghapusan. API 4.9 menyebut DELETE /transactions/{id} sebagai
- * "soft delete", tetapi ERD tidak memuat kolom untuk menyimpannya dan
- * blueprint tidak menjelaskan mekanismenya — lihat butir 74.
+ * Termasuk penghapusan. API 4.9 menyebut DELETE /transactions/{id} sebagai
+ * "soft delete"; kolom penyimpannya tidak ada di ERD dan ditambahkan sebagai
+ * keputusan implementasi Phase 1 — lihat butir 128. Yang berwenang di sana
+ * lebih sempit daripada yang berwenang mencatat (butir 129).
  */
 class TransactionRecorder
 {
@@ -122,6 +123,40 @@ class TransactionRecorder
             // `eloquent.updated`, dan query builder tidak memicu model event
             // sama sekali (butir 46).
             $transaction->forceFill($attributes)->save();
+
+            return $transaction;
+        });
+    }
+
+    /**
+     * Menghapus satu transaksi kas — API 4.9.2: "Hapus transaksi (soft
+     * delete)".
+     *
+     * Yang terjadi hanya `deleted_at` terisi. Tidak ada satu pun kolom bisnis
+     * yang berubah, dan berkas buktinya tidak disentuh: nota yang sudah
+     * diunggah adalah dokumen sumber, dan transaksi yang dihapus karena salah
+     * catat justru sering perlu ditelusuri kembali lewat notanya (butir 132).
+     *
+     * Urutannya sengaja: cari dulu, baru periksa kewenangan. Transaksi cabang
+     * lain karena itu tidak pernah sampai ke pemeriksaan izin — keberadaannya
+     * tidak terkonfirmasi, persis seperti pada `update()`.
+     *
+     * @throws AuthorizationException|ValidationException
+     */
+    public function delete(int $transactionId, User $actor): Transaction
+    {
+        return DB::transaction(function () use ($transactionId, $actor): Transaction {
+            $transaction = $this->findWithinTenant($transactionId, $actor);
+
+            if (Gate::forUser($actor)->denies('delete', $transaction)) {
+                throw new AuthorizationException('Anda tidak berwenang menghapus transaksi kas.');
+            }
+
+            // `delete()` pada model, bukan mass update: jejak audit DELETED
+            // ditulis listener `eloquent.deleted`, dan query builder tidak
+            // memicu model event sama sekali (butir 46). SoftDeletes membuat
+            // pemanggilan ini mengisi `deleted_at`, bukan menghapus barisnya.
+            $transaction->delete();
 
             return $transaction;
         });

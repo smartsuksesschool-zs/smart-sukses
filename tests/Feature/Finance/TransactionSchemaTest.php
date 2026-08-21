@@ -27,9 +27,15 @@ class TransactionSchemaTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_the_table_has_exactly_the_columns_the_erd_lists(): void
+    /**
+     * Kolom ERD, ditambah `deleted_at` — satu-satunya tambahan, dan tambahan
+     * yang disengaja: tanpa kolom itu kata "soft delete" pada API 4.9.2 tidak
+     * punya tempat penyimpanan sama sekali (butir 128).
+     */
+    public function test_the_table_has_exactly_the_columns_the_erd_lists_plus_deleted_at(): void
     {
         $this->assertEqualsCanonicalizing([
+            'deleted_at',
             'id',
             'school_id',
             'type',
@@ -54,22 +60,25 @@ class TransactionSchemaTest extends TestCase
     }
 
     /**
-     * API 4.9 menyebut "soft delete", tetapi ERD tidak memuat kolom untuk
-     * menyimpannya — dan kolom itu tidak dikarang di sini.
+     * "Soft delete" dipenuhi dengan cara yang paling kecil: satu `deleted_at`
+     * dan trait bawaan Laravel. Tidak ada kosakata baru yang dikarang — tidak
+     * status VOID, tidak flag aktif, tidak alasan penghapusan (butir 128).
      */
-    public function test_no_soft_delete_or_status_column_was_invented(): void
+    public function test_soft_delete_uses_deleted_at_and_invents_nothing_else(): void
     {
-        foreach (['deleted_at', 'status', 'is_active', 'voided_at', 'is_deleted'] as $column) {
+        $this->assertTrue(Schema::hasColumn('transactions', 'deleted_at'));
+
+        $this->assertContains(
+            SoftDeletes::class,
+            class_uses_recursive(Transaction::class),
+        );
+
+        foreach (['status', 'is_active', 'voided_at', 'is_deleted', 'void_reason', 'deleted_by'] as $column) {
             $this->assertFalse(
                 Schema::hasColumn('transactions', $column),
                 "Kolom {$column} tidak ada di ERD dan tidak boleh ditambahkan.",
             );
         }
-
-        $this->assertNotContains(
-            SoftDeletes::class,
-            class_uses_recursive(Transaction::class),
-        );
     }
 
     public function test_the_type_enum_holds_only_income_and_expense(): void

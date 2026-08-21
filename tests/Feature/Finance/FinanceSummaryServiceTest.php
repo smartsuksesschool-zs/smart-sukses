@@ -429,7 +429,9 @@ class FinanceSummaryServiceTest extends TestCase
             $this->assertFalse(Schema::hasTable($table));
         }
 
-        foreach (['deleted_at', 'is_active', 'status', 'voided_at'] as $column) {
+        // `deleted_at` menyusul pada Batch 6.7 sebagai keputusan implementasi
+        // untuk "soft delete" API 4.9.2 (butir 128); yang lain tetap tidak ada.
+        foreach (['is_active', 'status', 'voided_at'] as $column) {
             $this->assertFalse(Schema::hasColumn('transactions', $column));
         }
 

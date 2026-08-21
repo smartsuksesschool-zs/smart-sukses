@@ -15,9 +15,10 @@ use Illuminate\Validation\Rule;
 /**
  * API 4.9.2 — /transactions (KAS-01).
  *
- * `DELETE /transactions/{id}` sengaja tidak dibuat: ERD tidak memuat kolom
- * untuk "soft delete" yang disebut API map, dan mekanismenya belum dijelaskan
- * di mana pun (butir 74). Rutenya pun tidak didaftarkan sebagai placeholder.
+ * `DELETE /transactions/{id}` kini ada. Kolom penyimpan "soft delete"-nya
+ * tidak berasal dari ERD melainkan ditambahkan sebagai keputusan implementasi
+ * Phase 1 (butir 128), dan yang berwenang memakainya lebih sempit daripada
+ * yang berwenang mencatat (butir 129).
  */
 class TransactionController extends Controller
 {
@@ -88,6 +89,26 @@ class TransactionController extends Controller
         return ApiResponse::success(
             (new TransactionResource($transaction))->resolve(),
             'Transaksi kas diperbarui.',
+        );
+    }
+
+    /**
+     * DELETE /transactions/{id} — "hapus transaksi (soft delete)".
+     *
+     * Responsnya membawa transaksi yang baru dihapus, bukan bodi kosong:
+     * pemanggil dapat memastikan baris mana yang terkena tanpa harus
+     * menanyakannya lagi — dan bila ia bertanya lagi lewat GET, barisnya memang
+     * sudah tidak ada di sana.
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $transaction = app(TransactionRecorder::class)->delete($id, $request->user());
+
+        $transaction->loadMissing('createdBy');
+
+        return ApiResponse::success(
+            (new TransactionResource($transaction))->resolve(),
+            'Transaksi kas dihapus.',
         );
     }
 
