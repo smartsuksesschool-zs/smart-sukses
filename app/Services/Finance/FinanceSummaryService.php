@@ -150,13 +150,18 @@ class FinanceSummaryService
      * "Total penerimaan SPP bulan ini" — uang yang benar-benar tercatat di
      * `payments`, disaring berdasarkan `payment_date`.
      *
+     * Publik karena statistik per cabang milik Super Admin memakai arti yang
+     * persis sama untuk "tagihan terkumpul bulan ini" — yang berbeda hanya
+     * rentangnya. Menyalinnya ke sana akan melahirkan definisi "terkumpul"
+     * kedua (butir 141).
+     *
      * `student_fees.amount_paid` sengaja tidak dipakai walaupun angkanya sama:
      * ia kolom ringkasan posisi tagihan, bukan riwayat kapan uangnya diterima,
      * sehingga tidak dapat disaring per bulan. Tagihan berstatus WAIVED tidak
      * punya baris `payments` sama sekali dan karena itu tidak pernah muncul di
      * sini; tagihan PARTIAL menyumbang persis cicilan yang sudah masuk.
      */
-    protected function sppReceived(int $schoolId, CarbonImmutable $start, CarbonImmutable $end): string
+    public function sppReceived(int $schoolId, CarbonImmutable $start, CarbonImmutable $end): string
     {
         $sum = Payment::query()
             ->withoutGlobalScope(SchoolScope::class)

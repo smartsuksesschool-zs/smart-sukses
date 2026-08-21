@@ -754,20 +754,29 @@ class FinanceApiTest extends TestCase
     /**
      * @return array<string, array{string}>
      */
-    public static function deferredEndpoints(): array
+    public static function onceDeferredEndpoints(): array
     {
         return [
+            'transaction delete' => ['api/v1/transactions/{id}'],
+            'finance summary' => ['api/v1/finance/summary'],
+            'spp report' => ['api/v1/finance/spp-report'],
             'admin dashboard' => ['api/v1/admin/dashboard'],
             'school stats' => ['api/v1/admin/schools/{id}/stats'],
         ];
     }
 
-    #[DataProvider('deferredEndpoints')]
-    public function test_deferred_endpoints_have_no_placeholder_route(string $uri): void
+    /**
+     * Kelima endpoint ini dulu sengaja tidak didaftarkan karena datanya belum
+     * ada di service mana pun (butir 121, 125). Semuanya sudah dibuat pada
+     * Batch 6.7 dan 6.8, jadi yang dijaga sekarang kebalikannya: tidak ada satu
+     * pun yang diam-diam hilang lagi dari daftar rute.
+     */
+    #[DataProvider('onceDeferredEndpoints')]
+    public function test_the_once_deferred_endpoints_are_now_registered(string $uri): void
     {
         $registered = collect(Route::getRoutes())->map(fn ($route) => $route->uri())->all();
 
-        $this->assertNotContains($uri, $registered);
+        $this->assertContains($uri, $registered);
     }
 
     // ----------------------------------------------------------------- exports

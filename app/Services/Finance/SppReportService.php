@@ -70,6 +70,48 @@ class SppReportService
     }
 
     /**
+     * Seluruh tunggakan satu cabang, lintas seluruh periode.
+     *
+     * Dipakai statistik per cabang milik Super Admin, yang menyebut "tunggakan"
+     * tanpa keterangan periode sama sekali. Angkanya sengaja **tidak** diambil
+     * dengan menjumlahkan hasil `report()`: daftar itu dipotong pada
+     * MAX_PERIODS, sehingga cabang yang sudah berjalan lebih dari lima tahun
+     * akan diam-diam melaporkan tunggakan yang terlalu kecil.
+     *
+     * Aturannya tetap satu dan sama — UNPAID dan PARTIAL saja, WAIVED tidak
+     * pernah ikut (butir 135). Yang berbeda hanya pengelompokannya: di sini
+     * tidak ada `GROUP BY`, jadi hasilnya satu angka dari satu query.
+     */
+    public function totalArrearsForSchool(int $schoolId): string
+    {
+        $sum = StudentFee::query()
+            ->withoutGlobalScope(SchoolScope::class)
+            ->where('school_id', $schoolId)
+            ->whereIn('status', $this->arrearsStatuses())
+            ->selectRaw('SUM(amount - amount_paid) as arrears')
+            ->value('arrears');
+
+        return $this->decimal($sum);
+    }
+
+    /**
+     * Status yang benar-benar merupakan tunggakan.
+     *
+     * PAID sisanya nol dengan sendirinya; WAIVED sengaja tidak pernah masuk —
+     * tagihan yang dibebaskan adalah uang yang secara sadar direlakan, bukan
+     * piutang yang masih ditagih (butir 135).
+     *
+     * @return array<int, string>
+     */
+    protected function arrearsStatuses(): array
+    {
+        return [
+            StudentFeeStatus::Unpaid->value,
+            StudentFeeStatus::Partial->value,
+        ];
+    }
+
+    /**
      * Satu query agregat untuk seluruh periode sekaligus.
      *
      * Tidak ada satu pun baris `student_fees` yang ditarik ke PHP: jumlahnya
@@ -84,10 +126,7 @@ class SppReportService
      */
     protected function aggregate(int $schoolId, ?string $period): array
     {
-        $arrearsStatuses = "'".implode("','", [
-            StudentFeeStatus::Unpaid->value,
-            StudentFeeStatus::Partial->value,
-        ])."'";
+        $arrearsStatuses = "'".implode("','", $this->arrearsStatuses())."'";
 
         return StudentFee::query()
             // Scope dilepas dan `school_id` disaring eksplisit: laporan ini

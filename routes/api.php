@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminDashboardController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FeeTypeController;
 use App\Http\Controllers\Api\FinanceExportController;
@@ -75,16 +76,23 @@ Route::prefix('v1')->group(function (): void {
         Route::get('finance/summary', [FinanceReportController::class, 'summary']);
         Route::get('finance/spp-report', [FinanceReportController::class, 'sppReport']);
         Route::get('finance/export', [FinanceExportController::class, 'cashLedger']);
+
+        // ------------------------------------------------- 4.3 Super Admin
+        // Satu-satunya kelompok yang memang lintas cabang. Pagarnya berlapis:
+        // `auth_level:super` di sini, dan pemeriksaan yang sama di dalam
+        // service karena panel memanggil service itu tanpa melewati rute.
+        Route::middleware('auth_level:super')->group(function (): void {
+            Route::get('admin/dashboard', [AdminDashboardController::class, 'dashboard']);
+            Route::get('admin/schools/{id}/stats', [AdminDashboardController::class, 'schoolStats'])
+                ->whereNumber('id');
+        });
     });
 });
 
 /*
-| Sengaja BELUM didaftarkan, dan tidak sebagai placeholder:
-|
-|   GET    /admin/dashboard       — field-nya belum ada di service mana pun
-|   GET    /admin/schools/{id}/stats — idem
-|
-| Lihat butir 125. Tiga endpoint lain yang dulu ada di daftar ini —
-| DELETE /transactions/{id}, GET /finance/summary, GET /finance/spp-report —
-| sudah dibuat pada Batch 6.7 (butir 128, 134, 135).
+| Seluruh endpoint yang dulu ditunda kini ada. Yang tersisa dari API 4.3 dan
+| 4.4 — GET/POST/PUT/PATCH /admin/schools serta seluruh /users — memang belum
+| dibuat, tetapi keduanya bukan deliverable Sprint 6: keduanya milik manajemen
+| tenant dan pengguna, yang di panel sudah berjalan lewat SchoolResource dan
+| UserResource. Lihat butir 145.
 */
