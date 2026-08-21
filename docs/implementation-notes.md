@@ -2753,6 +2753,187 @@ membangun CRUD tenant serta seluruh `/users` bukan bagian dari permintaan itu.
 Yang perlu dipisah saat membaca status proyek: **Sprint 6 selesai** tidak sama dengan
 **seluruh REST API blueprint selesai**.
 
+## Sprint 7 Batch 7.1 — Fondasi Portal & Dashboard Orang Tua
+
+### 147. Parent Portal: rute web biasa, bukan panel Filament kedua
+
+Pilihan arsitektur, dan alasannya bermula dari satu baris yang sudah ada sejak lama.
+`User::canAccessPanel()` menolak SISWA dan ORANG_TUA dari panel, dengan komentar yang
+menyebut keduanya "dilayani portal terpisah". Aturan itu bukan penghalang yang perlu
+disiasati — itu justru keputusan yang sudah diambil project ini.
+
+Membuat panel Filament kedua akan memaksa `canAccessPanel()` menjadi sadar-panel, yaitu
+mengubah method yang menjaga akses seluruh peran admin demi menambah satu peran baru.
+Risikonya tidak sebanding, dan project sudah punya pola yang lebih kecil untuk halaman
+non-panel: PPDB berjalan sebagai rute web biasa + komponen Livewire halaman-penuh + satu
+berkas tata letak yang menyuntikkan warna cabang.
+
+Parent Portal mengikuti pola itu:
+
+- rute `/portal` di `routes/web.php`,
+- `App\Livewire\Portal\ParentDashboard` sebagai komponen halaman-penuh,
+- `resources/views/layouts/portal.blade.php` dengan CSS variables dari `SchoolBranding`,
+- guard **`web` yang sama** dengan panel — bukan guard kedua, bukan tabel pengguna kedua,
+  dan tidak ada token yang disimpan di peramban.
+
+Yang berubah pada kode lama: **tidak ada**. `canAccessPanel()`, `SchoolScope`, throttle
+login panel, dan aturan akses admin tidak disentuh sama sekali.
+
+Satu hal yang memang harus dibuat: halaman masuk portal. Orang tua tidak dapat memakai
+halaman masuk panel karena panel memang menolak mereka, dan melonggarkannya berarti
+menyentuh aturan yang tidak boleh dilonggarkan. `PortalLogin` karena itu memakai
+`Auth::attempt()` pada guard `web`, dengan throttle lima percobaan per menit seperti panel
+(Arsitektur 3.4), pesan galat yang tidak membedakan email tak dikenal dari kata sandi
+salah (butir 115), dan pembatalan sesi bila kredensialnya benar tetapi perannya bukan
+orang tua.
+
+Rute dashboard sengaja **tidak** memakai middleware `auth` bawaan. `auth` mengarahkan tamu
+ke rute bernama `login`, dan rute itu tidak ada di project ini — satu-satunya halaman masuk
+adalah milik panel (`filament.admin.auth.login`), yang justru bukan tempat orang tua.
+Tanpa penyesuaian ini, tamu yang membuka `/portal` mendapat error 500, bukan pengalihan.
+`EnsureParentPortalAccess` yang mengarahkannya ke halaman masuk portal.
+
+### 148. Kepemilikan anak: dua syarat, dan keduanya wajib
+
+Skema hanya menyediakan `students.parent_user_id` (ERD 2.2: "FK → users.id. Akun portal
+ortu"). Tidak ada tabel wali, tidak ada relasi banyak-ke-banyak, dan tidak ada wali kedua —
+jadi tidak ada satu pun dari itu yang dibuat.
+
+Seorang anak dianggap milik akun ini bila **dua-duanya** benar:
+
+1. `students.parent_user_id` = id akun yang login, dan
+2. `students.school_id` = `school_id` akun itu.
+
+Syarat kedua bukan kelebihan yang berjaga-jaga. Tanpanya, akun yang pernah dipindahkan ke
+cabang lain tetap membawa anak dari cabang lamanya — dan itu kebocoran lintas cabang yang
+tidak akan terlihat karena datanya memang "miliknya". Ada test khusus untuk keadaan itu.
+
+Anak yang bukan miliknya menjadi **404**, bukan 403: membedakan "bukan milik Anda" dari
+"tidak ada" sudah cukup untuk memberi tahu bahwa anak itu ada. Berlaku sama untuk anak
+orang tua lain di cabang yang sama, anak cabang lain, dan id yang memang tidak ada.
+
+Perannya diperiksa di service, bukan hanya di rute: halaman portal memanggil service yang
+sama tanpa melewati middleware API. Seperti pada laporan keuangan (butir 137), Auth Level
+"Auth" pada API map berarti *wajib token*, bukan *boleh dibaca semua peran yang punya
+token* — admin sekolah tidak menjadi orang tua siapa pun. Akun tanpa cabang ditolak
+eksplisit, tidak dibiarkan bergantung pada kebetulan bahwa `NULL` tidak pernah cocok.
+
+### 149. Daftar anak memuat seluruh anak yang tertaut, bukan hanya yang aktif
+
+Dokumen tidak menetapkan penyaringan status untuk `/parent/children`. Keputusan
+implementasi Phase 1: seluruh siswa yang tertaut ke akun itu dikembalikan, termasuk yang
+sudah GRADUATED atau TRANSFERRED.
+
+Menyaring hanya ACTIVE akan membuat anak yang baru lulus lenyap dari portal orang tuanya
+bersama seluruh riwayat tagihannya — termasuk tagihan yang mungkin masih tertunggak.
+Kehilangan itu lebih merugikan daripada menampilkan satu baris tambahan.
+
+Yang tetap mengikuti keadaan sekarang adalah data operasionalnya: `current_class` hanya
+terisi bila anak benar-benar punya penempatan aktif pada tahun ajaran berjalan, dan NULL
+bila tidak — bukan kelas terakhir yang sudah tidak berlaku.
+
+### 150. Lima mapel di API, tiga di dashboard
+
+Konflik yang eksplisit dan kedua sisinya benar:
+
+- API 4.11 — "Dashboard anak: **nilai terbaru 5 mapel**, hadir bulan ini, tagihan pending"
+- PORTAL-01 poin 1 — "Dashboard menampilkan: **3 nilai terbaru**, kehadiran bulan ini,
+  tagihan belum lunas"
+
+Keduanya tidak dipertentangkan dan tidak ada yang dikorbankan. Satu service menyediakan
+lima (`SUMMARY_SUBJECTS = 5`), endpoint mengembalikan lima sesuai kontrak API, dan
+dashboard memotong tampilannya menjadi tiga (`DASHBOARD_SUBJECTS = 3`) dari data yang sama.
+Yang dipotong tampilannya, bukan datanya — jadi tidak ada permintaan yang hilang, dan tidak
+ada dokumen yang perlu diubah. Ini interpretasi implementasi, bukan pernyataan blueprint.
+
+### 151. "Lima mapel terbaru" berarti per mapel, dan portal hanya membaca
+
+Dua hal yang mudah salah.
+
+**Pertama**, "5 mapel" bukan "5 baris penilaian". Lima ulangan harian pada mapel yang sama
+akan memenuhi seluruh kartu dan menyembunyikan empat mapel lain — pembacaan yang secara
+harfiah mungkin, tetapi jelas bukan yang dimaksud "5 mapel". Yang diurutkan karena itu
+mapelnya, berdasarkan penilaian terakhir yang masuk pada mapel itu, lalu lima teratas
+diambil. Satu entri ringkas per mapel.
+
+**Kedua**, nilainya dihitung `FinalScoreCalculator` — kalkulator yang sama dengan yang
+dipakai panel dan rapor. Tidak ada rumus kedua, tidak ada snapshot baru, tidak ada
+`GradeConfig` yang disentuh, dan tidak ada satu pun baris yang ditulis. Ada test yang
+memastikan membaca ringkasan tidak mengubah satu atribut nilai pun dan tidak melahirkan
+satu baris audit pun.
+
+Mapel yang komponennya belum lengkap mengembalikan `score: null` dengan `is_complete:
+false`, bukan angka yang dikarang — persis seperti yang sudah dilakukan kalkulatornya.
+
+### 152. "Kehadiran bulan ini": sumber datanya tidak ada di Phase 1
+
+PORTAL-01 meminta kehadiran bulan ini. Phase 1 tidak punya sumbernya, dan ini bukan
+kelalaian implementasi melainkan keadaan blueprint itu sendiri:
+
+- tidak ada tabel kehadiran di antara **21 tabel** yang didaftar ERD 2.1,
+- tidak ada satu pun baris presensi harian yang tercatat di mana pun,
+- **"Presensi Digital"** justru tercantum sebagai fitur **Phase 2**
+  (`01-prd/03-phase2-overview.md`: "Absensi via aplikasi (GPS/selfie), rekap per bulan").
+
+`report_cards` memang punya `attend_present`, `attend_sick`, `attend_permission`, dan
+`attend_absent`. Keempatnya tidak dipakai, karena dua alasan: kolom itu rekap **satu tahun
+ajaran**, bukan satu bulan, sehingga menjawab pertanyaan yang berbeda; dan sampai kini
+tidak ada satu pun jalur di aplikasi yang mengisinya, sehingga membacanya berarti
+menyajikan NULL sebagai data.
+
+Fallback Phase 1: keadaan "belum tersedia" yang eksplisit —
+`{"available": false, "reason": "attendance_source_not_available", "present_count": null}` —
+dan dashboard menuliskan "Data kehadiran belum tersedia".
+
+Yang sengaja **tidak** dilakukan: membuat tabel, menambah migrasi, menampilkan angka 0,
+menghitung dari jadwal, atau mengasumsikan hadir penuh. Nol adalah pernyataan bahwa anak
+tidak pernah hadir, dan itu keliru dengan cara yang tidak terlihat oleh pembacanya.
+
+Perlu dicatat untuk penutupan Sprint 7 nanti: **PORTAL-01 tidak terpenuhi seutuhnya**.
+Dua dari tiga angkanya nyata; yang ketiga menunggu sumber data yang menurut blueprint
+sendiri baru datang di Phase 2.
+
+### 153. Cabang tanpa tahun ajaran aktif bukan kesalahan
+
+Ringkasan nilai memakai tahun ajaran aktif cabang **anaknya** — bukan cabang sesi, dan
+bukan id yang dititipkan pemanggil.
+
+Bila cabang itu belum punya tahun ajaran aktif (keadaan wajar di cabang yang baru dibuka),
+`latest_grades` kembali kosong dan sisa ringkasan tetap terkirim. Bukan 500, dan bukan
+respons setengah jadi. Tagihan tetap terhitung penuh karena tunggakan tidak bergantung pada
+tahun ajaran mana pun.
+
+### 154. Tagihan belum lunas memakai aturan yang sudah ada
+
+PORTAL-01: "tagihan belum lunas (jumlah & nominal)". Aturannya sama persis dengan tunggakan
+laporan SPP (butir 135): UNPAID dan PARTIAL saja.
+
+PAID sisanya nol dengan sendirinya. WAIVED tidak pernah ikut — tagihan yang sudah
+dibebaskan sekolah, lalu muncul lagi sebagai tunggakan di dashboard orang tuanya, akan
+membatalkan keringanan itu di mata orang yang paling berkepentingan.
+
+`count` dan `outstanding_amount` dihitung satu query agregat, dan nominalnya string dua
+desimal seperti seluruh uang di sistem ini. `payments` dan `transactions` tidak ikut sama
+sekali: yang ditanyakan posisi tagihan, bukan arus kas.
+
+### 155. Yang belum dibuat dari API 4.11
+
+Batch ini hanya membuat dua endpoint orang tua. Sisanya —
+`/parent/children/{id}/grades`, `/fees`, `/schedule`, serta seluruh `/teacher` dan
+`/student` — belum ada dan **tidak** didaftarkan sebagai placeholder, mengikuti kebiasaan
+yang sama dengan butir 125.
+
+### 156. Pemilih anak tidak dapat dipakai untuk melihat anak orang lain
+
+Anak yang sedang dilihat disimpan sebagai id pada state komponen Livewire, dan setiap
+permintaan pindah diperiksa ulang terhadap daftar anak milik akun itu sebelum dipakai. Id
+yang bukan miliknya diabaikan sepenuhnya — pilihannya tetap pada anak sebelumnya, tanpa
+pesan yang membedakan "anak orang lain" dari "anak tidak ada".
+
+Ringkasannya sendiri tetap melewati `ParentPortalService::summary()`, jalur yang sama
+dengan API, sehingga andai pemeriksaan di komponen suatu saat dilewati, pagar kepemilikan
+di service masih berdiri.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
