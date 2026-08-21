@@ -437,4 +437,52 @@ class FinanceSummaryServiceTest extends TestCase
         $this->assertFalse(Schema::hasColumn('payments', 'transaction_id'));
         $this->assertFalse(method_exists(Transaction::class, 'payments'));
     }
+
+    /**
+     * Kolom `transaction_date` dan `payment_date` bertipe DATE, tetapi cast
+     * `date` Eloquent menyimpannya sebagai `Y-m-d H:i:s`. Perbandingan mentah
+     * terhadap `'2026-08-31'` karena itu menganggap `2026-08-31 00:00:00` lebih
+     * besar, dan seluruh transaksi pada hari terakhir bulan diam-diam hilang
+     * dari totalnya. Test ini menjaga hari terakhir tetap ikut terhitung
+     * (butir 139).
+     */
+    public function test_the_last_day_of_the_month_is_counted(): void
+    {
+        $this->transaction(TransactionType::Income, '1000000', '2026-08-31');
+        $this->transaction(TransactionType::Expense, '250000', '2026-08-31');
+
+        $summary = $this->summarize('2026-08');
+
+        $this->assertSame('250000.00', $summary['expenses']);
+        $this->assertSame('750000.00', $summary['cash_balance']);
+
+        $august = collect($summary['trend'])->firstWhere('period', '2026-08');
+
+        $this->assertSame('1000000.00', $august['income']);
+        $this->assertSame('250000.00', $august['expense']);
+    }
+
+    public function test_a_payment_on_the_last_day_of_the_month_is_counted(): void
+    {
+        $fee = $this->feeFor($this->schoolA);
+
+        $this->pay($fee, '400000', '2026-08-31');
+
+        $this->assertSame('400000.00', $this->summarize('2026-08')['spp_received']);
+    }
+
+    public function test_the_first_day_of_the_month_is_counted(): void
+    {
+        $this->transaction(TransactionType::Expense, '125000', '2026-08-01');
+
+        $this->assertSame('125000.00', $this->summarize('2026-08')['expenses']);
+    }
+
+    public function test_a_neighbouring_month_still_stays_out(): void
+    {
+        $this->transaction(TransactionType::Expense, '500000', '2026-07-31');
+        $this->transaction(TransactionType::Expense, '600000', '2026-09-01');
+
+        $this->assertSame('0.00', $this->summarize('2026-08')['expenses']);
+    }
 }

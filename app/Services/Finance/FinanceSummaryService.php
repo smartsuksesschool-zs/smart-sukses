@@ -108,7 +108,8 @@ class FinanceSummaryService
         $sum = Payment::query()
             ->withoutGlobalScope(SchoolScope::class)
             ->where('school_id', $schoolId)
-            ->whereBetween('payment_date', [$start->toDateString(), $end->toDateString()])
+            ->whereDate('payment_date', '>=', $start->toDateString())
+            ->whereDate('payment_date', '<=', $end->toDateString())
             ->sum('amount_paid');
 
         return $this->decimal($sum);
@@ -122,10 +123,7 @@ class FinanceSummaryService
     {
         $totals = $this->transactionTotals(
             $schoolId,
-            fn ($query) => $query->whereBetween('transaction_date', [
-                $start->toDateString(),
-                $end->toDateString(),
-            ]),
+            fn ($query) => $this->withinDates($query, 'transaction_date', $start, $end),
         );
 
         return $totals[TransactionType::Expense->value];
@@ -151,10 +149,12 @@ class FinanceSummaryService
             $month = $selected->subMonths($offset);
             $totals = $this->transactionTotals(
                 $schoolId,
-                fn ($query) => $query->whereBetween('transaction_date', [
-                    $month->startOfMonth()->toDateString(),
-                    $month->endOfMonth()->toDateString(),
-                ]),
+                fn ($query) => $this->withinDates(
+                    $query,
+                    'transaction_date',
+                    $month->startOfMonth(),
+                    $month->endOfMonth(),
+                ),
             );
 
             $months[] = [
@@ -166,6 +166,26 @@ class FinanceSummaryService
         }
 
         return $months;
+    }
+
+    /**
+     * Menyaring satu kolom tanggal ke sebuah rentang, inklusif di kedua ujung.
+     *
+     * `whereDate()`, bukan `whereBetween()`. Kolom `transaction_date` dan
+     * `payment_date` bertipe DATE di ERD, tetapi cast `date` Eloquent
+     * menyimpannya sebagai `Y-m-d H:i:s` — sehingga baris tanggal 31 tersimpan
+     * sebagai `2026-08-31 00:00:00` dan perbandingan mentah terhadap
+     * `'2026-08-31'` menganggapnya **lebih besar**. Akibatnya seluruh transaksi
+     * pada hari terakhir bulan diam-diam hilang dari total bulan itu.
+     * `whereDate()` membungkus kolomnya sehingga yang dibandingkan benar-benar
+     * tanggal, dan itu pula yang sudah dipakai scope `betweenDates` pada model
+     * (butir 139).
+     */
+    protected function withinDates(Builder $query, string $column, CarbonImmutable $from, CarbonImmutable $until): Builder
+    {
+        return $query
+            ->whereDate($column, '>=', $from->toDateString())
+            ->whereDate($column, '<=', $until->toDateString());
     }
 
     /**
