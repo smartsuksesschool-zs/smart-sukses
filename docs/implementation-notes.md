@@ -2595,6 +2595,164 @@ Perbaikannya memakai `whereDate()` di kedua ujung rentang, sama seperti scope ya
 benar itu. Ditambahkan test yang menjaga hari pertama dan hari terakhir bulan tetap ikut
 terhitung, sekaligus memastikan bulan tetangga tetap di luar.
 
+## Sprint 6 Batch 6.8 — Dashboard Super Admin, Statistik Cabang, Penutupan Sprint 6
+
+### 140. "Jumlah siswa": satu definisi untuk dua endpoint
+
+API 4.3 menyebut "total siswa" pada `/admin/dashboard` dan "jumlah siswa" pada
+`/admin/schools/{id}/stats`, dan tidak mendefinisikan keduanya. Tidak ada penjelasan di
+ERD, PRD, maupun arsitektur.
+
+Keputusan implementasi Phase 1: keduanya berarti **siswa berstatus ACTIVE**. Alasannya
+bukan selera, melainkan konsistensi dengan yang sudah ada — `Student::scopeActive()` sudah
+dipakai penerbitan tagihan massal (SPP-02) untuk menjawab "siswa aktif", dan memakai
+definisi kedua di sini akan membuat dua angka "siswa" yang saling membantah. GRADUATED,
+DROPPED_OUT, dan TRANSFERRED tidak dihitung: siswa yang sudah lulus atau pindah bukan
+siswa yang sedang bersekolah, dan menghitungnya akan membuat angka cabang lama terus
+membengkak tanpa pernah turun.
+
+Yang penting keduanya **sama**: ada test yang memastikan penjumlahan `student_count`
+seluruh cabang selalu menghasilkan `total_students` dashboard. Kalau suatu saat salah satu
+definisinya bergeser, test itu yang jatuh lebih dulu.
+
+### 141. "Jumlah guru": peran, bukan jadwal mengajar
+
+Tidak ada definisi di dokumen mana pun. Keputusan implementasi Phase 1: **akun aktif yang
+perannya GURU atau WALI_KELAS**.
+
+Wali kelas tetap seorang guru dengan tanggung jawab tambahan, jadi ia ikut. School Admin,
+Kepala Sekolah, dan Bendahara tidak — walaupun sebagian dari mereka mungkin juga mengajar
+di dunia nyata, yang dapat dibaca sistem hanyalah perannya, dan menebak lebih jauh berarti
+mengarang. Akun `is_active = false` tidak dihitung: statistik ini menggambarkan keadaan
+operasional sekarang, dan akun yang sudah dinonaktifkan bukan bagian darinya.
+
+Pengguna yang memegang dua peran sekaligus dihitung **sekali**; `whereHas` + `distinct`
+menjaga itu, dan sekaligus membuat hitungannya tetap satu query alih-alih satu pemeriksaan
+peran per pengguna.
+
+### 142. "PPDB aktif": pendaftarannya, bukan cabangnya
+
+Frasa paling kabur dari ketiga metrik dashboard. Yang menentukan bacaannya adalah apa yang
+benar-benar ada di skema: `ppdb_registrations` hanya punya `status`, dan **tidak ada**
+konsep periode pendaftaran dibuka/ditutup di mana pun — tidak ada kolom `ppdb_open`, tidak
+ada konfigurasi, tidak ada penanda pada `schools`. Seluruh repo dan seluruh dokumen sudah
+ditelusuri untuk memastikannya. Membuat konsep itu sekarang berarti mengarang skema.
+
+Keputusan implementasi Phase 1: yang dihitung **pendaftaran yang masih berjalan di alur**
+— REGISTERED, DOCUMENT_REVIEW, dan PASSED. FAILED dan ENROLLED adalah ujung alur dan tidak
+lagi aktif. PASSED tetap ikut karena alur PPDB berlanjut PASSED → enroll, sehingga calon
+yang sudah lulus tetapi belum didaftarkan masih merupakan pekerjaan yang tertunda.
+
+Perlu dicatat terang-terangan: artinya **"pendaftaran PPDB yang sedang berjalan"**, bukan
+"jumlah cabang yang sedang membuka pendaftaran". Kalau yang dimaksud blueprint ternyata
+yang kedua, yang dibutuhkan bukan perubahan rumus melainkan konsep periode PPDB yang
+memang belum ada di skema.
+
+### 143. "Total SPP terkumpul" tidak dibatasi bulan berjalan
+
+Dua baris bersebelahan di tabel API 4.3 yang sama menulis hal berbeda: statistik cabang
+menyebut "tagihan terkumpul **bulan ini**", sedangkan dashboard platform menyebut "**total**
+SPP terkumpul" tanpa satu pun keterangan waktu. Perbedaan itu dibaca apa adanya —
+menjadikan yang kedua diam-diam bulan berjalan berarti mengubah arti kalimatnya tanpa
+dasar.
+
+Keputusan implementasi Phase 1:
+
+- `total_spp_collected` = `SUM(payments.amount_paid)` lintas seluruh cabang dan seluruh
+  tanggal,
+- `collected_this_month` = penerimaan cabang itu pada bulan kalender berjalan, memakai
+  `FinanceSummaryService::sppReceived()` — definisi "penerimaan" yang sama dengan dashboard
+  cabang (KAS-02), termasuk perbaikan batas hari terakhir bulan (butir 139).
+
+Sumbernya `payments`, bukan `student_fees.amount_paid`: yang pertama riwayat uang yang
+benar-benar diterima dan dapat disaring per tanggal, yang kedua kolom posisi tagihan yang
+menjawab pertanyaan berbeda. Tidak ada penyaringan berdasarkan nama jenis tagihan — modul
+SPP menaungi berbagai jenis tagihan dan blueprint tidak menyediakan penanda "ini SPP",
+sehingga mencocokkan string `'SPP'` akan menjadi aturan karangan yang diam-diam membuang
+uang gedung dan kegiatan dari angka penerimaan.
+
+"Tunggakan" pada statistik cabang juga tanpa keterangan periode, jadi yang dilaporkan
+**seluruh periode**. Angkanya tidak diambil dengan menjumlahkan hasil `report()` milik
+laporan SPP: daftar itu dipotong pada `MAX_PERIODS`, sehingga cabang yang sudah berjalan
+lebih dari lima tahun akan diam-diam melaporkan tunggakan yang terlalu kecil.
+`SppReportService::totalArrearsForSchool()` memakai aturan yang sama persis — UNPAID dan
+PARTIAL saja, WAIVED tidak pernah ikut (butir 135) — hanya tanpa `GROUP BY`. Tidak ada
+rumus tunggakan kedua di mana pun.
+
+### 144. Cabang nonaktif tetap punya statistik
+
+`GET /admin/schools/{id}/stats` tidak menjadikan `is_active = false` sebagai 404. Cabang
+yang ditutup tetap punya riwayat pembayaran dan tunggakan, dan Super Admin justru sering
+perlu membacanya **setelah** cabang ditutup. Tidak ada satu pun dokumen yang meminta
+sebaliknya.
+
+Yang tetap mengikuti definisinya adalah metrik operasionalnya: siswa ACTIVE dan akun guru
+aktif tetap dihitung dengan aturan yang sama, yang pada cabang tutup umumnya memang sudah
+mendekati nol dengan sendirinya.
+
+Untuk alasan yang sama, `total_students` dashboard tidak menyaring cabang nonaktif:
+dokumen menyebut "semua cabang", dan menyaringnya berarti menambahkan aturan yang tidak
+diminta.
+
+### 145. Provenance kedua endpoint statistik Super Admin
+
+Yang menentukan **apa** yang harus dikembalikan kedua endpoint ini adalah API 4.3 "Super
+Admin — Manajemen Tenant": nama endpoint, Auth Level Super, dan daftar angkanya semua dari
+sana. Itu tidak pernah diperdebatkan.
+
+Yang perlu dicatat adalah soal **kapan** keduanya dijadwalkan, karena catatan versi
+sebelumnya menyimpulkan terlalu jauh dari satu baris tabel.
+
+`05-roadmap/01-implementation-order.md` (Lampiran A) merangkum Sprint 6 sebagai
+*"Akuntansi | Buku kas (income/expense), Laporan keuangan, Export Excel, Dashboard
+Bendahara"*. Baris itu ringkasan modul satu kalimat, dan tabel yang sama **tidak pernah
+memetakan satu pun endpoint API ke sprint mana pun** — bukan hanya untuk kedua endpoint
+ini. Karena itu baris tersebut tidak dapat dipakai sebagai bukti bahwa statistik Super
+Admin *di luar* Sprint 6; ia hanya tidak menyebutnya, sama seperti ia tidak menyebut
+endpoint lain. Catatan sebelumnya menyatakan "bukan deliverable Sprint 6" dan menebak
+penempatannya ke Sprint 1 — dua-duanya kesimpulan yang tidak ditopang dokumen, dan
+keduanya dicabut di sini.
+
+Pemilik pekerjaan menyatakan bahwa roadmap yang lebih rinci menempatkan "statistik per
+cabang untuk Super Admin" pada bagian reporting Sprint 6, dengan `/admin/dashboard` dan
+`/admin/schools/{id}/stats` sebagai sumbernya. Pernyataan itu **tidak dapat diverifikasi
+terhadap `smartsukses-docs/`**: folder itu adalah pecahan dari blueprint .docx (lihat
+README-nya) dan bagian roadmap-nya hanya berisi tiga berkas — urutan sprint, biaya
+infrastruktur, dan checklist go-live. Tidak ada berkas `02-ROADMAP.md`, tidak ada bagian
+"Phase 8" maupun "Reporting", dan kata "statistik" hanya muncul dua kali di seluruh folder,
+keduanya di tabel API 4.3.
+
+Jadi penjadwalannya diperlakukan begini: keduanya dikerjakan sebagai bagian penutup
+Sprint 6 sesuai arahan pemilik pekerjaan, dan catatan ini tidak mengklaim sebaliknya. Bila
+sumber yang lebih rinci itu kelak masuk ke `smartsukses-docs/`, ia menjadi rujukan yang
+lebih spesifik dan butir ini dapat menyebutnya langsung.
+
+Kewenangannya Auth Level **Super**, dan tidak digantung pada `financial_report.view`
+seperti dua laporan keuangan Batch 6.7. Alasannya berbeda kelas: laporan keuangan adalah
+data satu cabang yang dibaca peran cabang, sedangkan kedua endpoint ini lintas cabang dan
+eksklusif platform. Bendahara memegang `financial_report.view` dan tetap ditolak di sini.
+
+Pemeriksaannya berlapis: `auth_level:super` pada rute, dan pemeriksaan yang sama di dalam
+kedua service — karena widget panel memanggil service itu langsung tanpa melewati
+middleware rute.
+
+### 146. Yang belum ada dari API 4.3 dan 4.4, dan mengapa dibiarkan
+
+Sisa API 4.3 — `GET /admin/schools`, `POST /admin/schools`, `GET/PUT /admin/schools/{id}`,
+`PATCH /admin/schools/{id}/toggle` — dan seluruh API 4.4 `/users` belum dibuat sebagai
+REST. Seluruh fungsinya sudah berjalan di panel lewat `SchoolResource` dan `UserResource`,
+termasuk aktivasi/nonaktivasi cabang dan impor pengguna.
+
+Keduanya sengaja tidak dikerjakan pada batch ini. Bukan karena tidak penting, melainkan
+karena keduanya modul manajemen tenant dan pengguna yang fungsinya sudah berjalan sejak
+lama di panel — yang belum pernah dibuat hanya lapisan REST-nya. Roadmap tidak memetakan
+endpoint API ke sprint mana pun (butir 145), jadi yang dipakai di sini bukan klaim
+penjadwalan melainkan alasan ruang lingkup: batch ini diminta menutup Sprint 6, dan
+membangun CRUD tenant serta seluruh `/users` bukan bagian dari permintaan itu.
+
+Yang perlu dipisah saat membaca status proyek: **Sprint 6 selesai** tidak sama dengan
+**seluruh REST API blueprint selesai**.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
