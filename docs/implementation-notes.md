@@ -3008,6 +3008,148 @@ Dicatat supaya tidak diperiksa ulang dari nol di kemudian hari:
 - **Pengalihan** tidak pernah berasal dari query string: tujuannya rute internal yang
   ditulis pasti. `redirect`, `next`, `return`, dan `intended` tidak berpengaruh apa pun.
 
+## Sprint 7 Batch 7.2 — Nilai, Tagihan, dan Jadwal Anak
+
+### 160. Nilai real-time dan rapor final hidup berdampingan
+
+NILAI-04 menyebut keduanya dalam satu kalimat: *"saya dapat melihat nilai real-time
+(sebelum rapor diterbitkan) **dan** rapor final"*, dengan poin 1 *"nilai harian/UTS/UAS
+tampil segera setelah guru menyimpan"* dan poin 2 *"rapor final hanya tampil setelah Wali
+Kelas menerbitkan"*.
+
+Yang mudah keliru adalah membaca ini sebagai pergantian: seolah begitu rapor terbit, nilai
+real-time digantikan angka rapor. Bukan itu bunyinya. Yang bersyarat hanya rapornya —
+komponen nilainya sendiri tidak pernah disyaratkan hilang. Karena itu respons
+`/parent/children/{id}/grades` selalu memuat `subjects[]` (rincian komponen dan nilai akhir
+berjalan), dan `report_card` yang bernilai NULL sampai wali kelas menerbitkannya.
+
+Nilai akhirnya dihitung `FinalScoreCalculator` — kalkulator yang sama dengan panel dan
+rapor. Portal tidak punya rumus sendiri, tidak menyentuh `GradeConfig`, dan tidak menulis
+apa pun; ada test yang memastikan membaca halaman ini tidak mengubah satu atribut nilai pun
+dan tidak melahirkan satu baris audit pun.
+
+### 161. Rincian komponen dipertahankan, metadata internalnya tidak
+
+"Nilai lengkap" berarti lengkap sebagai penilaian, bukan sebagai baris basis data.
+
+Yang dipertahankan karena bermakna bagi pembacanya: jenis penilaian (DAILY, ASSIGNMENT,
+MIDTERM, FINAL, SKILL, ATTITUDE) beserta labelnya, sifat formatif/sumatifnya, nilainya,
+keterangannya, dan kapan dinilai. Meringkas semuanya menjadi satu angka per mapel akan
+menghilangkan alasan angka itu terbentuk — orang tua tidak akan tahu apakah 80 itu dari
+ulangan harian atau dari ujian akhir.
+
+Yang tidak ikut karena bukan urusan pembacanya: `grade_config_id`, `graded_by`, `weight`
+hasil snapshot, `class_subject_id`, dan `school_id`. Semuanya jejak internal yang tidak
+mengubah apa pun bagi orang tua.
+
+### 162. Rapor: hanya yang terbit, dan hanya milik anaknya
+
+Dua pagar, dan yang kedua yang mudah terlewat.
+
+**Pertama**, hanya rapor berstatus terbit yang muncul maupun dapat diunduh. Rapor draf tidak
+pernah keluar lewat portal dalam bentuk apa pun — bukan sebagai berkas, bukan sebagai angka
+rata-rata, bukan sebagai keberadaan.
+
+**Kedua**, kepemilikannya **tidak** diputuskan `ReportCardPolicy`. Policy itu memberi
+ORANG_TUA izin `report_card.view` (RolePermissionSeeder) yang dipadankan dengan
+`sharesTenant()` — artinya seorang orang tua lolos pemeriksaan policy untuk **setiap rapor
+di cabangnya**, termasuk rapor anak orang lain. Itu memadai bagi peran panel yang memang
+melihat seluruh siswa, tetapi jauh terlalu longgar di sini. Karena itu anaknya diresolusi
+lebih dulu lewat pagar Batch 7.1, lalu rapornya wajib milik anak itu dan sudah terbit.
+Diuji dari dua arah: lewat id anaknya sendiri dengan rapor orang lain, dan lewat id anak
+orang lain.
+
+Berkasnya dirender ulang lewat `ReportCardPdfRenderer`, renderer yang sama dengan panel.
+Tidak ada pembuatan PDF kedua, kolom `pdf_*` tidak tersentuh, dan jalur penyimpanannya tidak
+pernah muncul di respons — yang diberi tahu hanya apakah unduhannya ada.
+
+### 163. Urutan tagihan: periode terbaru lebih dulu
+
+SPP-04 poin 1 hanya menyebut *"tampil dalam daftar per periode"* tanpa arah urutan.
+
+Keputusan implementasi Phase 1: `period` menurun, lalu `due_date` menurun, lalu `id`
+menurun. Yang sedang berjalan itulah yang paling sering dicari orang tua, jadi ia di atas;
+`id` sebagai pemutus supaya dua tagihan pada periode yang sama selalu berurutan tetap dan
+tidak berpindah-pindah antar permintaan.
+
+### 164. Kelas anak: penempatan aktif pada tahun ajaran aktif
+
+Jadwal mengikuti kelas, jadi salah menentukan kelas berarti menampilkan jadwal yang salah
+tanpa terlihat keliru.
+
+Yang dipakai **bukan** baris `student_classes` terakhir. Anak yang pernah naik atau pindah
+kelas punya beberapa baris, dan yang terakhir dibuat belum tentu yang berlaku pada tahun
+ajaran yang sedang berjalan — barisnya bisa saja penempatan tahun lalu yang dicatat
+belakangan. Yang dipakai penempatan berstatus ACTIVE pada tahun ajaran aktif cabangnya.
+Bila tidak ada, hasilnya NULL dan jadwalnya kosong — bukan kelas lama yang sudah selesai.
+
+Relasi `Student::activeStudentClass()` yang sudah ada sengaja tidak dipakai untuk ini:
+relasi itu hanya menyaring status dan mengambil yang terbaru, tanpa mengikat tahun ajaran.
+
+### 165. Hari, jam, dan yang tidak ditampilkan tentang guru
+
+`schedules.day_of_week` menurut ERD bernomor 1 = Senin sampai 7 = Minggu, dan enum
+`DayOfWeek` sudah ada. Tidak ada pemetaan baru yang dibuat.
+
+`Carbon::dayOfWeek` menomori Minggu sebagai 0, jadi konversinya dilakukan sekali di service
+alih-alih ditebar ke setiap pemanggil. "Hari ini" ditentukan dari tanggal lokal aplikasi,
+dan disaring dari daftar mingguan yang sama — bukan dari query kedua, sehingga keduanya
+tidak mungkin berbeda. Jam ditampilkan sebagai `HH:MM`; detik tidak menambah apa pun bagi
+pembacanya.
+
+Dari guru, yang keluar hanya namanya. Surel, nomor telepon, dan id akunnya bukan urusan
+orang tua, dan mengirimkannya lewat portal akan menyebarkan data pribadi guru ke seluruh
+orang tua di kelas itu.
+
+### 166. Tagihan: sisa dari helper yang sudah ada, dan yang tidak ikut keluar
+
+`remaining` memakai `StudentFee::remaining()` — helper domain yang sudah ada sejak Batch
+5.x, bukan pengurangan yang ditulis ulang. Tidak ada rumus uang ketiga.
+
+Status ditampilkan apa adanya menurut enumnya, dan **WAIVED tidak disamakan dengan PAID**:
+domain membedakan keduanya, dan menyamakannya di layar akan menghapus jejak keringanan yang
+diberikan sekolah. Alasan pembebasan justru ditampilkan — itu keringanan atas tagihan
+anaknya sendiri, dan orang tua memang perlu tahu dasarnya.
+
+Riwayat pembayaran memuat tanggal, jumlah, cara bayar, dan nomor referensi — persis yang
+diminta SPP-04 poin 3. Yang **tidak** ikut: `proof_url` dan jalur berkasnya (disk privat),
+`received_by` (id akun bendahara), `notes` petugas, dan `school_id`. Batch ini juga tidak
+memberi orang tua satu pun jalur tulis: tidak mengunggah bukti, tidak mengubah, tidak
+menghapus. Pelampiran bukti menyusul tetap alur administrasi keuangan (butir 119).
+
+### 167. Satu pemilih anak untuk empat halaman
+
+Ringkasan, nilai, tagihan, dan jadwal memakai trait `SelectsChild` yang sama. Kalau
+masing-masing menyimpan pilihannya sendiri, orang tua dengan dua anak akan melihat anak yang
+berbeda di tiap tab tanpa pernah merasa berpindah — dan itu jenis kebingungan yang mudah
+berubah menjadi salah baca tagihan.
+
+Pilihannya disimpan di sesi, bukan di query string: nilai dari URL adalah masukan pengguna,
+dan menjadikannya sumber kebenaran berarti mengundang percobaan mengganti id anak lewat
+alamat. Apa pun yang tersimpan tetap diperiksa ulang terhadap daftar anak miliknya setiap
+kali halaman dimuat — id anak yang tautannya kemudian dicabut jatuh kembali ke anak pertama,
+bukan dipertahankan.
+
+Ringkasan setiap halaman tetap melewati `ParentPortalService`, jalur yang sama dengan API,
+sehingga andai pemeriksaan di komponen suatu saat dilewati, pagar kepemilikan di service
+masih berdiri.
+
+### 168. Navigasi hanya memuat halaman yang benar-benar ada
+
+Empat tautan: Ringkasan, Nilai, Tagihan, Jadwal — ditambah tombol keluar yang sudah ada di
+kepala halaman. Tidak ada tab Notifikasi: notifikasi milik Sprint 8, dan memasang tautannya
+sekarang berarti menjanjikan halaman yang belum ada.
+
+Navigasinya menggulung ke samping hanya bila memang tidak muat, dan penggulungan itu terjadi
+di dalam navigasinya sendiri — badan halaman tidak ikut melebar.
+
+### 169. Yang masih tertinggal dari Batch 7.1
+
+Halaman ganti kata sandi di dalam portal masih belum ada. Orang tua dengan kata sandi
+sementara tetap ditolak masuk (butir 158) dan diarahkan ke alur "lupa kata sandi" lewat
+surel. Perlindungannya sengaja tidak dilonggarkan pada batch ini; yang belum ada adalah
+kenyamanannya, dan itu pekerjaan fitur tersendiri.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
