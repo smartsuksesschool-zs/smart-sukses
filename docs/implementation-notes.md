@@ -2158,6 +2158,217 @@ mempertanggungjawabkan uang.
 Implementasinya belum dikerjakan pada saat butir ini ditulis; ia menjadi lingkup batch
 tersendiri. Sampai batch itu selesai, butir 64 tetap menggambarkan perilaku yang berjalan.
 
+## Sprint 6 Batch 6.6 — Fondasi REST API, Finance Wave 1, Late Payment Proof
+
+### 114. Pratinjau SPP-02 pada API: dikembalikan, bukan dihapus
+
+SPP-02 poin 3 mewajibkan *"preview daftar tagihan ditampilkan sebelum konfirmasi
+generate"*, dan Batch 5.2 memperlakukannya sebagai gerbang, bukan kenyamanan. API map
+justru hanya memuat `POST /student-fees/generate-bulk` — tidak ada endpoint pratinjau,
+dan tidak ada isyarat dua langkah.
+
+Ketiga jalan keluarnya tidak sama nilainya:
+
+- **mengarang `POST /student-fees/preview`** — menambah endpoint yang tidak ada di
+  blueprint, dan memaksa klien mengingat dua panggilan yang berpasangan
+- **menerbitkan langsung tanpa pratinjau** — menghapus jaminan yang justru ditulis
+  eksplisit di requirement
+- **menghitung pratinjau di server lalu mengembalikannya bersama respons** — endpointnya
+  tetap satu seperti API map, dan pemanggil selalu menerima daftar siswa yang ditagih
+
+Yang dipakai yang ketiga. Responsnya `202 Accepted` dengan `preview.will_be_billed`,
+`preview.already_billed`, dan daftar siswanya; pratinjau itu dihitung
+`StudentFeeGenerator::preview()` — sumber logika yang sama dengan panel, sehingga apa yang
+dilaporkan API adalah apa yang dikerjakan worker.
+
+Yang jujur diakui: ini **lebih lemah** daripada gerbang di panel. Di panel operator
+melihat pratinjau lalu menekan tombol kedua; di API penerbitannya sudah diantrekan saat
+pratinjau dikembalikan. Idempotensi Batch 5.2 (butir 52) menahan akibat terburuknya —
+menjalankan ulang tidak menghasilkan tagihan ganda — tetapi klien API tetap harus
+menampilkan pratinjaunya sendiri bila ingin setara dengan panel. Bila kelak dianggap
+kurang, jalur yang benar adalah menambahkan langkah konfirmasi ke blueprint lebih dulu.
+
+### 115. Logout mencabut satu token, bukan semua perangkat
+
+API 4.2 menulis `POST /auth/logout` sebagai *"invalidate token sesi aktif"* — tunggal.
+Yang dicabut karena itu hanya token yang dipakai request tersebut; perangkat lain milik
+pengguna yang sama tetap masuk.
+
+Mencabut seluruh token akan menjadi "logout dari semua perangkat", fitur berbeda yang
+tidak diminta dan berpotensi mengejutkan: menutup aplikasi di ponsel tidak seharusnya
+mengeluarkan orang yang sama dari komputernya.
+
+### 116. Record cabang lain menjadi 404, bukan 403
+
+Tagihan, jenis tagihan, dan transaksi milik cabang lain tersaring SchoolScope sebelum
+sampai ke policy, sehingga `findOrFail` menghasilkan `ModelNotFoundException` → 404.
+
+Itu bukan sekadar konsekuensi teknis melainkan yang memang diinginkan: 403 mengonfirmasi
+bahwa id tersebut **ada** di suatu cabang, dan itu sendiri sudah membocorkan sesuatu —
+penyerang dapat memetakan rentang id yang terpakai walaupun tidak dapat membacanya. 403
+tetap dipakai ketika yang kurang adalah perannya, bukan cabangnya.
+
+### 117. "Auth Level: Admin" tidak diterjemahkan buta menjadi middleware
+
+API 4.1 mendefinisikan Auth Level Admin sebagai "role SCHOOL_ADMIN / SUPER_ADMIN", dan
+banyak endpoint keuangan berlabel demikian. Menerapkannya sebagai middleware pada semua
+endpoint itu akan **menutup akses Bendahara** — bertentangan dengan user story SPP-01,
+SPP-02, SPP-03, dan KAS-01 yang menyebut Bendahara secara eksplisit (butir 73, 98, 105).
+
+Middleware `auth_level` karena itu hanya menegakkan tingkat kasar, dan endpoint keuangan
+memakai `auth_level:auth` ditambah policy domainnya masing-masing — policy yang sama
+persis dengan yang sudah diuji di panel. Hasilnya kewenangan API tidak pernah berbeda dari
+kewenangan panel, karena keduanya membaca sumber yang sama.
+
+`EnsureApiAuthLevel` tetap memeriksa dua hal yang bukan urusan policy: token milik akun
+yang masih aktif, dan tingkat Admin/Super untuk endpoint yang labelnya memang tidak
+tertimpa apa pun.
+
+### 118. `proof_url` tidak pernah keluar lewat API
+
+`PaymentResource` dan `TransactionResource` mengirim `has_proof` boolean, bukan jalur
+berkasnya. Berkasnya ada di disk privat justru supaya jalurnya tidak beredar (butir 63,
+108); mengirimkannya lewat JSON akan membatalkan maksud itu tanpa memberi klien kemampuan
+apa pun — mereka tetap tidak bisa mengunduhnya.
+
+Endpoint unduh bukti **tidak dibuat**: API map tidak memuatnya, dan mengarangnya hanya
+karena jalurnya disembunyikan berarti menambah permukaan yang tidak diminta. Unduhan
+terotorisasi lewat panel tetap ada. Bila klien API kelak benar-benar perlu mengunduh
+bukti, itu endpoint baru yang layak masuk blueprint lebih dulu.
+
+### 119. Bukti menyusul: satu kolom, satu arah
+
+Keputusan implementasi Phase 1 yang disetujui (butir 113 nomor 9). Sebelumnya `payments`
+append-only sepenuhnya (butir 64), sehingga alur lapangan yang wajar — transfer dicatat
+hari ini, scan buktinya tiba besok — tidak punya jalan keluar sama sekali.
+
+`PaymentProofAttacher` dibuat **terpisah** dari `PaymentRecorder`. Menjadikan pencatat
+pembayaran sekaligus pengubah pembayaran akan mengaburkan satu-satunya jaminan yang
+membuat `payments` dapat dipercaya sebagai riwayat; dua kelas dengan satu tanggung jawab
+masing-masing membuat batasnya terbaca dari struktur kodenya sendiri.
+
+Batasannya:
+
+- hanya `proof_url` yang ditulis — diuji dengan membandingkan sembilan kolom lain
+  sebelum dan sesudah
+- hanya dari kosong menjadi terisi; bukti yang sudah ada **tidak pernah** ditimpa, dan
+  keadaan itu diperiksa ulang di bawah row lock supaya dua permintaan bersamaan tidak
+  saling menimpa
+- `PaymentPolicy::update()` dan `::delete()` tetap menolak tanpa syarat; yang ditambahkan
+  ability `attachProof` tersendiri
+- kewenangannya mengikuti baris "Catat Pembayaran" (`payment.manage`): Super Admin,
+  School Admin, Bendahara — Kepala Sekolah tidak (butir 57)
+
+UI-nya satu aksi di riwayat pembayaran yang hanya muncul saat buktinya belum ada. Tidak
+ada aksi "Ganti Bukti", dan tidak ada satu pun field pembayaran lain yang dapat disunting
+dari sana.
+
+### 120. Berkas yatim saat pelampiran gagal
+
+Pada jalur API berkasnya disimpan sebelum transaksi dibuka, sehingga kegagalan penulisan
+akan meninggalkan berkas yang tidak ditunjuk baris mana pun. Berkas itu dihapus di blok
+`catch` — menutup kasus yang paling umum tanpa membangun sistem retensi baru.
+
+Pada jalur panel berkasnya sudah dimiliki Filament FileUpload dan tidak dihapus: Filament
+yang memilikinya, dan pengguna dapat mengunggah ulang jalur yang sama.
+
+Yang **belum** tertangani dan sengaja tidak dikarang penyelesaiannya: berkas yatim dari
+kegagalan proses (server mati di antara penyimpanan dan commit). Sama seperti gap yang
+sudah dicatat pada unggahan bukti saat pencatatan — tidak ada requirement retensi di
+blueprint.
+
+### 121. Endpoint 4.2 yang belum dibuat
+
+Dari API 4.2 baru `login`, `logout`, dan `me`. Belum ada: `POST /auth/refresh`,
+`POST /auth/forgot-password`, `POST /auth/reset-password`, `PATCH /auth/me`, dan
+`PATCH /auth/me/password`.
+
+Keempat yang terakhir menyentuh alur yang sudah ada di panel (reset password lewat email,
+ubah profil, ganti password wajib pada login pertama) dan layak dikerjakan bersama supaya
+perilakunya tidak bercabang. `refresh` perlu keputusan lebih dulu: Sanctum tidak punya
+masa berlaku token secara bawaan, dan "memperbarui token yang hampir kedaluwarsa" hanya
+bermakna bila kedaluwarsanya memang disetel.
+
+### 122. Filter `period` pada `/payments` lewat tagihannya
+
+API 4.9.1 menyebut filter `student_id`, `period`, dan `method` untuk `GET /payments`.
+`payments` tidak punya kolom periode — periodenya milik tagihan (ERD: `student_fees.period`
+format `YYYY-MM`).
+
+Filternya karena itu berjalan lewat `whereHas('studentFee')`. Menambahkan `payments.period`
+akan menduplikasi data yang sudah dimiliki tagihannya, dan menciptakan kemungkinan kedua
+angka itu berbeda.
+
+### 123. `date_to` adalah kontrak publik; `date_until` nama internal
+
+Blueprint menyebut filter `GET /transactions` sebagai `type, category, date_from,
+date_to`. `CashLedgerExporter` memakai `date_until` secara internal — nama yang dipilih
+saat belum ada lapisan API.
+
+Sejak batch ini keduanya dibedakan tegas: controller API menerima **`date_to`** dan
+memetakannya ke `date_until` internal. `date_until` tidak diterima sebagai parameter
+publik, dan sebuah test memastikannya — mengirim `date_until` ke API tidak menyaring apa
+pun.
+
+Docblock `CashLedgerExporter` yang sebelumnya menulis bahwa blueprint memakai `date_until`
+adalah salah kutip; sudah dikoreksi.
+
+### 124. Filter `/finance/export` adalah kontrak implementasi
+
+API map menulis `GET /finance/export` tanpa merinci filternya. Yang dipakai adalah
+kontrak filter `GET /transactions` — domain yang sama, dan itulah yang terdekat dengan
+dokumen. Rentang tanggalnya wajib (butir 109).
+
+Ini disebut sebagai kontrak implementasi, bukan klaim blueprint.
+
+### 125. Endpoint yang sengaja belum didaftarkan
+
+Tidak ada rute placeholder untuk kelimanya — rute yang ada tetapi selalu gagal lebih buruk
+daripada rute yang tidak ada, karena klien tidak dapat membedakan "belum dibuat" dari
+"sedang rusak".
+
+| Endpoint | Alasan |
+| --- | --- |
+| `DELETE /transactions/{id}` | "Soft delete" tanpa kolom di ERD; butuh keputusan pemilik produk (butir 74) |
+| `GET /finance/summary` | Blueprint meminta `total income`; `FinanceSummaryService` menghitung `spp_received`, dan `income` tingkat-atas belum ada |
+| `GET /finance/spp-report` | `tunggakan` belum dihitung di service mana pun, dan definisinya (apakah WAIVED termasuk?) belum diputuskan |
+| `GET /admin/dashboard` | Field-nya — total siswa, total SPP terkumpul, PPDB aktif — belum ada di service mana pun |
+| `GET /admin/schools/{id}/stats` | Idem: jumlah siswa, guru, tagihan terkumpul bulan ini, tunggakan |
+
+### 126. Token API tidak diaudit
+
+`PersonalAccessToken` masuk daftar pengecualian `AuditLogger`. Tanpa itu setiap login
+lewat API menulis satu baris `CREATED` dan setiap logout satu baris `DELETED`, keduanya
+untuk model yang bukan data bisnis dan tidak punya `school_id` — sehingga baris auditnya
+tak bercabang dan mencemari jejak yang seharusnya menjelaskan perubahan data.
+
+Security 3.4 meminta jejak aksi CUD atas data; waktu login sendiri sudah tersimpan di
+`users.last_login_at`. Alasannya sejajar dengan Role dan Permission yang sudah lebih dulu
+dikecualikan (butir 45).
+
+### 127. Akun tanpa cabang: dari melihat semuanya menjadi melihat nol
+
+Ditemukan saat membangun test tenant API, dan ini **cacat yang sudah ada sebelumnya**,
+bukan akibat lapisan API.
+
+`SchoolScope::currentSchoolId()` mengembalikan NULL untuk dua keadaan yang sangat berbeda:
+Super Admin (memang lintas cabang) dan akun School Level yang `school_id`-nya NULL.
+`apply()` memperlakukan NULL sebagai "tanpa filter", sehingga akun jenis kedua **membaca
+seluruh cabang** — di panel Filament maupun di API.
+
+Jalur tulis tidak pernah terpengaruh: `PaymentRecorder`, `TransactionRecorder`,
+`StudentFeeWaiver`, dan kedua exporter semuanya menolak akun tanpa cabang secara eksplisit,
+dan hal itu sudah diuji sejak Batch 5.3. Yang bocor hanya pembacaan.
+
+`apply()` sekarang membedakan ketiga keadaan itu: tanpa sesi → tanpa filter (seeder,
+antrean, CLI membawa cabangnya sebagai argumen); Super Admin → tanpa filter; akun tanpa
+cabang → `WHERE 1 = 0`, karena tanpa cabang tidak ada satu pun baris yang menjadi
+miliknya.
+
+Perbaikannya berlaku ke seluruh aplikasi, bukan hanya API. Seluruh 983 test tetap hijau
+sesudahnya, yang juga menunjukkan tidak ada bagian sistem yang diam-diam bergantung pada
+perilaku lama.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
