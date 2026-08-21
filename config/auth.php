@@ -42,6 +42,14 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // API 4.1 — "Authorization: Bearer {token} (Laravel Sanctum)".
+        // Guard terpisah dari `web`: panel Filament tetap memakai sesi, dan
+        // token API tidak pernah menjadi jalan masuk ke sesi panel.
+        'api' => [
+            'driver' => 'sanctum',
+            'provider' => 'users',
+        ],
     ],
 
     /*

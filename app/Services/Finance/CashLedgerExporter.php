@@ -166,10 +166,14 @@ class CashLedgerExporter
     /**
      * Rentang tanggal wajib, dan wajib masuk akal.
      *
-     * API 4.9.2 menyebut `date_from` dan `date_until` sebagai filter
-     * `GET /transactions`; keduanya dijadikan **wajib** di sini karena tanpa
-     * batas waktu satu klik dapat menarik seluruh riwayat buku kas cabang ke
-     * dalam satu berkas tanpa operator menyadarinya (butir 109).
+     * API 4.9.2 menyebut `date_from` dan **`date_to`** sebagai filter
+     * `GET /transactions`. Nama internal di kelas ini `date_until`, dan itu
+     * bukan pengganti kontrak publiknya: controller API menerima `date_to` lalu
+     * memetakannya ke sini (butir 123).
+     *
+     * Keduanya dijadikan **wajib** karena tanpa batas waktu satu klik dapat
+     * menarik seluruh riwayat buku kas cabang ke dalam satu berkas tanpa
+     * operator menyadarinya (butir 109).
      *
      * @return array{0: string, 1: string}
      *

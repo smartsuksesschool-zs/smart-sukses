@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\Scopes\SchoolScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Laravel\Sanctum\PersonalAccessToken;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -49,6 +50,12 @@ class AuditLogger
      * - Role & Permission: definisi peran bersifat platform-wide dan hanya
      *   berubah lewat seeder (butir 2). Pivot `model_has_roles` pun tidak
      *   memicu model event sama sekali — lihat batasan di butir 45.
+     * - PersonalAccessToken: token API adalah perkakas autentikasi, bukan data
+     *   bisnis. Ia juga tidak punya `school_id`, sehingga setiap login lewat
+     *   API akan menulis baris audit tak bercabang — dan setiap logout satu
+     *   baris DELETED lagi. Security 3.4 meminta jejak aksi CUD atas data;
+     *   waktu login sendiri sudah tersimpan di `users.last_login_at`
+     *   (butir 126).
      *
      * @var array<int, class-string>
      */
@@ -56,6 +63,7 @@ class AuditLogger
         AuditLog::class,
         Role::class,
         Permission::class,
+        PersonalAccessToken::class,
     ];
 
     public function shouldAudit(Model $model): bool
