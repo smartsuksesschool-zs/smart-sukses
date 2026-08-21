@@ -36,6 +36,18 @@ class EnsureParentPortalAccess
         // melihat kerangka halaman yang kosong.
         abort_if($user->school_id === null, 403, 'Akun Anda belum terhubung ke cabang mana pun.');
 
+        // Lapis kedua "password pertama wajib diganti" (Arsitektur 3.4).
+        // Halaman masuk portal sudah menolak akun berpenanda ini, tetapi
+        // pemeriksaan di sana hanya berlaku pada saat masuk: penanda ini dapat
+        // menyala **sesudah** sesi terbentuk, yaitu ketika admin mereset
+        // password pengguna yang sedang login (PORTAL-04). Tanpa lapis ini,
+        // sesi lama tetap berjalan seolah tidak terjadi apa-apa (butir 158).
+        abort_if(
+            (bool) $user->must_change_password,
+            403,
+            'Kata sandi sementara wajib diganti sebelum menggunakan portal.',
+        );
+
         return $next($request);
     }
 }

@@ -18,6 +18,7 @@ use App\Models\StudentFee;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Filament\Pages\Dashboard;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -435,5 +436,242 @@ class ParentPortalUiTest extends TestCase
         $response->assertSee('overflow-x: hidden', false);
         // Sasaran sentuh yang layak.
         $response->assertSee('min-height: 2.75rem', false);
+    }
+
+    // ----------------------------------------------- keamanan sesi masuk
+
+    /**
+     * Fiksasi sesi: id sesi sebelum masuk tidak boleh masih berlaku sesudahnya
+     * (butir 157).
+     */
+    public function test_the_session_id_is_regenerated_after_a_successful_login(): void
+    {
+        $parent = $this->userIn($this->schoolA, RoleName::OrangTua, [
+            'email' => 'ortu@example.test',
+            'password' => bcrypt('rahasia123'),
+        ]);
+        $this->childOf($parent, $this->schoolA, 'Anak Sesi');
+
+        $this->startSession();
+        $before = session()->getId();
+
+        Livewire::test(PortalLogin::class)
+            ->set('email', 'ortu@example.test')
+            ->set('password', 'rahasia123')
+            ->call('authenticate')
+            ->assertHasNoErrors();
+
+        $this->assertNotSame($before, session()->getId());
+        $this->assertAuthenticatedAs($parent);
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>}>
+     */
+    public static function refusedAccounts(): array
+    {
+        return [
+            'nonaktif' => [['is_active' => false]],
+            'wajib ganti kata sandi' => [['must_change_password' => true]],
+            'tanpa cabang' => [['school_id' => null]],
+        ];
+    }
+
+    /**
+     * Kredensialnya benar, tetapi akunnya tidak berhak: tidak boleh ada sesi
+     * yang tertinggal (butir 157).
+     *
+     * @param  array<string, mixed>  $overrides
+     */
+    #[DataProvider('refusedAccounts')]
+    public function test_a_refused_account_is_never_left_authenticated(array $overrides): void
+    {
+        $this->userIn($this->schoolA, RoleName::OrangTua, [
+            'email' => 'ortu@example.test',
+            'password' => bcrypt('rahasia123'),
+            ...$overrides,
+        ]);
+
+        Livewire::test(PortalLogin::class)
+            ->set('email', 'ortu@example.test')
+            ->set('password', 'rahasia123')
+            ->call('authenticate')
+            ->assertHasErrors('email');
+
+        $this->assertGuest();
+    }
+
+    /**
+     * Arsitektur 3.4 berlaku untuk seluruh pengguna, bukan hanya pengguna
+     * panel. Portal tidak boleh menjadi jalan memutarnya (butir 158).
+     */
+    public function test_a_temporary_password_cannot_be_used_to_browse_the_portal(): void
+    {
+        $parent = $this->userIn($this->schoolA, RoleName::OrangTua, [
+            'must_change_password' => true,
+        ]);
+        $this->childOf($parent, $this->schoolA, 'Anak Sandi Sementara');
+
+        $this->actingAs($parent);
+
+        $this->get(route('portal.dashboard'))->assertForbidden();
+    }
+
+    /**
+     * Penanda itu dapat menyala setelah sesi terbentuk — admin mereset
+     * password pengguna yang sedang login (PORTAL-04).
+     */
+    public function test_an_existing_session_stops_once_a_password_reset_is_required(): void
+    {
+        $this->actingAs($this->parentA);
+
+        $this->get(route('portal.dashboard'))->assertOk();
+
+        $this->parentA->forceFill(['must_change_password' => true])->save();
+
+        $this->get(route('portal.dashboard'))->assertForbidden();
+    }
+
+    /**
+     * Jalan keluarnya alur yang sudah ada: karena akun itu tidak pernah diberi
+     * sesi, rute tamu "lupa kata sandi" selalu dapat dijangkau, dan mengganti
+     * password melepas penandanya lewat hook pada User.
+     */
+    public function test_setting_a_new_password_clears_the_requirement(): void
+    {
+        $parent = $this->userIn($this->schoolA, RoleName::OrangTua, [
+            'must_change_password' => true,
+        ]);
+
+        $this->get(route('filament.admin.auth.password-reset.request'))->assertOk();
+
+        $parent->forceFill(['password' => bcrypt('sandibaru123')])->save();
+
+        $this->assertFalse($parent->fresh()->must_change_password);
+    }
+
+    // --------------------------------------------------- keluar & sesi
+
+    public function test_logging_out_invalidates_the_session_and_rotates_the_token(): void
+    {
+        $this->actingAs($this->parentA);
+        $this->startSession();
+
+        $sessionBefore = session()->getId();
+        $tokenBefore = session()->token();
+
+        $this->post(route('portal.logout'))->assertRedirect(route('portal.login'));
+
+        $this->assertGuest();
+        $this->assertNotSame($sessionBefore, session()->getId());
+        $this->assertNotSame($tokenBefore, session()->token());
+    }
+
+    public function test_the_portal_cannot_be_reached_again_after_logging_out(): void
+    {
+        $this->actingAs($this->parentA);
+
+        $this->post(route('portal.logout'));
+
+        $this->get(route('portal.dashboard'))->assertRedirect(route('portal.login'));
+    }
+
+    public function test_there_is_no_get_logout_route(): void
+    {
+        $this->actingAs($this->parentA);
+
+        // 405: rutenya hanya menerima POST, sehingga tidak dapat dipicu lewat
+        // tautan maupun prefetch peramban.
+        $this->get('/portal/keluar')->assertStatus(405);
+    }
+
+    /**
+     * Rute POST portal berada di grup `web`, jadi CSRF-nya dijaga middleware
+     * yang sama dengan seluruh aplikasi.
+     */
+    public function test_the_logout_route_is_csrf_protected(): void
+    {
+        $route = collect(app('router')->getRoutes())
+            ->first(fn ($route) => $route->getName() === 'portal.logout');
+
+        $this->assertContains('web', $route->gatherMiddleware());
+
+        $this->assertContains(
+            ValidateCsrfToken::class,
+            app('router')->getMiddlewareGroups()['web'],
+        );
+    }
+
+    // ------------------------------------------------ pengalihan aman
+
+    public function test_a_guest_is_redirected_rather_than_erroring(): void
+    {
+        $response = $this->get(route('portal.dashboard'));
+
+        $response->assertRedirect(route('portal.login'));
+        $this->assertNotSame(500, $response->getStatusCode());
+    }
+
+    public function test_an_authenticated_non_parent_does_not_loop(): void
+    {
+        $this->actingAs($this->userIn($this->schoolA, RoleName::SchoolAdmin));
+
+        // Halaman masuk mengalihkan ke beranda, bukan kembali ke dirinya
+        // sendiri.
+        $target = $this->get(route('portal.login'))->headers->get('Location');
+
+        $this->assertNotSame(route('portal.login'), $target);
+        $this->assertStringStartsWith(config('app.url'), $target);
+    }
+
+    /**
+     * Tidak ada open redirect: tujuannya rute internal yang ditulis pasti,
+     * bukan nilai dari query string.
+     */
+    public function test_no_query_parameter_can_steer_the_redirect(): void
+    {
+        $parent = $this->userIn($this->schoolA, RoleName::OrangTua, [
+            'email' => 'ortu@example.test',
+            'password' => bcrypt('rahasia123'),
+        ]);
+        $this->childOf($parent, $this->schoolA, 'Anak Redirect');
+
+        foreach (['redirect', 'next', 'return', 'intended'] as $parameter) {
+            $this->get(route('portal.login').'?'.$parameter.'=https://jahat.example.com')
+                ->assertOk();
+        }
+
+        Livewire::test(PortalLogin::class)
+            ->set('email', 'ortu@example.test')
+            ->set('password', 'rahasia123')
+            ->call('authenticate')
+            ->assertRedirect(route('portal.dashboard'));
+    }
+
+    public function test_the_login_throttle_still_stops_at_five_attempts(): void
+    {
+        $this->userIn($this->schoolA, RoleName::OrangTua, [
+            'email' => 'ortu@example.test',
+            'password' => bcrypt('rahasia123'),
+        ]);
+
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            Livewire::test(PortalLogin::class)
+                ->set('email', 'ortu@example.test')
+                ->set('password', 'salah')
+                ->call('authenticate')
+                ->assertHasErrors('email');
+        }
+
+        // Percobaan keenam ditolak karena batasnya, bukan karena kata sandinya
+        // — bahkan dengan kata sandi yang benar.
+        $errors = Livewire::test(PortalLogin::class)
+            ->set('email', 'ortu@example.test')
+            ->set('password', 'rahasia123')
+            ->call('authenticate')
+            ->errors()->get('email');
+
+        $this->assertStringContainsString('Terlalu banyak percobaan', $errors[0]);
+        $this->assertGuest();
     }
 }

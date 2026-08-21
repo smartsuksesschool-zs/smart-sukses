@@ -58,18 +58,18 @@ class PortalLogin extends Component
 
         $user = Auth::user();
 
-        if (! $user->is_active || ! $user->hasRole(RoleName::OrangTua->value)) {
-            // Kredensialnya benar tetapi akun ini bukan untuk portal ini.
-            // Sesinya dibatalkan supaya tidak ada pengguna setengah masuk.
-            Auth::logout();
-            session()->invalidate();
-            session()->regenerateToken();
+        // Kredensial boleh benar dan akunnya tetap tidak berhak masuk. Ketiga
+        // keadaan di bawah dinilai **sebelum** sesi diakui, supaya tidak pernah
+        // ada pengguna setengah masuk yang memegang sesi `web` sah tanpa dapat
+        // memakainya (butir 157).
+        $refusal = $this->refusalReasonFor($user);
+
+        if ($refusal !== null) {
+            $this->abandonSession();
 
             RateLimiter::hit($this->throttleKey());
 
-            throw ValidationException::withMessages([
-                'email' => 'Akun ini tidak memiliki akses ke Portal Orang Tua.',
-            ]);
+            throw ValidationException::withMessages(['email' => $refusal]);
         }
 
         RateLimiter::clear($this->throttleKey());
@@ -80,6 +80,60 @@ class PortalLogin extends Component
         event(new Login('web', $user, $this->remember));
 
         $this->redirectRoute('portal.dashboard', navigate: false);
+    }
+
+    /**
+     * Alasan menolak akun yang kredensialnya sudah benar, atau NULL bila ia
+     * memang boleh masuk.
+     *
+     * `must_change_password` termasuk di sini, dan itu yang paling mudah
+     * terlewat. Arsitektur 3.4 dan NFR keamanan menyatakan "password pertama
+     * wajib diganti saat login pertama" untuk **seluruh** pengguna — bukan
+     * hanya pengguna panel. Penegaknya selama ini `EnsurePasswordIsChanged`,
+     * yang terpasang sebagai middleware panel dan bergantung pada halaman
+     * profil panel, sehingga tidak dapat dipakai ulang apa adanya di sini.
+     * Tanpa pemeriksaan ini, portal menjadi jalan memutar: password sementara
+     * hasil reset admin (PORTAL-04) akan berlaku selamanya selama pemiliknya
+     * hanya membuka portal (butir 158).
+     *
+     * Yang ditawarkan sebagai jalan keluar adalah alur yang sudah ada —
+     * "lupa kata sandi" lewat surel (AUTH-04). Alur itu rute tamu, dan justru
+     * karena akun ini tidak pernah diberi sesi, alur itu selalu dapat
+     * dijangkau. Menggantinya dengan password baru otomatis melepas penanda
+     * ini lewat hook `updating` pada User.
+     */
+    protected function refusalReasonFor(?User $user): ?string
+    {
+        if ($user === null || ! $user->is_active) {
+            return 'Akun ini tidak memiliki akses ke Portal Orang Tua.';
+        }
+
+        if (! $user->hasRole(RoleName::OrangTua->value)) {
+            return 'Akun ini tidak memiliki akses ke Portal Orang Tua.';
+        }
+
+        // Akun School Level tanpa cabang tidak punya satu pun anak yang dapat
+        // menjadi miliknya (butir 127, 148).
+        if ($user->school_id === null) {
+            return 'Akun ini tidak memiliki akses ke Portal Orang Tua.';
+        }
+
+        if ($user->must_change_password) {
+            return 'Kata sandi sementara wajib diganti sebelum masuk. '
+                .'Gunakan tautan lupa kata sandi untuk menyetel kata sandi baru.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Membuang sesi yang terlanjur dibuat `Auth::attempt()`.
+     */
+    protected function abandonSession(): void
+    {
+        Auth::logout();
+        session()->invalidate();
+        session()->regenerateToken();
     }
 
     /**

@@ -2934,6 +2934,80 @@ Ringkasannya sendiri tetap melewati `ParentPortalService::summary()`, jalur yang
 dengan API, sehingga andai pemeriksaan di komponen suatu saat dilewati, pagar kepemilikan
 di service masih berdiri.
 
+### 157. Tidak ada pengguna setengah masuk di portal
+
+Pemeriksaan sebelum push menemukan bahwa akun orang tua **tanpa cabang** dapat menyelesaikan
+proses masuk portal: `Auth::attempt()` berhasil, sesi `web` terbentuk, dan penolakannya baru
+terjadi di halaman dashboard sebagai 403. Sesi itu memang tidak membuka apa pun — panel juga
+menolak ORANG_TUA — tetapi sesi sah yang menganggur adalah keadaan yang tidak perlu ada.
+
+Seluruh syarat kelayakan kini dinilai di satu tempat (`refusalReasonFor()`) **sebelum** sesi
+diakui: akun nonaktif, peran selain ORANG_TUA, akun tanpa cabang, dan penanda ganti kata
+sandi. Bila salah satunya berlaku, sesi yang terlanjur dibuat `Auth::attempt()` dibuang
+seluruhnya — `logout`, `invalidate`, `regenerateToken` — sehingga pemanggil kembali menjadi
+tamu sepenuhnya.
+
+Pesannya tetap satu kalimat yang sama untuk nonaktif, peran keliru, dan tanpa cabang:
+membedakannya akan memberi tahu bahwa surel itu terdaftar dan seperti apa akunnya.
+
+Regenerasi sesi pada jalur yang berhasil sudah ada sejak awal dan tetap ditempatkan setelah
+seluruh pemeriksaan lolos — itu yang menutup fiksasi sesi, dan sekarang ada test yang
+membandingkan id sesi sebelum dan sesudah masuk.
+
+### 158. Portal tidak boleh menjadi jalan memutar "wajib ganti kata sandi"
+
+Temuan paling serius pada pemeriksaan sebelum push, dan ini **cacat nyata** yang dibawa
+Batch 7.1.
+
+Aturannya berlaku untuk seluruh pengguna, bukan hanya pengguna panel:
+
+- `03-architecture/04-security.md`: *"Minimum 8 karakter; password pertama wajib diganti
+  saat login pertama"*
+- `01-prd/04-non-functional-requirements.md`: *"Bcrypt/Argon2, minimal 8 karakter, wajib
+  ganti password pertama"*
+
+Tidak ada satu pun kalimat yang membatasinya pada pengguna panel. Penegaknya selama ini
+`EnsurePasswordIsChanged`, tetapi middleware itu terpasang **hanya** di AdminPanelProvider
+dan bekerja dengan memaksa pengguna ke halaman profil panel — jadi ia tidak dapat dipakai
+ulang apa adanya untuk portal, dan tidak ikut berlaku di sana.
+
+Akibatnya, sebelum perbaikan ini: orang tua yang kata sandinya baru direset admin
+(PORTAL-04 — "reset password oleh Admin menghasilkan password sementara yang dikirim via
+notifikasi") dapat masuk portal dengan kata sandi sementara itu dan memakainya tanpa batas
+waktu. Kata sandi yang dikirim lewat pesan justru yang paling perlu segera diganti.
+
+Perbaikannya dua lapis, dan keduanya menolak — bukan membuat sistem ganti kata sandi kedua:
+
+1. **Saat masuk** — akun berpenanda ini tidak pernah diberi sesi.
+2. **Di middleware portal** — sesi yang sudah berjalan berhenti begitu penandanya menyala.
+   Lapis kedua ini bukan pengulangan: admin dapat mereset kata sandi pengguna yang sedang
+   login, dan tanpa lapis ini sesi lama akan berjalan terus seolah tidak terjadi apa-apa.
+
+Jalan keluarnya alur yang **sudah ada**, bukan yang baru: "lupa kata sandi" lewat surel
+(AUTH-04, `admin/password-reset/request`). Rute itu rute tamu, dan justru karena akun
+tersebut tidak pernah diberi sesi, alur itu selalu dapat dijangkau. Menyetel kata sandi baru
+melepas penandanya sendiri lewat hook `updating` pada model User.
+
+Yang perlu dicatat sebagai pekerjaan lanjutan: halaman ganti kata sandi **di dalam** portal
+belum ada, sehingga pengalaman orang tua saat ini adalah menempuh alur surel. Membuat
+halaman itu adalah pekerjaan fitur, bukan tambalan keamanan, dan tidak dikerjakan pada
+pemeriksaan ini.
+
+### 159. Yang diperiksa dan ternyata sudah benar
+
+Dicatat supaya tidak diperiksa ulang dari nol di kemudian hari:
+
+- **Cabang nonaktif** tidak diperiksa saat masuk — dan itu memang mengikuti perilaku yang
+  ada: baik panel maupun `POST /auth/login` API tidak pernah memeriksa `schools.is_active`.
+  Portal sengaja tidak membuat pengecualian sendiri.
+- **Kunci throttle** memakai gabungan surel dan alamat IP, pola yang sama dengan Laravel dan
+  dengan halaman masuk panel. Batasnya tetap lima percobaan per menit (Arsitektur 3.4).
+- **Keluar** memakai `logout` + `invalidate` + `regenerateToken`, hanya menerima POST
+  (GET menghasilkan 405), dan berada di grup `web` sehingga CSRF-nya dijaga middleware yang
+  sama dengan seluruh aplikasi.
+- **Pengalihan** tidak pernah berasal dari query string: tujuannya rute internal yang
+  ditulis pasti. `redirect`, `next`, `return`, dan `intended` tidak berpengaruh apa pun.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
