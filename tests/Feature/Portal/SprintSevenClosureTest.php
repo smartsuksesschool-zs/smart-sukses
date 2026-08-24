@@ -187,22 +187,37 @@ class SprintSevenClosureTest extends TestCase
     }
 
     /**
-     * Subsistem notifikasi masuk pada Sprint 8. Yang dijaga di sini bukan lagi
-     * ketiadaannya, melainkan batas Batch 8.1: datanya dan API-nya sudah ada,
-     * tampilannya di ketiga portal belum — dan tidak boleh ada placeholder-nya.
+     * Ketergantungan yang penutupan Sprint 7 tangguhkan ke Sprint 8 kini
+     * mendarat: ketiga portal punya kotak masuk notifikasinya.
+     *
+     * Yang dijaga di sini bukan lagi ketiadaannya, melainkan bentuknya — tepat
+     * satu rute kotak masuk per portal, dan tidak satu pun rute portal yang
+     * menyentuh **pembuatan** pengumuman. Konflik PORTAL-02 tetap belum
+     * terselesaikan, dan Batch 8.2 tidak menyelesaikannya (butir 213).
      */
-    public function test_the_notification_subsystem_has_not_reached_the_portals(): void
+    public function test_the_notification_subsystem_has_reached_the_portals(): void
     {
         $this->assertTrue(Schema::hasTable('notifications'));
         $this->assertTrue(Schema::hasTable('notification_reads'));
+
+        foreach (['portal.notifications', 'teacher.notifications', 'student.notifications'] as $name) {
+            $this->assertNotNull(
+                app('router')->getRoutes()->getByName($name),
+                "Rute kotak masuk {$name} belum terdaftar.",
+            );
+        }
 
         $portalUris = collect(app('router')->getRoutes())
             ->filter(fn ($route) => preg_match('#^(portal|teacher|student)\.#', (string) $route->getName()) === 1)
             ->map(fn ($route) => $route->uri());
 
+        // Tepat satu kotak masuk per portal, tidak lebih.
+        $this->assertSame(
+            3,
+            $portalUris->filter(fn ($uri) => str_contains($uri, 'notifikasi'))->count(),
+        );
+
         foreach ($portalUris as $uri) {
-            $this->assertStringNotContainsString('notification', $uri);
-            $this->assertStringNotContainsString('notifikasi', $uri);
             $this->assertStringNotContainsString('pengumuman', $uri);
         }
     }
@@ -309,18 +324,22 @@ class SprintSevenClosureTest extends TestCase
     }
 
     /**
-     * Dua tempat yang sengaja menampilkan menu/pintasan tanpa tautan: menu
-     * Notifikasi siswa (butir 183) dan pintasan Buat Pengumuman guru
-     * (butir 175). Keduanya harus tetap tanpa href.
+     * Dua hal ditangguhkan pada penutupan Sprint 7; Batch 8.2 menyelesaikan
+     * satu dan **tidak** menyelesaikan yang lain.
+     *
+     * Menu Notifikasi siswa (butir 183) kini tautan sungguhan. Pintasan "Buat
+     * Pengumuman" guru tetap tanpa tautan, karena yang menghalanginya bukan
+     * ketiadaan modul melainkan matriks 1.1.2 yang menandai GURU/WALI ❌ pada
+     * "Notifikasi (buat)" — hadirnya modul notifikasi tidak mengubah kewenangan
+     * (butir 213).
      */
-    public function test_deferred_items_are_shown_without_a_dead_link(): void
+    public function test_the_student_menu_landed_while_the_teacher_shortcut_stays_deferred(): void
     {
         $this->actingAs($this->studentUserA);
 
         $student = $this->get(route('student.dashboard'))->assertOk();
         $student->assertSee('Notifikasi');
-        $student->assertSee('aria-disabled="true"', false);
-        $student->assertDontSee('href="/siswa/notifikasi"', false);
+        $student->assertSee('href="'.route('student.notifications').'"', false);
 
         $this->actingAs($this->teacherA);
 
@@ -328,6 +347,9 @@ class SprintSevenClosureTest extends TestCase
         $teacher->assertSee('Buat Pengumuman');
         $teacher->assertSee('aria-disabled="true"', false);
         $teacher->assertSee('kewenangan Admin Sekolah');
+
+        // Dan kewenangannya benar-benar masih tertutup, bukan hanya tombolnya.
+        $this->assertFalse($this->teacherA->can('notification.manage'));
     }
 
     // --------------------------------------------- matriks pagar baris

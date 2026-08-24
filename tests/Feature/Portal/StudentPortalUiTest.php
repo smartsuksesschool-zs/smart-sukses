@@ -377,21 +377,28 @@ class StudentPortalUiTest extends TestCase
         $response->assertSee(route('student.schedule'), false);
         $response->assertSee(route('student.grades'), false);
         $response->assertSee(route('student.profile'), false);
+        // Keempat menu PORTAL-03 kini bertautan sungguhan, termasuk Notifikasi.
+        $response->assertSee(route('student.notifications'), false);
     }
 
     /**
-     * PORTAL-03 meminta empat menu, tetapi subsistem notifikasi milik Sprint 8.
-     * Menunya tampil tanpa tautan mati (butir 183).
+     * PORTAL-03 poin 1 meminta empat menu. Sampai Sprint 7 menu Notifikasi
+     * tampil tanpa tautan karena subsistemnya belum ada; sejak Batch 8.2
+     * halamannya ada, jadi yang dijaga sekarang kebalikannya — menu itu harus
+     * benar-benar dapat dibuka, dan tidak ada lagi penanda mati (butir 208).
      */
-    public function test_the_notification_menu_is_disabled_and_has_no_href(): void
+    public function test_the_notification_menu_is_now_a_live_link(): void
     {
         $this->actingAs($this->userA);
 
         $response = $this->get(route('student.dashboard'))->assertOk();
 
-        $response->assertSee('aria-disabled="true"', false);
-        $response->assertSee('Notifikasi belum tersedia');
-        $response->assertDontSee('href="/siswa/notifikasi"', false);
+        $response->assertSee('href="'.route('student.notifications').'"', false);
+        $response->assertDontSee('Notifikasi belum tersedia');
+        $response->assertDontSee('Tersedia setelah modul notifikasi aktif');
+
+        // Dan halamannya memang terbuka, bukan hanya tertaut.
+        $this->get(route('student.notifications'))->assertOk();
     }
 
     public function test_the_student_navigation_carries_no_other_portal_menu(): void

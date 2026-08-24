@@ -5,6 +5,7 @@ use App\Http\Controllers\Portal\StudentReportCardController;
 use App\Http\Middleware\EnsureParentPortalAccess;
 use App\Http\Middleware\EnsureStudentPortalAccess;
 use App\Http\Middleware\EnsureTeacherPortalAccess;
+use App\Livewire\Portal\NotificationInbox;
 use App\Livewire\Portal\ParentDashboard;
 use App\Livewire\Portal\ParentFees;
 use App\Livewire\Portal\ParentGrades;
@@ -66,6 +67,16 @@ Route::prefix('portal')->name('portal.')->group(function () {
         Route::get('/tagihan', ParentFees::class)->name('fees');
         Route::get('/jadwal', ParentSchedule::class)->name('schedule');
 
+        /*
+         * NOTIF-04 — kotak masuk notifikasi orang tua.
+         *
+         * Penerimanya akun orang tua itu sendiri, bukan profil anak yang sedang
+         * dipilih: berpindah anak tidak mengubah isi halaman ini (butir 212).
+         * Komponennya sama dengan kedua portal lain; yang membedakan hanya
+         * middleware di atasnya (butir 208).
+         */
+        Route::get('/notifikasi', NotificationInbox::class)->name('notifications');
+
         // NILAI-04 poin 3. Kepemilikan anak dan status terbitnya rapor
         // diperiksa di controller lewat pagar Batch 7.1 (butir 162).
         Route::get('/nilai/{studentId}/rapor/{reportCardId}', ReportCardDownloadController::class)
@@ -99,6 +110,11 @@ Route::prefix('teacher')->name('teacher.')->middleware(EnsureTeacherPortalAccess
         ->whereNumber('classId')
         ->name('class-students');
     Route::get('/jadwal', TeacherSchedule::class)->name('schedule');
+
+    // NOTIF-04 — "notifikasi masuk" yang API 4.11 sebut pada dasbor guru, kini
+    // punya halamannya sendiri. Tetap hanya sisi penerima: tidak ada jalan
+    // membuat pengumuman dari portal guru (butir 213).
+    Route::get('/notifikasi', NotificationInbox::class)->name('notifications');
 });
 
 /*
@@ -118,6 +134,10 @@ Route::prefix('siswa')->name('student.')->group(function () {
         Route::get('/jadwal', StudentSchedule::class)->name('schedule');
         Route::get('/nilai', StudentGrades::class)->name('grades');
         Route::get('/profil', StudentProfile::class)->name('profile');
+
+        // PORTAL-03 poin 1 menyebut menu Notifikasi; sejak Batch 8.2 menu itu
+        // punya halamannya, jadi ia tautan sungguhan (butir 208).
+        Route::get('/notifikasi', NotificationInbox::class)->name('notifications');
 
         Route::get('/nilai/rapor/{reportCardId}', StudentReportCardController::class)
             ->whereNumber('reportCardId')

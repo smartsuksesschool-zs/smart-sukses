@@ -189,16 +189,20 @@ class ParentPortalPagesTest extends TestCase
     }
 
     /**
-     * Notifikasi milik Sprint 8; tidak boleh ada tautan mati sekarang
-     * (butir 168).
+     * Sampai Sprint 7 menu Notifikasi sengaja tidak ada di portal orang tua,
+     * karena subsistemnya belum ada dan tautan mati lebih buruk daripada menu
+     * yang tidak muncul (butir 168). Sejak Batch 8.2 halamannya ada, jadi
+     * menunya hadir sebagai tautan sungguhan — dan menu portal lain tetap tidak
+     * pernah muncul di sini (butir 208).
      */
-    public function test_there_is_no_dead_notification_or_other_portal_menu(): void
+    public function test_the_notification_menu_is_live_and_no_other_portal_menu_appears(): void
     {
         $this->actingAs($this->parentA);
 
         $response = $this->get(route('portal.dashboard'))->assertOk();
 
-        $response->assertDontSee('Notifikasi');
+        $response->assertSee('Notifikasi');
+        $response->assertSee('href="'.route('portal.notifications').'"', false);
         $response->assertDontSee('Portal Guru');
         $response->assertDontSee('Portal Siswa');
     }

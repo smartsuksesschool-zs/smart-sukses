@@ -14,6 +14,34 @@
     $branding = app(\App\Support\SchoolBranding::class);
     $school = $branding->currentSchool();
     $bare = $bare ?? false;
+
+    /**
+     * NOTIF-04 poin 1 — "Jumlah notifikasi belum baca tampil di badge (bell
+     * icon)".
+     *
+     * Dihitung **sekali** di sini, lalu dipakai lencana lonceng maupun entri
+     * navigasi. Menghitungnya di setiap komponen akan berarti satu query per
+     * elemen untuk angka yang sama (butir 211).
+     *
+     * Di halaman Notifikasi sendiri lencananya tidak ditampilkan, jadi tidak
+     * dihitung: tata letak tidak ikut dirender ulang ketika aksi Livewire
+     * berjalan, sehingga angka di lonceng akan tertinggal basi tepat di halaman
+     * tempat pengguna menandai bacaannya. Halaman itu sudah menyebut jumlahnya
+     * sendiri, hidup, di judulnya (butir 211).
+     */
+    $onNotificationPage = request()->routeIs('*.notifications');
+
+    $unreadNotifications = (! $bare && ! $onNotificationPage && auth()->check())
+        ? app(\App\Services\Notification\NotificationCenter::class)->unreadCount(auth()->user())
+        : 0;
+
+    /* Rute kotak masuk mengikuti portal yang sedang dibuka, pola yang sama
+       dengan rute keluar di bawah. */
+    $notificationRoute = match (true) {
+        request()->routeIs('student.*') => route('student.notifications'),
+        request()->routeIs('teacher.*') => route('teacher.notifications'),
+        default => route('portal.notifications'),
+    };
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -279,6 +307,142 @@
 
         .portal-scroll { overflow-x: auto; }
 
+        /* Hanya untuk pembaca layar: keterangan yang tidak perlu terlihat,
+           tetapi juga tidak boleh hilang dari pohon aksesibilitas. */
+        .portal-sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: -1px;
+            padding: 0;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        /* ---------------------------------------------- notifikasi (NOTIF-04) */
+
+        .portal-bell {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 2.75rem;
+            min-height: 2.75rem;
+            border-radius: .5rem;
+            color: #fff;
+            background: rgba(255, 255, 255, .18);
+        }
+
+        .portal-bell__count {
+            position: absolute;
+            top: .25rem;
+            right: .125rem;
+            min-width: 1.15rem;
+            padding: 0 .25rem;
+            border-radius: 999px;
+            background: var(--color-danger);
+            color: #fff;
+            font-size: .6875rem;
+            font-weight: 700;
+            line-height: 1.15rem;
+            text-align: center;
+        }
+
+        .portal-nav__badge {
+            display: inline-block;
+            min-width: 1.15rem;
+            margin-left: .375rem;
+            padding: 0 .25rem;
+            border-radius: 999px;
+            background: var(--color-danger);
+            color: #fff;
+            font-size: .6875rem;
+            font-weight: 700;
+            line-height: 1.15rem;
+            text-align: center;
+        }
+
+        .notif-head {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .75rem;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .notif-head__title { font-size: 1.25rem; margin: 0; }
+
+        .notif-markall {
+            min-height: 2.75rem;
+            padding: 0 1rem;
+            border: 1px solid var(--color-border);
+            border-radius: .5rem;
+            background: var(--color-surface);
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .notif-list { display: grid; gap: .75rem; }
+
+        .notif { padding: 0; }
+
+        /* Yang belum dibaca ditandai tebal dan bergaris tepi — bukan warna saja,
+           supaya tetap terbaca tanpa persepsi warna. */
+        .notif--unread { border-left: 4px solid var(--color-primary); }
+
+        .notif--unread .notif__title { font-weight: 700; }
+
+        .notif__toggle {
+            display: block;
+            width: 100%;
+            /* Sasaran sentuh selebar kartu, bukan hanya judulnya. */
+            min-height: 2.75rem;
+            padding: 1rem;
+            border: 0;
+            background: none;
+            font: inherit;
+            color: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .notif__top {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .5rem;
+            align-items: baseline;
+        }
+
+        .notif__title { overflow-wrap: anywhere; }
+
+        .notif__meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .5rem;
+            align-items: center;
+            margin-top: .375rem;
+            font-size: .8125rem;
+            color: var(--color-muted);
+        }
+
+        .notif__body {
+            padding: 0 1rem 1rem;
+            border-top: 1px solid var(--color-border);
+        }
+
+        .notif__message {
+            margin: .75rem 0 0;
+            /* Baris baru pesan dihormati lewat CSS, bukan dengan menyisipkan
+               markup ke dalam isi yang ditulis pengguna. */
+            white-space: pre-line;
+            overflow-wrap: anywhere;
+        }
+
+        .notif__from { margin: .75rem 0 0; }
+
         .portal-centered {
             max-width: 24rem;
             margin: 3rem auto;
@@ -301,6 +465,30 @@
 
                 @auth
                     <div class="portal-user">
+                        {{--
+                            NOTIF-04 poin 1 menyebut lencana pada ikon lonceng.
+                            Lonceng ini tautan ke kotak masuk portal yang sedang
+                            dibuka; ketika tidak ada yang belum dibaca, lencananya
+                            tidak muncul sama sekali — bukan nol yang dicetak.
+                        --}}
+                        <a
+                            href="{{ $notificationRoute }}"
+                            class="portal-bell"
+                            @if (request()->routeIs('*.notifications')) aria-current="page" @endif
+                        >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                            </svg>
+                            <span class="portal-sr-only">Notifikasi</span>
+                            @if ($unreadNotifications > 0)
+                                <span class="portal-bell__count">{{ $unreadNotifications }}</span>
+                                <span class="portal-sr-only">{{ $unreadNotifications }} belum dibaca</span>
+                            @endif
+                        </a>
+
                         <span>{{ auth()->user()->name }}</span>
                         {{--
                             Guru berbagi sesi `web` dengan panel, jadi keluarnya
@@ -328,10 +516,11 @@
         @auth
             {{--
                 Navigasi portal. Hanya halaman yang benar-benar ada; tidak ada
-                tautan mati. Notifikasi milik Sprint 8 dan karena itu belum
-                muncul di sini (butir 168, 175).
+                tautan mati. Sejak Batch 8.2 Notifikasi termasuk di antaranya di
+                ketiga portal — halamannya nyata, jadi menunya tautan sungguhan
+                dan bukan lagi penanda mati (butir 208).
 
-                Dua portal berbagi tata letak ini, dan menunya mengikuti yang
+                Ketiga portal berbagi tata letak ini, dan menunya mengikuti yang
                 sedang dibuka — orang tua tidak pernah melihat menu guru, dan
                 sebaliknya.
             --}}
@@ -339,20 +528,19 @@
                 <div class="portal-nav__inner">
                     @if (request()->routeIs('student.*'))
                         {{--
-                            PORTAL-03 poin 1 menyebut empat menu. Notifikasi
-                            tetap tampil supaya menunya tidak diam-diam
-                            berkurang, tetapi tidak dapat diklik: subsistemnya
-                            milik Sprint 8 (butir 183).
+                            PORTAL-03 poin 1 — keempat menu, dan keempatnya kini
+                            benar-benar dapat dibuka: Notifikasi tidak lagi
+                            penanda mati (butir 208).
                         --}}
                         <a href="{{ route('student.schedule') }}"
                            @if (request()->routeIs('student.schedule')) aria-current="page" @endif>Jadwal</a>
                         <a href="{{ route('student.grades') }}"
                            @if (request()->routeIs('student.grades')) aria-current="page" @endif>Nilai</a>
-                        <span
-                            class="portal-nav__disabled"
-                            aria-disabled="true"
-                            title="Tersedia setelah modul notifikasi aktif"
-                        >Notifikasi</span>
+                        <x-portal.notification-nav
+                            :route="route('student.notifications')"
+                            :active="request()->routeIs('student.notifications')"
+                            :count="$unreadNotifications"
+                        />
                         <a href="{{ route('student.profile') }}"
                            @if (request()->routeIs('student.profile')) aria-current="page" @endif>Profil</a>
                     @elseif (request()->routeIs('teacher.*'))
@@ -362,6 +550,11 @@
                            @if (request()->routeIs('teacher.classes') || request()->routeIs('teacher.class-students')) aria-current="page" @endif>Kelas Ajar</a>
                         <a href="{{ route('teacher.schedule') }}"
                            @if (request()->routeIs('teacher.schedule')) aria-current="page" @endif>Jadwal</a>
+                        <x-portal.notification-nav
+                            :route="route('teacher.notifications')"
+                            :active="request()->routeIs('teacher.notifications')"
+                            :count="$unreadNotifications"
+                        />
                         {{-- Input Nilai memang menyeberang ke panel: alur
                              penilaiannya sudah ada di sana (butir 178). --}}
                         <a href="{{ \App\Filament\Pages\InputNilai::getUrl() }}">Input Nilai</a>
@@ -374,6 +567,11 @@
                            @if (request()->routeIs('portal.fees')) aria-current="page" @endif>Tagihan</a>
                         <a href="{{ route('portal.schedule') }}"
                            @if (request()->routeIs('portal.schedule')) aria-current="page" @endif>Jadwal</a>
+                        <x-portal.notification-nav
+                            :route="route('portal.notifications')"
+                            :active="request()->routeIs('portal.notifications')"
+                            :count="$unreadNotifications"
+                        />
                     @endif
                 </div>
             </nav>
