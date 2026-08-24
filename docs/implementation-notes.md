@@ -3351,6 +3351,145 @@ menunjuk rute keluar panel, dan sesinya berakhir di kedua tempat.
 Berbeda dari portal orang tua, yang punya rutenya sendiri karena memang tidak berbagi
 pintu masuk dengan siapa pun.
 
+## Sprint 7 Batch 7.4 — Portal Siswa, Jadwal, dan Nilai
+
+### 180. Satu aturan kelayakan portal untuk tiga portal
+
+Batch 7.3 menyalin syarat masuk portal untuk kedua kalinya, dan batch ini akan menjadi
+yang ketiga. Syaratnya sama persis di ketiganya — peran yang tepat, akun aktif, terhubung
+ke sebuah cabang, dan kata sandi sementara sudah diganti — sehingga tiga salinan berarti
+tiga tempat yang harus ikut berubah setiap kali salah satunya bergeser, dan yang tertinggal
+adalah lubang yang tidak terlihat.
+
+`App\Support\PortalEligibility` menuliskannya sekali. Ketiga middleware portal dan kedua
+halaman masuk membacanya dari sana, masing-masing hanya menyebutkan peran yang berlaku
+untuknya. Pesannya seragam untuk nonaktif, peran keliru, dan tanpa cabang: membedakannya
+akan memberi tahu bahwa surel itu terdaftar dan seperti apa akunnya (butir 115, 157).
+
+Yang paling mudah terlewat tetap syarat terakhir. Ketiga portal berada di luar panel,
+sehingga `EnsurePasswordIsChanged` — middleware panel — tidak ikut berlaku di sana.
+
+### 181. Identitas siswa selalu dari token, tidak pernah dari parameter
+
+Berbeda dari portal orang tua, yang memang perlu memilih di antara beberapa anak, portal
+siswa tidak punya pilihan sama sekali: yang dibaca hanya satu orang, dan orang itu adalah
+pemilik akunnya.
+
+Karena itu tidak ada satu pun endpoint maupun halaman yang menerima `student_id`. Alamat
+profilnya pun tanpa id (`/siswa/profil`), sehingga tidak ada angka yang dapat diganti untuk
+melihat siswa lain. Ada test yang memastikan seluruh rute `siswa/*` tidak memuat parameter
+siswa, dan test lain yang menembakkan `?student_id=`, `?nis=`, dan `?nisn=` milik siswa
+lain lalu memastikan yang kembali tetap data pemilik token.
+
+Syarat kepemilikannya dua: `students.user_id` menunjuk akun ini, **dan** cabang siswa sama
+dengan cabang akunnya. Syarat kedua menutup tautan yang tertinggal setelah akun dipindahkan
+cabang — diuji dengan siswa yang tertaut ke akun cabang A tetapi datanya di cabang B.
+
+### 182. Akun siswa yang belum tertaut bukan kesalahan
+
+`students.user_id` boleh NULL menurut ERD: *"NULL jika siswa belum punya akun portal"*.
+Kebalikannya juga mungkin — akun berperan SISWA sudah dibuat, penautannya belum.
+
+Yang **tidak** dilakukan: mengambil siswa lain sebagai gantinya, atau membiarkan halaman
+gagal dengan pesan sistem. API mengembalikan 404 yang konsisten; halaman portal menampilkan
+keterangan bahwa akunnya belum terhubung dan menyarankan menghubungi administrasi. Keempat
+halaman memakai keterangan yang sama, jadi tidak ada satu pun yang setengah jadi.
+
+### 183. Notifikasi: menu tetap ada, isinya belum
+
+PORTAL-03 poin 1 menyebut **empat** menu — Jadwal, Nilai, Notifikasi, Profil — dan API 4.11
+menyebut notifikasi pada dashboard siswa. Subsistemnya milik Sprint 8: belum ada tabelnya,
+belum ada modulnya.
+
+Menu Notifikasi tetap ditampilkan supaya menunya tidak diam-diam berkurang dari empat
+menjadi tiga, tetapi dirender sebagai teks yang tidak dapat diklik dan menyebutkan
+alasannya. Tidak ada `href` mati, tidak ada halaman berisi data karangan, dan tidak ada
+endpoint notifikasi yang dibuat. Dashboard mengembalikan keadaan "belum tersedia" secara
+eksplisit — bentuk yang sama dengan kehadiran (butir 152) dan notifikasi guru (butir 175);
+`unread_count: null`, bukan 0, karena nol berarti "tidak ada notifikasi" sedangkan yang
+benar adalah "belum ada cara mengetahuinya".
+
+**PORTAL-03 karena itu berstatus PARTIAL** sampai Sprint 8, dan harus disebut begitu pada
+penutupan Sprint 7.
+
+### 184. Semester nyata, bukan karangan
+
+PORTAL-03 poin 2 meminta nilai per mata pelajaran, **per semester**, dan per komponen.
+
+Semesternya benar-benar ada di skema: `academic_years.semester` bertipe TINYINT bernilai
+1 atau 2 (ERD 2.2), dan `name` memang berbentuk "2024/2025 Semester 1". Jadi tidak ada
+yang perlu dikarang — yang ditampilkan semester dari tahun ajaran aktif, dan API
+mengembalikannya sebagai bagian dari `academic_year`.
+
+Yang perlu dicatat jujur tentang batasnya: karena nilai selalu disaring ke tahun ajaran
+**aktif** (sesuai API 4.11 — "tahun ajaran aktif"), yang terlihat adalah semester yang
+sedang berjalan, bukan riwayat kedua semester berdampingan. Menampilkan keduanya sekaligus
+akan melanggar batasan "tahun ajaran aktif" yang disebut endpointnya sendiri.
+
+### 185. Rapor siswa: miliknya sendiri, dan hanya yang terbit
+
+Pola yang sama dengan portal orang tua (butir 162), dengan pagar yang lebih sederhana
+karena tidak ada anak yang perlu dipilih: identitas siswanya diresolusi dari akun, lalu
+rapornya wajib milik siswa itu dan sudah `published()`.
+
+Rapor draf dan rapor siswa lain sama-sama 404 — tanpa membedakan keduanya, sehingga
+keberadaannya tidak terkonfirmasi. Berkasnya dirender lewat `ReportCardPdfRenderer` yang
+sama dengan panel dan portal orang tua; tidak ada pembuatan PDF ketiga, `pdf_*` tidak
+tersentuh, dan jalur penyimpanannya tidak pernah muncul di respons.
+
+### 186. Profil tanpa id di alamatnya
+
+PORTAL-03 meminta menu Profil, dan batch ini menyediakan halamannya — bukan menu mati.
+
+Alamatnya `/siswa/profil`, tanpa parameter apa pun. Ini bukan sekadar kerapian: alamat
+tanpa id tidak punya angka yang dapat diganti, sehingga tidak ada permukaan untuk mencoba
+membuka profil siswa lain sejak awal.
+
+Isinya nama, NIS, NISN, kelas aktif, tahun ajaran, status, keberadaan foto, dan nama
+sekolahnya. Yang tidak ikut: `parent_user_id`, `school_id`, catatan administrasi, dan
+jalur foto mentah.
+
+### 187. Profil hanya dapat dibaca, dan itu memang batas repo saat ini
+
+Mengubah profil dan kata sandi dari dalam portal belum dapat dilakukan, dan itu bukan
+keputusan desain melainkan keadaan repo: `PATCH /auth/me` memang belum pernah dibuat, dan
+membuatnya di batch ini berarti mengerjakan backlog endpoint lain.
+
+Halamannya menyatakan bahwa perubahan data dilakukan lewat administrasi sekolah. Ini
+tercatat sebagai gap yang tersisa, bersama halaman ganti kata sandi di dalam portal yang
+masih tertinggal sejak Batch 7.1 (butir 169).
+
+### 188. `StudentPolicy::view` ikut dibatasi ke barisnya
+
+Ditemukan saat audit baris untuk batch ini. Bentuknya sama persis dengan butir 170 dan 176:
+matriks PRD 1.1.2 memberi SISWA dan ORANG_TUA ⭕ pada modul Data Siswa, sehingga
+`izin + sharesTenant` meloloskan keduanya ke **seluruh** siswa cabang itu.
+
+Tidak ada rute yang mengeksposnya hari ini — tidak ada `GET /api/v1/students`, dan kedua
+peran itu tidak dapat memasuki panel. Tetapi batch ini menambah portal yang membaca record
+`Student`, dan pagar yang bolong sebaiknya ditutup sebelum ada yang menyandarinya.
+
+`StudentVisibility` sudah menjawab pertanyaan itu sejak butir 170; yang dilakukan hanya
+memakainya di `StudentPolicy::view()`. Peran administratif dan platform lewat tanpa
+perubahan, dan guru tetap diatur `TeacherClassVisibility` di lapis query (butir 176) —
+keduanya dikunci test.
+
+### 189. Portal siswa tidak menyentuh keuangan sama sekali
+
+Matriks PRD 1.1.2 menandai **Tagihan SPP ❌** dan **Catat Pembayaran ❌** untuk SISWA.
+Portal ini karena itu tidak punya satu pun tautan, kartu, maupun angka keuangan — dan tidak
+memakai ulang halaman tagihan portal orang tua.
+
+Diuji dari dua arah: seluruh respons ketiga endpoint diperiksa tidak memuat kata maupun
+angka keuangan sama sekali, dan keempat halaman diperiksa tidak memuat tautan tagihan.
+Jalur generiknya juga dikunci — `GET /api/v1/student-fees` dan `/payments` menjawab 403,
+tagihan siswa lain menjawab 404.
+
+Satu perbedaan yang sempat mengecoh dan layak dicatat: tagihan **miliknya sendiri**
+menjawab **403**, bukan 404. Barisnya lolos pagar baris karena memang miliknya, lalu
+ditolak izin — sedangkan tagihan siswa lain disaring lebih dulu sehingga keberadaannya tidak
+terkonfirmasi. Keduanya benar, dan keduanya diuji.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
