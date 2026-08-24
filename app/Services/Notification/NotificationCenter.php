@@ -24,6 +24,18 @@ class NotificationCenter
     /** API 4.10 — "Limit: 50 terbaru". */
     public const FEED_LIMIT = 50;
 
+    /**
+     * Banyaknya notifikasi terbaru yang ikut pada ringkasan dasbor.
+     *
+     * Batas tampilan, bukan aturan bisnis: API 4.11 menyebut "notifikasi masuk"
+     * pada dasbor guru dan "notifikasi" pada dasbor siswa tanpa menyebut jumlah,
+     * sedangkan satu-satunya angka yang disebut blueprint untuk notifikasi
+     * adalah limit 50 milik umpan penuh. Lima dipilih agar sejajar dengan
+     * ringkasan dasbor lain di aplikasi ini (5 nilai terbaru), dan halaman
+     * Notifikasi tetap menjadi tempat daftar penuhnya (butir 206).
+     */
+    public const DASHBOARD_LIMIT = 5;
+
     public function __construct(protected NotificationRecipientResolver $recipients) {}
 
     /**
@@ -63,7 +75,7 @@ class NotificationCenter
             // tempat antar permintaan.
             ->orderByDesc('sent_at')
             ->orderByDesc('notifications.id')
-            ->limit(self::FEED_LIMIT)
+            ->limit($this->limitOf($filters))
             ->get();
     }
 
@@ -142,6 +154,28 @@ class NotificationCenter
         );
 
         return $unread->count();
+    }
+
+    /**
+     * Batas baris umpan: bawaannya 50 milik API 4.10, dan pemanggil boleh
+     * meminta lebih sedikit — dasbor meminta `DASHBOARD_LIMIT`.
+     *
+     * Disediakan sebagai parameter, bukan dengan mengambil lima teratas dari
+     * hasil lima puluh baris: yang diminta dasbor lima, jadi yang dibaca
+     * database pun lima. Nilai di atas 50 tidak pernah melebihi batas
+     * blueprint, dan nilai tak masuk akal jatuh ke bawaan.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    protected function limitOf(array $filters): int
+    {
+        $limit = $filters['limit'] ?? self::FEED_LIMIT;
+
+        if (! is_int($limit) || $limit < 1) {
+            return self::FEED_LIMIT;
+        }
+
+        return min($limit, self::FEED_LIMIT);
     }
 
     protected function recordRead(User $user, int $notificationId): NotificationRead
