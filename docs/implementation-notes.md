@@ -3490,6 +3490,35 @@ menjawab **403**, bukan 404. Barisnya lolos pagar baris karena memang miliknya, 
 ditolak izin — sedangkan tagihan siswa lain disaring lebih dulu sehingga keberadaannya tidak
 terkonfirmasi. Keduanya benar, dan keduanya diuji.
 
+## Sprint 7 Batch 7.5 — Penutupan Portal
+
+### 190. Penutupan Sprint 7: yang terbukti, dan yang hanya terlihat terbukti
+
+Audit penutupan tidak menemukan bug baru — ketiga portal, kesepuluh endpoint §4.11, dan
+seluruh pagar barisnya sudah pada tempatnya. Yang perlu dicatat justru soal **batas
+klaim**, karena dua hal mudah dinyatakan selesai padahal tidak.
+
+**Responsif.** Yang benar-benar diuji adalah struktur markup dan CSS: `viewport` meta,
+satu kolom sebagai bawaan, `overflow-x: hidden`, sasaran sentuh 2,75rem, dan tabel yang
+menggulung di dalam wadahnya sendiri. Itu bukan pengujian pada perangkat sungguhan, dan
+dokumen penutupan menyebutnya persis begitu. Lintas perangkat adalah pekerjaan QA Sprint 9.
+
+**NFR "< 3 detik pada 4G".** Yang terbukti adalah jumlah query tetap konstan saat data
+bertambah, di seluruh halaman ketiga portal — bukan waktu muat pada jaringan ter-throttle.
+Menyebut angka detik tanpa pengukuran itu akan menjadi klaim palsu, jadi statusnya ditulis
+**NOT YET VERIFIED** dan diserahkan ke Sprint 9.
+
+`docs/sprint-7-closure.md` menyimpan matriksnya, dan `SprintSevenClosureTest` menyimpan
+buktinya — kelengkapan endpoint, tidak adanya tautan mati, matriks pagar baris lintas
+peran, dan keseragaman aturan masuk ketiga portal. Test itu sengaja tidak mengulang
+perilaku yang sudah diuji di tempatnya; ia menguji kesatuannya, yaitu hal-hal yang hanya
+terlihat bila ketiga portal dibaca bersama.
+
+Tiga kriteria PORTAL tetap berstatus tertunda dan disebut apa adanya: kehadiran (sumber
+Phase 2), notifikasi (Sprint 8), dan pintasan Buat Pengumuman (konflik kewenangan yang
+belum diputuskan). Verdict-nya karena itu "implementation complete with declared deferred
+dependencies", bukan "100% acceptance criteria".
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
