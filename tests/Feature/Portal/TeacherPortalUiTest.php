@@ -301,14 +301,21 @@ class TeacherPortalUiTest extends TestCase
         $response->assertSee('aria-disabled="true"', false);
     }
 
+    /**
+     * Sprint 8 membuka halaman pengumuman di panel admin, bukan di portal guru.
+     * Yang diperiksa karena itu adalah izin gurunya dan rute portalnya — bukan
+     * lagi seluruh tabel rute aplikasi (butir 201).
+     */
     public function test_no_notification_permission_was_granted_to_teachers(): void
     {
         $this->assertFalse($this->teacherA->can('notification.manage'));
         $this->assertFalse($this->teacherA->can('notification.view'));
 
-        $uris = collect(app('router')->getRoutes())->map(fn ($route) => $route->uri())->all();
+        $portalUris = collect(app('router')->getRoutes())
+            ->filter(fn ($route) => str_starts_with((string) $route->getName(), 'teacher.'))
+            ->map(fn ($route) => $route->uri());
 
-        foreach ($uris as $uri) {
+        foreach ($portalUris as $uri) {
             $this->assertStringNotContainsString('pengumuman', $uri);
             $this->assertStringNotContainsString('notification', $uri);
         }
