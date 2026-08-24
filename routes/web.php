@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Portal\ReportCardDownloadController;
 use App\Http\Middleware\EnsureParentPortalAccess;
+use App\Http\Middleware\EnsureTeacherPortalAccess;
 use App\Livewire\Portal\ParentDashboard;
 use App\Livewire\Portal\ParentFees;
 use App\Livewire\Portal\ParentGrades;
@@ -10,6 +11,10 @@ use App\Livewire\Portal\PortalLogin;
 use App\Livewire\Ppdb\RegistrationForm;
 use App\Livewire\Ppdb\SchoolList;
 use App\Livewire\Ppdb\StatusCheck;
+use App\Livewire\Teacher\TeacherClasses;
+use App\Livewire\Teacher\TeacherClassStudents;
+use App\Livewire\Teacher\TeacherDashboard;
+use App\Livewire\Teacher\TeacherSchedule;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -70,4 +75,21 @@ Route::prefix('portal')->name('portal.')->group(function () {
 
         return redirect()->route('portal.login');
     })->name('logout');
+});
+
+/*
+ * PORTAL-02 / API 4.11 — Teacher Portal.
+ *
+ * Menumpang sesi `web` yang sama dengan panel: guru memang berhak memasuki
+ * panel (Input Nilai), jadi tidak ada halaman masuk ketiga yang dibuat.
+ * Kelayakannya diperiksa EnsureTeacherPortalAccess, dengan aturan yang sama
+ * dengan portal orang tua termasuk penanda ganti kata sandi (butir 171, 177).
+ */
+Route::prefix('teacher')->name('teacher.')->middleware(EnsureTeacherPortalAccess::class)->group(function () {
+    Route::get('/', TeacherDashboard::class)->name('dashboard');
+    Route::get('/kelas', TeacherClasses::class)->name('classes');
+    Route::get('/kelas/{classId}', TeacherClassStudents::class)
+        ->whereNumber('classId')
+        ->name('class-students');
+    Route::get('/jadwal', TeacherSchedule::class)->name('schedule');
 });

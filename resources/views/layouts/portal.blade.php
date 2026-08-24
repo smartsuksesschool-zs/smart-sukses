@@ -290,7 +290,14 @@
                 @auth
                     <div class="portal-user">
                         <span>{{ auth()->user()->name }}</span>
-                        <form method="POST" action="{{ route('portal.logout') }}">
+                        {{--
+                            Guru berbagi sesi `web` dengan panel, jadi keluarnya
+                            lewat rute keluar panel — satu login, satu keluar
+                            (butir 179).
+                        --}}
+                        <form method="POST" action="{{ request()->routeIs('teacher.*')
+                            ? route('filament.admin.auth.logout')
+                            : route('portal.logout') }}">
                             @csrf
                             <button type="submit" class="portal-logout">Keluar</button>
                         </form>
@@ -305,18 +312,34 @@
             {{--
                 Navigasi portal. Hanya halaman yang benar-benar ada; tidak ada
                 tautan mati. Notifikasi milik Sprint 8 dan karena itu belum
-                muncul di sini (butir 168).
+                muncul di sini (butir 168, 175).
+
+                Dua portal berbagi tata letak ini, dan menunya mengikuti yang
+                sedang dibuka — orang tua tidak pernah melihat menu guru, dan
+                sebaliknya.
             --}}
             <nav class="portal-nav">
                 <div class="portal-nav__inner">
-                    <a href="{{ route('portal.dashboard') }}"
-                       @if (request()->routeIs('portal.dashboard')) aria-current="page" @endif>Ringkasan</a>
-                    <a href="{{ route('portal.grades') }}"
-                       @if (request()->routeIs('portal.grades')) aria-current="page" @endif>Nilai</a>
-                    <a href="{{ route('portal.fees') }}"
-                       @if (request()->routeIs('portal.fees')) aria-current="page" @endif>Tagihan</a>
-                    <a href="{{ route('portal.schedule') }}"
-                       @if (request()->routeIs('portal.schedule')) aria-current="page" @endif>Jadwal</a>
+                    @if (request()->routeIs('teacher.*'))
+                        <a href="{{ route('teacher.dashboard') }}"
+                           @if (request()->routeIs('teacher.dashboard')) aria-current="page" @endif>Dasbor</a>
+                        <a href="{{ route('teacher.classes') }}"
+                           @if (request()->routeIs('teacher.classes') || request()->routeIs('teacher.class-students')) aria-current="page" @endif>Kelas Ajar</a>
+                        <a href="{{ route('teacher.schedule') }}"
+                           @if (request()->routeIs('teacher.schedule')) aria-current="page" @endif>Jadwal</a>
+                        {{-- Input Nilai memang menyeberang ke panel: alur
+                             penilaiannya sudah ada di sana (butir 178). --}}
+                        <a href="{{ \App\Filament\Pages\InputNilai::getUrl() }}">Input Nilai</a>
+                    @else
+                        <a href="{{ route('portal.dashboard') }}"
+                           @if (request()->routeIs('portal.dashboard')) aria-current="page" @endif>Ringkasan</a>
+                        <a href="{{ route('portal.grades') }}"
+                           @if (request()->routeIs('portal.grades')) aria-current="page" @endif>Nilai</a>
+                        <a href="{{ route('portal.fees') }}"
+                           @if (request()->routeIs('portal.fees')) aria-current="page" @endif>Tagihan</a>
+                        <a href="{{ route('portal.schedule') }}"
+                           @if (request()->routeIs('portal.schedule')) aria-current="page" @endif>Jadwal</a>
+                    @endif
                 </div>
             </nav>
         @endauth
