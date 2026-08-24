@@ -3199,6 +3199,158 @@ Perlu dicatat juga apa yang **tidak** ditemukan: rute `GET /report-cards/{id}/pd
 disebut API 4.8 tidak pernah didaftarkan di aplikasi ini. Satu-satunya jalur PDF di luar
 panel adalah rute portal Batch 7.2, dan `admin/report-cards` tetap panel-only.
 
+## Sprint 7 Batch 7.3 — Portal Guru, Dasbor Kerja, dan Kelas Ajar
+
+### 171. Portal guru menumpang sesi panel, bukan login ketiga
+
+Berbeda dari portal orang tua, dan alasannya justru dari perbedaan yang sudah ada. Orang
+tua **ditolak** seluruh panel (`canAccessPanel`), sehingga mereka memang butuh halaman
+masuk sendiri (butir 147). Guru tidak: mereka sudah berhak memasuki panel, dan memang harus
+— alur Input Nilai ada di sana.
+
+Membuat halaman masuk ketiga karena itu tidak menyelesaikan apa pun dan menambah satu lagi
+tempat yang harus benar. `/teacher` memakai sesi `web` yang sama dengan panel; tamu
+diarahkan ke rute masuk panel yang sudah ada, lewat nama rutenya
+(`filament.admin.auth.login`), bukan alamat yang ditulis tangan.
+
+Konsekuensi yang disengaja: keluar dari portal guru berarti keluar dari panel juga. Itu
+memang satu sesi, dan memisahkannya akan menciptakan dua keadaan masuk yang membingungkan
+(butir 179).
+
+Kewenangannya GURU dan WALI_KELAS. Wali kelas memegang seluruh akses guru ditambah
+tanggung jawab perwaliannya (PRD 1.1.1), jadi keduanya masuk. Peran lain ditolak — termasuk
+Super Admin, karena endpoint ini melekat pada **fungsi mengajar**, bukan pada tingkat
+kewenangan: Super Admin tidak mengampu kelas mana pun, dan memberinya dasbor guru yang
+kosong bukan kemurahan hati melainkan kebingungan.
+
+### 172. "Kelas yang diampu": penugasan mengajar pada tahun ajaran aktif
+
+Definisi kanoniknya satu, dan dipakai bersama endpoint REST, halaman portal, dan pagar
+baris di panel:
+
+> `class_subjects.teacher_id` = guru yang login,
+> `class_subjects.academic_year_id` = tahun ajaran **aktif**,
+> cabang yang sama.
+
+Yang sengaja **tidak** dipakai: seluruh kelas cabang, `homeroom_teacher_id` saja, jadwal
+sebagai sumber, dan penugasan tahun-tahun sebelumnya.
+
+Satu kelas muncul **sekali** walaupun guru itu mengajar beberapa mata pelajaran di sana;
+mata pelajarannya dikumpulkan di dalam barisnya. Urutannya tetap — tingkat, nama, lalu id
+sebagai pemutus — supaya daftar yang sama tidak berpindah-pindah antar permintaan.
+
+**Perwalian tidak dipalsukan menjadi penugasan mengajar.** Wali kelas yang tidak mengajar
+satu pun mata pelajaran di kelas perwaliannya tetap melihat kelas itu sebagai
+`homeroom_class` pada dasbor, tetapi `/teacher/classes` tidak melaporkannya — kelas itu
+memang tidak punya mata pelajaran yang ia ajar, dan memasukkannya akan menghasilkan baris
+dengan daftar mapel kosong. Keduanya keadaan yang berbeda dan ditampilkan berbeda.
+
+### 173. Kelas yang tidak diampu adalah 404
+
+Halaman daftar siswa meresolusi kelasnya lewat service, dan kelas yang tidak ada di daftar
+kelas ajarnya menjadi `ModelNotFoundException` — termasuk kelas lain di cabang yang sama.
+Guru tidak boleh memeriksa kelas sembarangan hanya dengan mengganti angka di alamat, dan
+membedakan "bukan kelas Anda" dari "tidak ada" sudah cukup untuk memberi tahu kelas mana
+yang ada.
+
+Resolusinya terjadi saat `mount()`, bukan saat render: kelas yang bukan miliknya berhenti
+sebelum kerangka halamannya sempat terbentuk.
+
+### 174. Jadwal: milik gurunya, bukan milik kelasnya
+
+Penyaring jadwal adalah `class_subjects.teacher_id`, bukan kelasnya. Dua guru dapat
+mengajar di kelas yang sama, dan jadwal guru lain di kelas itu bukan urusannya.
+
+Penomoran hari mengikuti ERD (1 = Senin … 7 = Minggu) lewat enum `DayOfWeek` yang sudah
+ada, dan konversi `Carbon::dayOfWeek` (Minggu = 0) dilakukan sekali di service — sama
+persis dengan jadwal orang tua (butir 165). Tidak ada konversi hari kedua di project ini.
+
+Halaman `/teacher/jadwal` memenuhi KELAS-04 ("jadwal mengajar saya untuk minggu berjalan")
+dengan service yang sama, tanpa endpoint API baru di luar API 4.11.
+
+### 175. Dua hal yang belum bisa dipenuhi, dan keduanya disebut apa adanya
+
+**Notifikasi.** API 4.11 menyebut "notifikasi masuk" pada dasbor guru. Subsistemnya milik
+Sprint 8 — belum ada tabelnya, belum ada modulnya. Yang dikembalikan keadaan "belum
+tersedia" secara eksplisit (`available: false`, `unread_count: null`), bentuk yang sama
+dengan kehadiran pada Batch 7.1 (butir 152). Angka nol akan terbaca sebagai "tidak ada
+notifikasi", padahal yang benar adalah "belum ada cara mengetahuinya".
+
+**Pintasan "Buat Pengumuman".** Ini konflik kewenangan, bukan sekadar modul yang belum ada:
+
+- PORTAL-02 poin 2 meminta pintasan ke Buat Pengumuman;
+- NOTIF-01 menyatakan "Sebagai **Admin Sekolah**, saya dapat membuat pengumuman";
+- matriks PRD 1.1.2 baris "Notifikasi (buat)" menandai **GURU/WALI ❌**.
+
+Yang bersifat kewenangan dan lebih spesifik menang. Pintasannya tetap ditampilkan supaya
+dasbornya tidak diam-diam kehilangan satu dari tiga hal yang diminta, tetapi **tidak dapat
+diklik** dan menyebutkan alasannya. Tidak ada izin notifikasi yang diberikan kepada guru,
+tidak ada rute notifikasi yang dibuat, dan tidak ada tautan ke halaman yang memang tidak
+boleh dibukanya.
+
+Perlu dicatat untuk penutupan Sprint 7: **PORTAL-02 poin 2 berstatus PARTIAL** — dua dari
+tiga pintasan berfungsi penuh, yang ketiga terhalang konflik blueprint yang eksplisit.
+
+### 176. Guru melihat siswa kelas ajarnya, bukan seluruh cabang
+
+Ditemukan saat audit baris untuk batch ini, dan ini **kebocoran nyata yang sudah ada
+sejak panel dibangun**: seorang guru yang membuka daftar siswa di panel melihat **seluruh
+siswa cabang**, dan daftar jadwal menampilkan **jadwal seluruh guru**.
+
+Bentuk persoalannya sama dengan butir 170: matriks PRD 1.1.2 memberi GURU/WALI ⭕ pada
+modul Data Siswa serta Kelas & Jadwal, tetapi ⭕ menyatakan boleh membaca **modulnya** —
+bukan boleh membaca **setiap barisnya**. Yang lebih spesifik menyebutkan batasnya:
+
+- PRD 1.1.1 — "GURU | Guru Mata Pelajaran | Input nilai, **lihat daftar siswa kelas ajar**,
+  **jadwal mengajar**";
+- SIS-04 — "daftar siswa di kelas **yang saya ampu**";
+- KELAS-04 — "jadwal mengajar **saya**".
+
+`App\Support\TeacherClassVisibility` menuliskan aturannya sekali, dan dipakai pada query
+kedua resource panel itu. Kelas perwalian ikut terlihat, karena wali kelas memang
+bertanggung jawab atas rapor dan absensi kelas itu walaupun tidak mengajar mata pelajaran
+di sana. Guru tanpa penugasan aktif melihat **nol** siswa, bukan semuanya.
+
+Sengaja **tidak** dipasang di policy, berbeda dari butir 170. Policy nilai dan rapor
+dipakai alur akademik yang sudah berjalan dan diuji sejak Sprint 4; membatasi di sana akan
+mengubah perilaku penilaian, dan itu di luar lingkup batch ini. Peran administratif dan
+platform melewatinya tanpa perubahan sama sekali — dikunci test.
+
+Yang juga perlu dicatat: **tidak ada** `GET /api/v1/students` maupun `GET /api/v1/schedules`
+di aplikasi ini. Satu-satunya jalur baca generik untuk keduanya adalah panel, dan itulah
+yang diperbaiki.
+
+### 177. Satu aturan kelayakan portal, dua portal
+
+`EnsureTeacherPortalAccess` memeriksa hal yang sama dengan
+`EnsureParentPortalAccess`: peran yang tepat, akun aktif, punya cabang, dan penanda ganti
+kata sandi sudah lepas.
+
+Yang terakhir itu yang paling mudah terlewat. Kedua portal berada di luar panel, sehingga
+`EnsurePasswordIsChanged` — middleware panel — tidak ikut berlaku. Tanpa pemeriksaan ini,
+portal guru akan menjadi jalan memutar yang persis sama dengan yang ditutup untuk orang tua
+(butir 158): kata sandi sementara hasil reset admin berlaku selamanya selama pemiliknya
+hanya membuka portal. Diperiksa juga pada sesi yang sudah berjalan, karena penandanya dapat
+menyala setelah guru itu login.
+
+### 178. Input Nilai menyeberang ke panel, dan itu disengaja
+
+Pintasan "Input Nilai" menunjuk ke halaman `InputNilai` di panel lewat generator rutenya
+(`InputNilai::getUrl()`), bukan alamat yang ditulis tangan.
+
+Tidak ada antarmuka penilaian kedua yang dibuat. Alur penilaian sudah ada, sudah diuji, dan
+sudah punya pagar kewenangannya sendiri sejak Sprint 4; membuat versi portalnya berarti dua
+tempat memasukkan nilai dengan dua aturan yang perlahan berbeda. Guru memang berhak
+memasuki panel, jadi penyeberangan ini bukan celah — hanya perpindahan halaman.
+
+### 179. Keluar dari portal guru berarti keluar dari panel
+
+Konsekuensi langsung dari butir 171: satu sesi `web`, satu tindakan keluar. Tombolnya
+menunjuk rute keluar panel, dan sesinya berakhir di kedua tempat.
+
+Berbeda dari portal orang tua, yang punya rutenya sendiri karena memang tidak berbagi
+pintu masuk dengan siapa pun.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
