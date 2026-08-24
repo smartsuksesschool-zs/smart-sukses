@@ -3802,6 +3802,283 @@ siapa pun; ia sengaja tidak diekspos ke penerima (butir 203). Menu Notifikasi di
 siswa masih berupa penanda kosong seperti dicatat pada butir 183 — batch ini menyediakan
 datanya, bukan tampilannya.
 
+## Sprint 8 Batch 8.2 — Notification Center di Portal Orang Tua, Guru, dan Siswa
+
+### 206. Lima notifikasi terbaru di dasbor adalah batas tampilan, bukan aturan bisnis
+
+| | |
+| --- | --- |
+| **Status** | Keputusan implementasi (dokumen tidak menyebut angka) |
+| **Referensi** | `04-api/09-portal-and-dashboard.md` — "notifikasi masuk", "notifikasi" |
+
+API 4.11 menyebut "notifikasi masuk" pada dasbor guru dan "notifikasi" pada dasbor siswa,
+dan tidak satu pun menyebut berapa banyak. Satu-satunya angka yang blueprint sebut untuk
+notifikasi adalah "Limit: 50 terbaru" milik `GET /notifications` — dan lima puluh kartu di
+sebuah ringkasan dasbor bukan ringkasan lagi.
+
+Yang dipakai lima, dengan alasan yang dapat diperiksa: dasbor lain di aplikasi ini sudah
+meringkas dengan lima ("nilai terbaru 5 mapel" pada dasbor anak, `SUMMARY_SUBJECTS`), jadi
+angka yang sama membuat kedua ringkasan terbaca setara. Halaman Notifikasi tetap menjadi
+tempat daftar penuhnya.
+
+Ini **batas tampilan, bukan aturan bisnis**, dan bedanya nyata: lencana belum dibaca tetap
+menghitung **seluruhnya**, bukan hanya lima yang ikut tampil. Kalau lima itu aturan bisnis,
+notifikasi keenam akan hilang dari hitungan juga — dan itu akan salah.
+
+Batasnya disediakan sebagai parameter `feed(['limit' => …])` alih-alih dengan mengambil
+lima teratas dari lima puluh baris yang sudah ditarik: yang diminta dasbor lima, jadi yang
+dibaca database pun lima. Nilai di atas 50 tetap tidak pernah melewati batas blueprint.
+
+### 207. Satu formatter untuk dua permukaan
+
+Notifikasi kini tampil di dua tempat di luar API: ringkasan dasbor guru/siswa, dan halaman
+Notifikasi ketiga portal. Keduanya menjawab pertanyaan yang sama — "apa yang boleh
+diketahui penerima tentang notifikasi ini" — dan menuliskannya dua kali berarti dua
+daftar-izin yang perlahan berbeda. Sebuah kolom yang tidak boleh keluar hanya perlu lolos
+sekali untuk bocor.
+
+`NotificationPresenter` adalah satu-satunya tempat daftar itu ditulis, dalam dua bentuk:
+
+- `summary()` — untuk dasbor: id, judul, kategori, label kategori, waktu kirim, keadaan
+  terbaca. Tanpa isi pesan, karena dasbor bukan tempat membacanya;
+- `detail()` — untuk halaman Notifikasi: `summary()` ditambah isi pesan, nama pengirim, dan
+  label waktu yang siap tampil.
+
+Yang sengaja tidak ikut pada keduanya sama dengan `NotificationResource`: `school_id`,
+`target_type`/`target_id`, `wa_template`, `is_draft`, dan seluruh isi pivot selain keadaan
+terbaca pengguna itu sendiri (butir 203).
+
+Konsekuensi yang penting: **Blade tidak pernah menerima model `Notification`**. Ia menerima
+array hasil presenter, sehingga tidak ada jalan bagi kolom yang tidak disebut di sini untuk
+sampai ke halaman — bukan karena view-nya berhati-hati, melainkan karena datanya memang
+tidak ada di sana.
+
+Label waktu tidak ditambahkan ke muatan dasbor. `sent_at` dikirim sebagai ISO 8601, bentuk
+yang sama dengan responsnya, dan komponen dasbor memformatnya sendiri; menambahkan label
+siap-tampil ke muatan API akan memperluas kontraknya demi satu tampilan.
+
+### 208. Satu komponen, tiga rute
+
+| | |
+| --- | --- |
+| **Status** | Keputusan arsitektur |
+| **Referensi** | NOTIF-04; PORTAL-03 kriteria 1 |
+
+Orang tua, guru, dan siswa membaca kotak masuk dengan aturan yang **sama persis**: umpan
+yang sama, lencana yang sama, penandaan yang sama. Tiga komponen Livewire karena itu akan
+menjadi tiga salinan dari perilaku identik, dan ketika salah satu diperbaiki dua lainnya
+tertinggal.
+
+Yang ada satu: `App\Livewire\Portal\NotificationInbox`, dipakai tiga rute —
+`/portal/notifikasi`, `/teacher/notifikasi`, `/siswa/notifikasi`. Yang membedakan ketiganya
+**middleware portalnya**, bukan isi halamannya, dan itu memang tempat yang benar: pagar
+peran sudah ada di sana untuk seluruh halaman portal lain.
+
+Komponen itu tidak memeriksa peran sama sekali dan tidak menyaring penerima. Kepenerimaan
+bukan soal peran (butir 203), jadi pertanyaan "notifikasi mana milik pengguna ini" tetap
+dijawab `NotificationCenter` — yang sekaligus menjadi pagar keamanannya. Tidak ada
+penargetan penerima di Blade.
+
+Bentuknya daftar kartu pada satu halaman, dan mengklik satu kartu membentangkan pesannya.
+Tidak ada halaman detail dengan `{id}` di alamatnya, karena tidak ada yang perlu
+ditampilkan di sana selain pesan yang sudah ada di daftar — dan rute beralamat id berarti
+satu permukaan lagi yang harus dipagari.
+
+Menu Notifikasi karena itu berhenti menjadi penanda mati. Sampai Sprint 7, menu siswa
+tampil tanpa tautan (butir 183) dan portal orang tua tidak menampilkannya sama sekali
+(butir 168) — keduanya karena halamannya belum ada. Sekarang ada, jadi ketiganya tautan
+sungguhan, dan test yang dulu menjaga ketiadaannya sekarang menjaga kehadirannya.
+
+### 209. Memuat halaman bukan tindakan membaca
+
+NOTIF-04 kriteria 2 menyebut **klik**: *"Klik notifikasi menandainya sebagai 'dibaca'"*.
+Bukan tampil, bukan terlihat, bukan tergulir melewatinya.
+
+Karena itu `GET` mana pun — halaman portal maupun `GET /notifications` — tidak pernah
+menulis ke `notification_reads`, dan halaman selalu dibuka tanpa satu kartu pun terbentang.
+Hanya `open()` di portal, `PATCH /notifications/{id}/read`, dan `POST
+/notifications/mark-all-read` yang menandai.
+
+Ini juga alasan pesannya baru tampil setelah diklik: satu tindakan dengan dua akibat yang
+tidak dapat dipisahkan — pesannya terbuka dan notifikasinya tertandai. Kalau seluruh isi
+sudah terbaca sejak halaman dimuat, "klik untuk menandai terbaca" menjadi tombol yang
+maknanya dikarang, bukan tindakan yang benar-benar terjadi.
+
+Klik kedua pada kartu yang sama menutupnya kembali dan tidak menandai apa pun lagi; klik
+ketiga membuka lagi lewat jalur penandaan yang sama, yang idempoten (butir 192).
+
+### 210. Isi notifikasi ditulis manusia, dan tetap tidak dipercaya
+
+| | |
+| --- | --- |
+| **Status** | Pengerasan implementasi |
+| **Referensi** | `03-architecture/04-security.md` |
+
+Judul dan isi pesan datang dari Admin Sekolah atau Kepala Sekolah — orang yang berwenang,
+bukan orang asing. Itu tidak membuatnya data yang aman dirender sebagai markup: akun
+berwenang dapat ditembus, dan pesan yang sama dibaca ratusan penerima. Satu `{!! !!}` di
+halaman ini berarti satu XSS tersimpan yang menjangkau seluruh cabang.
+
+Seluruh judul dan pesan karena itu dirender `{{ }}` yang ter-escape. Tidak ada `{!! !!}`
+di halaman notifikasi mana pun, dan ada test yang mengirim `<script>` sebagai isi pesan lalu
+memastikan yang keluar `&lt;script&gt;`.
+
+Baris baru tetap dihormati, tetapi lewat CSS `white-space: pre-line` — bukan dengan
+mengubah `\n` menjadi `<br>`, yang berarti menyisipkan markup ke dalam isi yang ditulis
+pengguna dan membuka kembali pintu yang baru saja ditutup.
+
+### 211. Lencana dihitung sekali per halaman
+
+NOTIF-04 kriteria 1 meminta jumlah belum dibaca tampil di badge pada ikon lonceng. Lonceng
+itu ada di tata letak, yang dipakai setiap halaman portal — jadi pertanyaannya bukan
+"bagaimana menghitungnya" melainkan "berapa kali".
+
+Angkanya dihitung **sekali** di tata letak dan diteruskan ke lencana lonceng maupun entri
+navigasi. Menghitungnya di dalam masing-masing komponen akan berarti satu query per elemen
+untuk angka yang sama; dan karena entri navigasi dibuat sebagai komponen Blade bersama,
+angkanya masuk sebagai prop alih-alih dihitung di dalamnya.
+
+Di halaman Notifikasi sendiri lencananya **tidak ditampilkan**, dan karena itu tidak
+dihitung. Alasannya perilaku Livewire: tata letak hanya dirender pada pemuatan halaman, dan
+tidak ikut dirender ulang ketika aksi komponen berjalan. Kalau lencana lonceng tampil di
+sana, angkanya akan tertinggal basi tepat di halaman tempat pengguna menandai bacaannya —
+daftarnya berkata "semua sudah dibaca" sementara loncengnya masih menunjukkan tiga.
+
+Menyinkronkannya akan menuntut JavaScript sendiri atau komponen lencana terpisah yang
+menghitung sekali lagi; menghilangkannya di satu halaman yang memang tidak memerlukannya
+tidak menuntut keduanya. Halaman itu sudah menyebut jumlahnya sendiri di judulnya, hidup,
+dengan `aria-live` sehingga perubahannya terdengar. Hasilnya: tepat satu query hitungan per
+halaman di mana pun, dan tidak ada satu tempat pun yang dapat menampilkan angka basi.
+
+Hitungannya tetap `unreadCount()` kanonik: satu agregat yang tidak menarik satu baris
+notifikasi pun. Tidak ada jalur yang memuat notifikasi lalu menghitungnya di PHP. Ada test
+yang membuktikan biaya halaman dasbor orang tua sama untuk satu anak dan untuk empat anak —
+lencana ini tidak pernah dihitung per anak.
+
+Ketika tidak ada yang belum dibaca, lencananya **tidak muncul** — bukan nol yang dicetak.
+
+### 212. Kotak masuk orang tua milik akunnya, bukan profil anaknya
+
+| | |
+| --- | --- |
+| **Status** | Keputusan implementasi |
+| **Referensi** | NOTIF-04; PORTAL-01 kriteria 2 |
+
+Portal orang tua adalah satu-satunya portal dengan pemilih anak, jadi ia satu-satunya
+tempat di mana "notifikasi siapa" dapat tertukar dengan "data anak yang mana".
+
+Penerima sebuah notifikasi adalah **akun pengguna**, dan itu bukan tafsir: `notifications`
+menargetkan `user_id` untuk INDIVIDUAL, dan `notification_reads.user_id` mencatat siapa yang
+membaca. Tidak ada kolom siswa di mana pun pada kedua tabel itu.
+
+Karena itu berpindah anak tidak mengubah isi kotak masuk, dan halaman Notifikasi tidak
+menerima parameter anak sama sekali. Orang tua dengan anak di dua kelas melihat notifikasi
+**kedua** kelas itu bersama-sama, apa pun anak yang sedang dipilih di halaman lain —
+notifikasi kelas menjangkaunya karena ia orang tua siswa kelas itu (butir 199), bukan karena
+ia sedang melihat profil anak itu.
+
+Menyaringnya per anak akan menyembunyikan pengumuman yang sah ditujukan kepadanya, dan
+penerimanya tidak akan pernah tahu ada yang disembunyikan.
+
+Dasbor anak juga tidak mendapat data notifikasi:
+`GET /parent/children/{studentId}/summary` tetap seperti apa adanya. Menyuntikkan
+notifikasi ke sana akan menciptakan "notifikasi anak ini", yang tidak ada dalam skema mana
+pun.
+
+### 213. Guru menerima notifikasi, dan tetap tidak boleh membuatnya
+
+| | |
+| --- | --- |
+| **Status** | Konflik yang **tetap terbuka** |
+| **Referensi** | `01-prd/01-roles-and-access.md` — "Notifikasi (buat)": GURU/WALI ❌ |
+| **Bertentangan dengan** | PORTAL-02 kriteria 2 — pintasan "Buat Pengumuman" |
+
+Batch ini membuat notifikasi guru menjadi nyata, dan itu adalah godaan yang paling jelas
+untuk menutup konflik PORTAL-02 diam-diam: modulnya sudah ada, jadi mengapa pintasannya
+tidak diaktifkan?
+
+Karena yang menghalanginya bukan ketiadaan modul. Matriks 1.1.2 menandai GURU/WALI ❌ pada
+"Notifikasi (buat)", dan hadirnya modul tidak menggeser satu pun kewenangan. Menerima dan
+membuat adalah dua hal berbeda; kalau keduanya disatukan, setiap penerima akan menjadi
+pengirim.
+
+Pintasan "Buat Pengumuman" karena itu **tetap tanpa tautan dan tetap dinyatakan sebagai
+kewenangan Admin Sekolah**, dan konflik PORTAL-02 tetap tercatat sebagai belum
+terselesaikan. Statusnya sama dengan pada penutupan Sprint 7; yang berubah hanya bahwa
+sekarang ada halaman notifikasi di sebelahnya, dan itu memperjelas bedanya.
+
+Yang dijaga test bukan hanya tombolnya: guru dan wali kelas tetap tidak memegang
+`notification.manage` maupun `notification.view`, `POST /api/v1/notifications` dengan muatan
+yang **sah** tetap 403 dan tidak menyisakan baris, dan tidak ada satu pun rute portal guru
+yang menyentuh pembuatan pengumuman.
+
+### 214. Keadaan "belum tersedia" dilepas, beserta kunci `reason`-nya
+
+Dasbor guru dan siswa selama Sprint 7 menjawab notifikasi dengan keadaan tidak tersedia
+yang eksplisit — `available: false`, `reason`, `unread_count: null` — karena angka nol akan
+terbaca sebagai "tidak ada notifikasi" padahal yang benar "belum ada cara mengetahuinya"
+(butir 152, 175, 183).
+
+Sekarang caranya ada, jadi bentuknya menjadi `available: true`, `unread_count` berupa
+bilangan, dan `items` berupa daftar. Nol akhirnya benar-benar berarti tidak ada notifikasi.
+
+`reason` **hilang**, tidak diisi `null`. Kunci itu hanya punya arti selama jawabannya tidak
+tersedia; mempertahankannya sebagai kunci kosong berarti menyimpan bekas penangguhan di
+dalam kontrak yang sudah tidak menangguhkan apa pun. Ini perubahan bentuk respons yang
+disengaja, dan pemakainya memang sudah diberi tahu bahwa keadaan itu sementara.
+
+Kartu dasbor keduanya memakai komponen yang sama (butir 207) dan menautkan ke halaman
+Notifikasi portalnya masing-masing.
+
+### 215. Fiksur penerima diuji sebagai matriks, bukan sebagai tiga daftar
+
+Ketiga portal harus diuji terhadap kombinasi target yang **sama persis**. Kalau tidak, satu
+portal dapat lolos justru pada kombinasi yang tidak diujikan padanya — dan yang berbahaya
+bukan satu target yang salah, melainkan satu peran yang kebetulan tidak pernah diperiksa
+terhadap target tertentu.
+
+Karena itu fiksurnya satu (`BuildsNotificationFixture`): dua cabang lengkap, delapan
+notifikasi yang mencakup ALL, CLASS (kelas anaknya dan kelas lain), INDIVIDUAL (kepada
+masing-masing peran dan kepada orang lain), draf, dan satu ALL cabang seberang. Empat
+salinan fiksur ini akan perlahan berbeda, dan perbedaannya baru terasa ketika salah satu
+portal membocorkan notifikasi yang bukan miliknya.
+
+Ini penyimpangan kecil dari kebiasaan repo ini, di mana tiap kelas test membangun fiksurnya
+sendiri. Alasannya spesifik: yang dibagi di sini bukan kenyamanan, melainkan **definisi
+kasus ujinya**.
+
+`PortalNotificationIntegrationTest` memeriksa matriks itu sebagai satu tabel utuh, ditambah
+hal-hal yang hanya terlihat bila ketiga portal dan API dilihat bersama: keadaan terbaca yang
+dibagi (API menandai → portal menampilkan terbaca, dan sebaliknya), idempotensi lewat tiga
+jalur penandaan sekaligus, dan batas query.
+
+### 216. Yang tidak dikerjakan di batch ini
+
+Batch ini mengintegrasikan sisi penerima ke ketiga portal. Yang **belum** ada, beserta
+tempatnya:
+
+| Belum ada | Sumber | Rencana |
+| --- | --- | --- |
+| `GET /notifications/{id}/wa-links` | `04-api/08-notifications.md`; NOTIF-02 | batch wa.me |
+| Normalisasi nomor & tombol "Buka WA" | NOTIF-02 kriteria 1, 3 | batch wa.me |
+| Trigger otomatis (PPDB, tagihan, rapor) | NOTIF-03 kriteria 1 | batch trigger |
+| Editor template notifikasi | NOTIF-03 kriteria 2 | batch trigger |
+| Retensi riwayat 90 hari | NOTIF-04 kriteria 3 | batch retensi |
+| Lonceng notifikasi di panel admin | NOTIF-04 kriteria 1 | belum dijadwalkan |
+
+Retensi 90 hari **tidak** dikerjakan dan tidak dipalsukan: tidak ada scheduler, tidak ada
+job pembersih, dan tidak ada penyaring tanggal yang menyembunyikan notifikasi lama sehingga
+seakan-akan sudah dibersihkan. Riwayatnya tersimpan seluruhnya; yang belum ada mekanisme
+pembatasannya.
+
+Baris terakhir tabel itu perlu disebut apa adanya. NOTIF-04 berbunyi "Sebagai **Pengguna**",
+dan Bendahara, Kepala Sekolah, serta Admin Sekolah adalah pengguna aktif cabang yang
+**benar-benar menerima** notifikasi bertarget ALL — resolver memasukkan mereka (butir 198).
+Tetapi ketiganya bekerja di panel admin, bukan di portal, dan panel belum punya lonceng.
+Mereka karena itu punya notifikasi yang belum ada tempatnya dibaca, kecuali lewat
+`GET /notifications`. Batch ini bercakupan portal, jadi itu di luar lingkupnya — bukan
+karena tidak diperlukan.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

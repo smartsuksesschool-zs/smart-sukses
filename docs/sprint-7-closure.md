@@ -201,3 +201,49 @@ Yang **tidak** boleh dikatakan: bahwa seluruh kriteria PORTAL-01/02/03 terpenuhi
 Tiga di antaranya bergantung pada hal di luar Sprint 7 — sumber data Phase 2 (kehadiran),
 subsistem Sprint 8 (notifikasi), dan satu konflik blueprint yang belum diputuskan
 (kewenangan membuat pengumuman).
+
+
+## Pembaruan pasca-Sprint 7
+
+Bagian di atas adalah keadaan Sprint 7 **pada saat penutupannya**, dan sengaja dibiarkan apa
+adanya: ia catatan sejarah, bukan papan status berjalan. Yang berikut mencatat apa yang
+sejak itu mendarat, supaya daftar penundaan di atas tidak terbaca sebagai masih terbuka
+seluruhnya.
+
+| # | Item | Keadaan sekarang |
+| --- | --- | --- |
+| B | Pintasan "Buat Pengumuman" guru | **MASIH TERBUKA.** Lihat di bawah. |
+| C | Data notifikasi ketiga portal | **MENDARAT** — Sprint 8 Batch 8.1 (data, API) dan Batch 8.2 (portal). |
+| A, D, E, F | Kehadiran, ubah profil, ganti kata sandi, ukur 4G | Belum berubah. |
+
+Yang berubah pada baris C, dan hanya itu:
+
+- **Sprint 8 Batch 8.1** membangun tabel `notifications`/`notification_reads`, penerbitan
+  pengumuman di panel admin, dan tujuh endpoint API 4.10 (butir 191-205).
+- **Sprint 8 Batch 8.2** menghubungkannya ke ketiga portal: satu halaman Notifikasi per
+  portal, lencana belum dibaca pada lonceng dan navigasi, klik menandai terbaca, dan
+  keadaan notifikasi nyata pada dasbor guru dan siswa (butir 206-216).
+
+Akibatnya pada pernyataan-pernyataan di atas:
+
+- "Tidak ada endpoint notifikasi" → tujuh endpoint API 4.10 kini ada; `GET
+  /notifications/{id}/wa-links` masih **tidak** ada dan memang belum dikerjakan.
+- PORTAL-03 "Menu Notifikasi — DEFERRED" dan "Notifikasi dengan timestamp — DEFERRED" →
+  keduanya **DONE**; menunya tautan sungguhan dan kartunya membawa timestamp.
+- Tabel navigasi: menu Notifikasi kini ada di **ketiga** portal dan ketiganya menjawab 200.
+  Satu-satunya elemen yang masih sengaja tanpa tautan adalah pintasan Buat Pengumuman guru.
+
+Yang **tidak** berubah, dan tidak boleh dinyatakan berubah:
+
+> Konflik PORTAL-02 kriteria 2 (pintasan "Buat Pengumuman") **belum terselesaikan**.
+> Matriks PRD 1.1.2 masih menandai GURU/WALI ❌ pada "Notifikasi (buat)", tidak ada izin
+> notifikasi yang diberikan kepada Guru maupun Wali Kelas, dan pintasannya tetap
+> `aria-disabled="true"` tanpa href. Hadirnya modul notifikasi tidak menggeser kewenangan;
+> menyelesaikan konflik ini tetap memerlukan keputusan pemilik produk atau perubahan
+> matriks (butir 213).
+
+Retensi riwayat 90 hari (NOTIF-04 kriteria 3), tautan wa.me (NOTIF-02), dan trigger otomatis
+(NOTIF-03) juga belum dikerjakan — lihat butir 216 untuk daftar lengkapnya.
+
+Verdict Sprint 7 di atas tetap berlaku sebagaimana ditulis: ia menilai Sprint 7, bukan
+Sprint 8.
