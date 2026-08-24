@@ -43,6 +43,12 @@ trait BuildsNotificationFixture
 
     protected User $adminA;
 
+    protected User $kepalaA;
+
+    protected User $bendaharaA;
+
+    protected User $superAdmin;
+
     protected User $parentA;
 
     protected User $otherParentA;
@@ -89,6 +95,12 @@ trait BuildsNotificationFixture
         $this->classB = $this->classFor($this->schoolB, $yearB, '7A');
 
         $this->adminA = $this->userFor($this->schoolA, RoleName::SchoolAdmin, ['name' => 'Admin Madani']);
+        $this->kepalaA = $this->userFor($this->schoolA, RoleName::KepalaSekolah, ['name' => 'Kepala Madani']);
+        $this->bendaharaA = $this->userFor($this->schoolA, RoleName::Bendahara, ['name' => 'Bendahara Madani']);
+
+        // Platform Level: school_id NULL. Ia bukan pengguna cabang mana pun, dan
+        // karena itu bukan penerima notifikasi cabang mana pun (butir 198).
+        $this->superAdmin = User::factory()->superAdmin()->create(['name' => 'Super Admin']);
         $this->parentA = $this->userFor($this->schoolA, RoleName::OrangTua, ['name' => 'Bapak Ahmad']);
         $this->otherParentA = $this->userFor($this->schoolA, RoleName::OrangTua, ['name' => 'Ibu Lain']);
         $this->teacherA = $this->userFor($this->schoolA, RoleName::Guru, ['name' => 'Pak Rudi']);
