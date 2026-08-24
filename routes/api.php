@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FeeTypeController;
 use App\Http\Controllers\Api\FinanceExportController;
 use App\Http\Controllers\Api\FinanceReportController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ParentPortalController;
 use App\Http\Controllers\Api\ParentPortalDetailController;
 use App\Http\Controllers\Api\PaymentController;
@@ -94,6 +95,24 @@ Route::prefix('v1')->group(function (): void {
         Route::get('parent/children/{studentId}/schedule', [ParentPortalDetailController::class, 'schedule'])
             ->whereNumber('studentId');
 
+        // ------------------------------------------------- 4.10 Notifikasi
+        // Kelompok penerima: Auth Level "Auth", dan kewenangannya bukan izin
+        // melainkan kepenerimaan — tidak ada peran yang boleh membaca
+        // notifikasi orang lain (butir 203).
+        Route::get('notifications', [NotificationController::class, 'index']);
+        // Didaftarkan sebelum `{id}` supaya tidak tertangkap sebagai id.
+        Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::post('notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
+        Route::post('notifications', [NotificationController::class, 'store']);
+        Route::get('notifications/{id}', [NotificationController::class, 'show'])->whereNumber('id');
+        Route::patch('notifications/{id}/read', [NotificationController::class, 'markRead'])
+            ->whereNumber('id');
+
+        // Riwayat pengumuman satu cabang, termasuk draf. Dipagari izin
+        // `notification.manage`, bukan `auth_level:admin` — label generik itu
+        // akan menutup Kepala Sekolah yang justru berwenang (butir 201).
+        Route::get('admin/notifications', [NotificationController::class, 'adminIndex']);
+
         // -------------------------------------------- 4.11 Student Portal
         // Identitas siswanya selalu dari token, tidak pernah dari parameter
         // (butir 181); perannya ditegakkan StudentPortalService.
@@ -125,8 +144,8 @@ Route::prefix('v1')->group(function (): void {
 | pengguna, yang di panel sudah berjalan lewat SchoolResource dan UserResource.
 | Lihat butir 145, 146.
 |
-| Seluruh API 4.11 kini ada: orang tua, guru, dan siswa. Yang tersisa dari
-| blueprint adalah 4.3/4.4 (manajemen tenant & pengguna) dan 4.10 notifikasi —
-| yang terakhir milik Sprint 8, dan sengaja tidak didaftarkan sebagai
-| placeholder (butir 183).
+| Seluruh API 4.11 ada, dan 4.10 tinggal satu: GET /notifications/{id}/wa-links
+| menyusul pada Batch 8.2 bersama NOTIF-02, dan sengaja belum didaftarkan
+| sebagai placeholder (butir 205). Yang tersisa dari blueprint adalah 4.3/4.4 —
+| manajemen tenant dan pengguna, yang di panel sudah berjalan.
 */

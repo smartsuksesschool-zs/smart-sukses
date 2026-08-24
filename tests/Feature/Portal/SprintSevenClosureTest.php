@@ -171,13 +171,19 @@ class SprintSevenClosureTest extends TestCase
         $this->assertNotNull($route, "Endpoint {$method} {$uri} belum terdaftar.");
     }
 
-    public function test_the_api_surface_is_exactly_thirty_three_routes(): void
+    /**
+     * Sprint 7 ditutup dengan 33 endpoint. Sprint 8 Batch 8.1 menambahkan tujuh
+     * endpoint notifikasi (API 4.10) dan tidak menyentuh satu pun yang lama.
+     * Angkanya tetap dijaga supaya penambahan berikutnya adalah keputusan, bukan
+     * tumpukan yang tidak disadari.
+     */
+    public function test_the_api_surface_is_exactly_forty_routes(): void
     {
         $api = collect(app('router')->getRoutes())
             ->filter(fn ($route) => str_starts_with($route->uri(), 'api/'))
             ->count();
 
-        $this->assertSame(33, $api);
+        $this->assertSame(40, $api);
     }
 
     /**
