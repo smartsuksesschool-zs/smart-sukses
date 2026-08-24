@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ParentPortalController;
 use App\Http\Controllers\Api\ParentPortalDetailController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\StudentFeeController;
+use App\Http\Controllers\Api\TeacherPortalController;
 use App\Http\Controllers\Api\TransactionController;
 use Illuminate\Support\Facades\Route;
 
@@ -92,6 +93,12 @@ Route::prefix('v1')->group(function (): void {
         Route::get('parent/children/{studentId}/schedule', [ParentPortalDetailController::class, 'schedule'])
             ->whereNumber('studentId');
 
+        // -------------------------------------------- 4.11 Teacher Portal
+        // Auth Level "Auth" pada API map; perannya (GURU/WALI_KELAS)
+        // ditegakkan TeacherPortalService (butir 171).
+        Route::get('teacher/dashboard', [TeacherPortalController::class, 'dashboard']);
+        Route::get('teacher/classes', [TeacherPortalController::class, 'classes']);
+
         // ------------------------------------------------- 4.3 Super Admin
         // Satu-satunya kelompok yang memang lintas cabang. Pagarnya berlapis:
         // `auth_level:super` di sini, dan pemeriksaan yang sama di dalam
@@ -110,8 +117,7 @@ Route::prefix('v1')->group(function (): void {
 | pengguna, yang di panel sudah berjalan lewat SchoolResource dan UserResource.
 | Lihat butir 145, 146.
 |
-| Dari API 4.11, seluruh endpoint orang tua kini ada. Yang tersisa —
-| /teacher/dashboard, /teacher/classes, dan seluruh /student — menyusul pada
-| batch Sprint 7 berikutnya, dan sengaja tidak didaftarkan sebagai placeholder
-| (butir 155).
+| Dari API 4.11, endpoint orang tua dan guru kini ada. Yang tersisa — seluruh
+| /student — menyusul pada batch Sprint 7 berikutnya, dan sengaja tidak
+| didaftarkan sebagai placeholder (butir 155).
 */
