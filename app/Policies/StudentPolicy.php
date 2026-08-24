@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Enums\PermissionName;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\StudentVisibility;
 
 /**
  * PRD 1.1.2 — Modul "Data Siswa (SIS)":
@@ -20,10 +21,20 @@ class StudentPolicy
         return $user->can(PermissionName::StudentView->value);
     }
 
+    /**
+     * Izin modul dan cabang saja tidak cukup untuk dua peran.
+     *
+     * SISWA dan ORANG_TUA sama-sama memegang `student.view` (matriks PRD 1.1.2
+     * — Data Siswa: SISWA ⭕, ORTU ⭕), sehingga pemeriksaan izin + cabang
+     * meloloskan keduanya ke **seluruh** siswa cabang itu. Batasan barisnya
+     * karena itu ikut diperiksa di sini, memakai aturan yang sama dengan
+     * tagihan dan rapor (butir 170, 188).
+     */
     public function view(User $user, Student $student): bool
     {
         return $user->can(PermissionName::StudentView->value)
-            && $this->sharesTenant($user, $student);
+            && $this->sharesTenant($user, $student)
+            && StudentVisibility::allows($user, $student);
     }
 
     public function create(User $user): bool
