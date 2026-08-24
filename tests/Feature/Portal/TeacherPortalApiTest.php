@@ -512,9 +512,15 @@ class TeacherPortalApiTest extends TestCase
         $this->assertNotSame(0, $body->json('data.notifications.unread_count'));
     }
 
-    public function test_no_notification_table_or_permission_was_introduced(): void
+    /**
+     * Tabelnya ada sejak Sprint 8 Batch 8.1, izinnya tidak: konflik PORTAL-02
+     * tidak diselesaikan dengan memberi guru kewenangan membuat pengumuman
+     * (butir 201).
+     */
+    public function test_the_teacher_still_holds_no_notification_permission(): void
     {
-        $this->assertFalse(Schema::hasTable('notifications'));
+        $this->assertTrue(Schema::hasTable('notifications'));
+
         $this->assertFalse($this->teacherA->can('notification.manage'));
         $this->assertFalse($this->teacherA->can('notification.view'));
     }

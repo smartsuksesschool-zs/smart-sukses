@@ -10,6 +10,7 @@ use Filament\Models\Contracts\HasAvatar;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -79,6 +80,17 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             'must_change_password' => 'boolean',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Siswa yang menjadikan akun ini sebagai akun portal orang tuanya
+     * (ERD: `students.parent_user_id`).
+     *
+     * Dipakai penyaringan penerima notifikasi bertarget kelas (butir 199).
+     */
+    public function parentedStudents(): HasMany
+    {
+        return $this->hasMany(Student::class, 'parent_user_id');
     }
 
     /**

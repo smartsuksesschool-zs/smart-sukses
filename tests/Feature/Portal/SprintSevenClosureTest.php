@@ -181,17 +181,24 @@ class SprintSevenClosureTest extends TestCase
     }
 
     /**
-     * Subsistem notifikasi milik Sprint 8; tidak boleh ada placeholder-nya.
+     * Subsistem notifikasi masuk pada Sprint 8. Yang dijaga di sini bukan lagi
+     * ketiadaannya, melainkan batas Batch 8.1: datanya dan API-nya sudah ada,
+     * tampilannya di ketiga portal belum — dan tidak boleh ada placeholder-nya.
      */
-    public function test_no_notification_endpoint_or_table_exists_yet(): void
+    public function test_the_notification_subsystem_has_not_reached_the_portals(): void
     {
-        foreach (collect(app('router')->getRoutes())->map(fn ($r) => $r->uri())->all() as $uri) {
+        $this->assertTrue(Schema::hasTable('notifications'));
+        $this->assertTrue(Schema::hasTable('notification_reads'));
+
+        $portalUris = collect(app('router')->getRoutes())
+            ->filter(fn ($route) => preg_match('#^(portal|teacher|student)\.#', (string) $route->getName()) === 1)
+            ->map(fn ($route) => $route->uri());
+
+        foreach ($portalUris as $uri) {
             $this->assertStringNotContainsString('notification', $uri);
             $this->assertStringNotContainsString('notifikasi', $uri);
             $this->assertStringNotContainsString('pengumuman', $uri);
         }
-
-        $this->assertFalse(Schema::hasTable('notifications'));
     }
 
     // ------------------------------------------------- navigasi & tautan

@@ -404,9 +404,15 @@ class StudentPortalApiTest extends TestCase
         $this->assertNotSame(0, $body->json('data.notifications.unread_count'));
     }
 
-    public function test_no_notification_table_or_permission_exists_yet(): void
+    /**
+     * Sprint 8 Batch 8.1 membawa tabel notifikasinya, bukan aksesnya: siswa tetap
+     * tidak memegang satu pun izin notifikasi, dan dasbornya belum menyajikan
+     * apa pun (butir 205).
+     */
+    public function test_the_student_still_holds_no_notification_permission(): void
     {
-        $this->assertFalse(Schema::hasTable('notifications'));
+        $this->assertTrue(Schema::hasTable('notifications'));
+
         $this->assertFalse($this->userA->can('notification.view'));
         $this->assertFalse($this->userA->can('notification.manage'));
     }
