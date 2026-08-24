@@ -73,15 +73,12 @@
         </div>
 
         {{--
-            PORTAL-03 meminta notifikasi; subsistemnya milik Sprint 8. Yang
-            ditampilkan keadaan sebenarnya, bukan angka nol (butir 183).
+            PORTAL-03 poin 3 — "Notifikasi dari sekolah tampil dengan
+            timestamp". Sejak Batch 8.2 isinya nyata (butir 214).
         --}}
-        <div class="portal-card">
-            <div class="portal-label">Notifikasi</div>
-            <div style="font-size:1rem;font-weight:600;margin-top:.25rem;">
-                Notifikasi belum tersedia
-            </div>
-            <div class="portal-muted">Modul notifikasi belum aktif pada tahap ini.</div>
-        </div>
+        <x-portal.notification-summary
+            :notifications="$data['notifications']"
+            :route="route('student.notifications')"
+        />
     @endif
 </div>

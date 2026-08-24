@@ -13,6 +13,8 @@ use App\Models\SchoolClass;
 use App\Models\Scopes\SchoolScope;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\Notification\NotificationCenter;
+use App\Services\Notification\NotificationPresenter;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
@@ -176,7 +178,7 @@ class TeacherPortalService
      *     today_schedule: array<int, array<string, mixed>>,
      *     active_classes: array<int, array<string, mixed>>,
      *     homeroom_class: SchoolClass|null,
-     *     notifications: array{available: bool, reason: string, unread_count: null, items: array<int, mixed>}
+     *     notifications: array{available: bool, unread_count: int, items: array<int, array<string, mixed>>}
      * }
      *
      * @throws AuthorizationException
@@ -201,7 +203,7 @@ class TeacherPortalService
             // /teacher/classes — bukan tafsir kedua (butir 172).
             'active_classes' => $this->classes($teacher),
             'homeroom_class' => $this->homeroomClass($teacher),
-            'notifications' => $this->notifications(),
+            'notifications' => $this->notifications($teacher),
         ];
     }
 
@@ -341,23 +343,32 @@ class TeacherPortalService
     }
 
     /**
-     * API 4.11 menyebut "notifikasi masuk" pada dashboard guru, dan
-     * subsistemnya milik Sprint 8 — belum ada tabel, belum ada modulnya.
+     * API 4.11 — "notifikasi masuk" pada dashboard guru.
      *
-     * Yang dikembalikan keadaan "belum tersedia" secara eksplisit, bentuk yang
-     * sama dengan kehadiran pada Batch 7.1 (butir 152). Angka nol akan terbaca
-     * sebagai "tidak ada notifikasi", padahal yang benar adalah "belum ada
-     * cara mengetahuinya" (butir 175).
+     * Sejak Batch 8.2 keadaannya nyata: `available` benar, dan angka nol
+     * akhirnya berarti tidak ada notifikasi alih-alih tidak ada cara
+     * mengetahuinya. Kunci `reason` hilang karena ia hanya punya arti selama
+     * jawabannya tidak tersedia (butir 214).
      *
-     * @return array{available: bool, reason: string, unread_count: null, items: array<int, mixed>}
+     * Ini tetap sisi **penerima** saja. Guru menerima notifikasi seperti
+     * pengguna cabang lain, dan itu tidak berarti ia boleh membuatnya: matriks
+     * 1.1.2 menandai GURU/WALI ❌ pada "Notifikasi (buat)", dan Batch 8.2 tidak
+     * mengubahnya (butir 213).
+     *
+     * @return array{available: bool, unread_count: int, items: array<int, array<string, mixed>>}
      */
-    protected function notifications(): array
+    protected function notifications(User $teacher): array
     {
+        $center = app(NotificationCenter::class);
+
         return [
-            'available' => false,
-            'reason' => 'notification_module_not_available',
-            'unread_count' => null,
-            'items' => [],
+            'available' => true,
+            'unread_count' => $center->unreadCount($teacher),
+            'items' => app(NotificationPresenter::class)->summaries(
+                // Batas dibaca database, bukan diambil dari lima puluh baris
+                // yang sudah ditarik (butir 206).
+                $center->feed($teacher, ['limit' => NotificationCenter::DASHBOARD_LIMIT]),
+            ),
         ];
     }
 

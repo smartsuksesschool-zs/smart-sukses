@@ -498,18 +498,23 @@ class TeacherPortalApiTest extends TestCase
     }
 
     /**
-     * API 4.11 meminta "notifikasi masuk"; modulnya milik Sprint 8. Yang
-     * dikembalikan keadaan sebenarnya, bukan angka nol (butir 175).
+     * API 4.11 — "notifikasi masuk". Sampai Batch 8.1 jawabannya keadaan "belum
+     * tersedia" yang eksplisit; sejak Batch 8.2 jawabannya nyata, jadi nol
+     * benar-benar berarti tidak ada notifikasi.
+     *
+     * `reason` ikut hilang: ia hanya punya arti selama jawabannya tidak
+     * tersedia (butir 214). Perilaku isinya diuji TeacherNotificationTest.
      */
-    public function test_notifications_are_reported_as_unavailable_rather_than_zero(): void
+    public function test_notifications_are_now_reported_as_available(): void
     {
         $body = $this->asUser($this->teacherA)->getJson('/api/v1/teacher/dashboard')->assertOk();
 
-        $body->assertJsonPath('data.notifications.available', false);
-        $body->assertJsonPath('data.notifications.unread_count', null);
+        $body->assertJsonPath('data.notifications.available', true);
+        $body->assertJsonPath('data.notifications.unread_count', 0);
         $body->assertJsonPath('data.notifications.items', []);
 
-        $this->assertNotSame(0, $body->json('data.notifications.unread_count'));
+        $this->assertIsInt($body->json('data.notifications.unread_count'));
+        $this->assertArrayNotHasKey('reason', $body->json('data.notifications'));
     }
 
     /**

@@ -15,6 +15,8 @@ use App\Models\Student;
 use App\Models\StudentClass;
 use App\Models\User;
 use App\Services\Grading\FinalScoreCalculator;
+use App\Services\Notification\NotificationCenter;
+use App\Services\Notification\NotificationPresenter;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
@@ -109,7 +111,7 @@ class StudentPortalService
             ],
             'today_schedule' => $this->lessons($student, $day),
             'latest_grades' => array_slice($this->subjectGrades($student), 0, self::SUMMARY_SUBJECTS),
-            'notifications' => $this->notifications(),
+            'notifications' => $this->notifications($user),
         ];
     }
 
@@ -337,21 +339,31 @@ class StudentPortalService
 
     /**
      * PORTAL-03 meminta menu Notifikasi dan API 4.11 meminta notifikasi pada
-     * dashboard; subsistemnya milik Sprint 8 dan belum ada.
+     * dashboard.
      *
-     * Bentuknya sama dengan kehadiran (butir 152) dan notifikasi guru
-     * (butir 175): keadaan "belum tersedia" yang eksplisit, bukan angka nol
-     * yang terbaca sebagai "tidak ada notifikasi".
+     * Sejak Batch 8.2 keadaannya nyata, bukan lagi "belum tersedia": angka nol
+     * di sini kini benar-benar berarti tidak ada notifikasi, bukan tidak ada
+     * cara mengetahuinya. Kunci `reason` karena itu hilang — ia hanya punya arti
+     * selama jawabannya tidak tersedia (butir 214).
      *
-     * @return array{available: bool, reason: string, unread_count: null, items: array<int, mixed>}
+     * Penerimanya ditentukan NotificationCenter, bukan dihitung ulang di sini:
+     * siswa bukan penerima notifikasi bertarget kelas, dan itu keputusan
+     * resolver (butir 199).
+     *
+     * @return array{available: bool, unread_count: int, items: array<int, array<string, mixed>>}
      */
-    protected function notifications(): array
+    protected function notifications(User $user): array
     {
+        $center = app(NotificationCenter::class);
+
         return [
-            'available' => false,
-            'reason' => 'notification_module_not_available',
-            'unread_count' => null,
-            'items' => [],
+            'available' => true,
+            'unread_count' => $center->unreadCount($user),
+            'items' => app(NotificationPresenter::class)->summaries(
+                // Batas dibaca database, bukan diambil dari lima puluh baris
+                // yang sudah ditarik (butir 206).
+                $center->feed($user, ['limit' => NotificationCenter::DASHBOARD_LIMIT]),
+            ),
         ];
     }
 

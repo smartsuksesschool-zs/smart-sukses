@@ -247,13 +247,22 @@ class TeacherPortalUiTest extends TestCase
         $response->assertDontSee('7B');
     }
 
-    public function test_the_dashboard_states_that_notifications_are_unavailable(): void
+    /**
+     * API 4.11 menyebut "notifikasi masuk". Sampai Sprint 7 dasbor menyatakan
+     * keadaan itu belum tersedia; sejak Batch 8.2 keadaannya nyata, dan yang
+     * dijaga di sini adalah hilangnya kalimat penangguhan beserta hadirnya
+     * tautan ke daftar penuhnya (butir 214).
+     */
+    public function test_the_dashboard_shows_real_notification_state(): void
     {
         $this->actingAs($this->teacherA);
 
         $this->get(route('teacher.dashboard'))
             ->assertOk()
-            ->assertSee('Notifikasi belum tersedia');
+            ->assertSee('Notifikasi Masuk')
+            ->assertDontSee('Notifikasi belum tersedia')
+            ->assertDontSee('Modul notifikasi belum aktif pada tahap ini.')
+            ->assertSee('href="'.route('teacher.notifications').'"', false);
     }
 
     // ---------------------------------------------------------- pintasan

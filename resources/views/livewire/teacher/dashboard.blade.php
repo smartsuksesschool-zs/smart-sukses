@@ -102,15 +102,12 @@
     </div>
 
     {{--
-        API 4.11 menyebut "notifikasi masuk" pada dasbor guru; modulnya milik
-        Sprint 8 dan belum ada. Keadaannya dinyatakan apa adanya, bukan
-        ditampilkan sebagai angka nol (butir 175).
+        API 4.11 — "notifikasi masuk". Sejak Batch 8.2 isinya nyata, dan daftar
+        penuhnya ada di halaman Notifikasi (butir 214).
     --}}
-    <div class="portal-card">
-        <div class="portal-label">Notifikasi Masuk</div>
-        <div style="font-size:1rem;font-weight:600;margin-top:.25rem;">
-            Notifikasi belum tersedia
-        </div>
-        <div class="portal-muted">Modul notifikasi belum aktif pada tahap ini.</div>
-    </div>
+    <x-portal.notification-summary
+        :notifications="$data['notifications']"
+        :route="route('teacher.notifications')"
+        label="Notifikasi Masuk"
+    />
 </div>

@@ -391,17 +391,20 @@ class StudentPortalApiTest extends TestCase
     }
 
     /**
-     * API 4.11 meminta notifikasi; subsistemnya milik Sprint 8 (butir 183).
+     * API 4.11 meminta notifikasi pada dasbor siswa. Sejak Batch 8.2 keadaannya
+     * nyata, dan `reason` hilang bersama penangguhannya (butir 214). Perilaku
+     * isinya diuji StudentNotificationTest.
      */
-    public function test_notifications_are_reported_as_unavailable_rather_than_zero(): void
+    public function test_notifications_are_now_reported_as_available(): void
     {
         $body = $this->asUser($this->userA)->getJson('/api/v1/student/dashboard')->assertOk();
 
-        $body->assertJsonPath('data.notifications.available', false);
-        $body->assertJsonPath('data.notifications.unread_count', null);
+        $body->assertJsonPath('data.notifications.available', true);
+        $body->assertJsonPath('data.notifications.unread_count', 0);
         $body->assertJsonPath('data.notifications.items', []);
 
-        $this->assertNotSame(0, $body->json('data.notifications.unread_count'));
+        $this->assertIsInt($body->json('data.notifications.unread_count'));
+        $this->assertArrayNotHasKey('reason', $body->json('data.notifications'));
     }
 
     /**
