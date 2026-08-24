@@ -4,6 +4,7 @@ namespace App\Livewire\Portal;
 
 use App\Enums\RoleName;
 use App\Models\User;
+use App\Support\PortalEligibility;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
@@ -104,26 +105,7 @@ class PortalLogin extends Component
      */
     protected function refusalReasonFor(?User $user): ?string
     {
-        if ($user === null || ! $user->is_active) {
-            return 'Akun ini tidak memiliki akses ke Portal Orang Tua.';
-        }
-
-        if (! $user->hasRole(RoleName::OrangTua->value)) {
-            return 'Akun ini tidak memiliki akses ke Portal Orang Tua.';
-        }
-
-        // Akun School Level tanpa cabang tidak punya satu pun anak yang dapat
-        // menjadi miliknya (butir 127, 148).
-        if ($user->school_id === null) {
-            return 'Akun ini tidak memiliki akses ke Portal Orang Tua.';
-        }
-
-        if ($user->must_change_password) {
-            return 'Kata sandi sementara wajib diganti sebelum masuk. '
-                .'Gunakan tautan lupa kata sandi untuk menyetel kata sandi baru.';
-        }
-
-        return null;
+        return PortalEligibility::refusalReasonFor($user, [RoleName::OrangTua]);
     }
 
     /**

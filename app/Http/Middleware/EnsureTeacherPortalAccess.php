@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Enums\RoleName;
+use App\Support\PortalEligibility;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -30,24 +31,14 @@ class EnsureTeacherPortalAccess
             return redirect()->route('filament.admin.auth.login');
         }
 
-        abort_unless($user->is_active, 403, 'Akun Anda tidak aktif.');
-
-        $isTeacher = $user->hasRole(RoleName::Guru->value)
-            || $user->hasRole(RoleName::WaliKelas->value);
-
-        abort_unless($isTeacher, 403);
-
-        abort_if($user->school_id === null, 403, 'Akun Anda belum terhubung ke cabang mana pun.');
-
-        // Arsitektur 3.4 — "password pertama wajib diganti saat login pertama".
-        // Portal berada di luar panel, jadi EnsurePasswordIsChanged tidak ikut
-        // berlaku di sini; tanpa baris ini portal guru akan menjadi jalan
-        // memutar yang sama seperti yang ditutup untuk orang tua (butir 158).
-        abort_if(
-            (bool) $user->must_change_password,
-            403,
-            'Kata sandi sementara wajib diganti sebelum menggunakan portal.',
+        // Syarat yang sama dengan kedua portal lain, dibaca dari satu tempat
+        // (butir 180). Wali kelas ikut karena memegang seluruh akses guru.
+        $refusal = PortalEligibility::refusalReasonFor(
+            $user,
+            [RoleName::Guru, RoleName::WaliKelas],
         );
+
+        abort_if($refusal !== null, 403, $refusal ?? '');
 
         return $next($request);
     }

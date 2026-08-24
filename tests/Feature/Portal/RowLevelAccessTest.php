@@ -322,7 +322,17 @@ class RowLevelAccessTest extends TestCase
             ->values()
             ->all();
 
-        $this->assertSame(['portal/nilai/{studentId}/rapor/{reportCardId}'], $reachable);
+        // Dua jalur portal, masing-masing dengan pagar kepemilikannya sendiri:
+        // orang tua meresolusi anaknya lebih dulu (butir 162), siswa
+        // meresolusi dirinya sendiri (butir 185). Keduanya hanya melayani
+        // rapor yang sudah terbit.
+        $this->assertEqualsCanonicalizing(
+            [
+                'portal/nilai/{studentId}/rapor/{reportCardId}',
+                'siswa/nilai/rapor/{reportCardId}',
+            ],
+            $reachable,
+        );
     }
 
     public function test_a_parent_may_only_view_their_own_childs_report_card(): void

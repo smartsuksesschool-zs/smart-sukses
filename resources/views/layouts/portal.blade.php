@@ -235,6 +235,18 @@
             border-bottom: 2px solid transparent;
         }
 
+        /* Menu yang belum dapat dibuka: terlihat, tetapi bukan tautan. */
+        .portal-nav__disabled {
+            display: inline-flex;
+            align-items: center;
+            min-height: 2.75rem;
+            padding: 0 .875rem;
+            white-space: nowrap;
+            color: var(--color-muted);
+            opacity: .55;
+            cursor: not-allowed;
+        }
+
         .portal-nav a[aria-current="page"] {
             color: var(--color-primary);
             border-bottom-color: var(--color-primary);
@@ -295,9 +307,14 @@
                             lewat rute keluar panel — satu login, satu keluar
                             (butir 179).
                         --}}
-                        <form method="POST" action="{{ request()->routeIs('teacher.*')
-                            ? route('filament.admin.auth.logout')
-                            : route('portal.logout') }}">
+                        @php
+                            $logoutRoute = match (true) {
+                                request()->routeIs('student.*') => route('student.logout'),
+                                request()->routeIs('teacher.*') => route('filament.admin.auth.logout'),
+                                default => route('portal.logout'),
+                            };
+                        @endphp
+                        <form method="POST" action="{{ $logoutRoute }}">
                             @csrf
                             <button type="submit" class="portal-logout">Keluar</button>
                         </form>
@@ -320,7 +337,25 @@
             --}}
             <nav class="portal-nav">
                 <div class="portal-nav__inner">
-                    @if (request()->routeIs('teacher.*'))
+                    @if (request()->routeIs('student.*'))
+                        {{--
+                            PORTAL-03 poin 1 menyebut empat menu. Notifikasi
+                            tetap tampil supaya menunya tidak diam-diam
+                            berkurang, tetapi tidak dapat diklik: subsistemnya
+                            milik Sprint 8 (butir 183).
+                        --}}
+                        <a href="{{ route('student.schedule') }}"
+                           @if (request()->routeIs('student.schedule')) aria-current="page" @endif>Jadwal</a>
+                        <a href="{{ route('student.grades') }}"
+                           @if (request()->routeIs('student.grades')) aria-current="page" @endif>Nilai</a>
+                        <span
+                            class="portal-nav__disabled"
+                            aria-disabled="true"
+                            title="Tersedia setelah modul notifikasi aktif"
+                        >Notifikasi</span>
+                        <a href="{{ route('student.profile') }}"
+                           @if (request()->routeIs('student.profile')) aria-current="page" @endif>Profil</a>
+                    @elseif (request()->routeIs('teacher.*'))
                         <a href="{{ route('teacher.dashboard') }}"
                            @if (request()->routeIs('teacher.dashboard')) aria-current="page" @endif>Dasbor</a>
                         <a href="{{ route('teacher.classes') }}"

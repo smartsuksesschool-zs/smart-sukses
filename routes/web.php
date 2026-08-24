@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Portal\ReportCardDownloadController;
+use App\Http\Controllers\Portal\StudentReportCardController;
 use App\Http\Middleware\EnsureParentPortalAccess;
+use App\Http\Middleware\EnsureStudentPortalAccess;
 use App\Http\Middleware\EnsureTeacherPortalAccess;
 use App\Livewire\Portal\ParentDashboard;
 use App\Livewire\Portal\ParentFees;
@@ -11,6 +13,11 @@ use App\Livewire\Portal\PortalLogin;
 use App\Livewire\Ppdb\RegistrationForm;
 use App\Livewire\Ppdb\SchoolList;
 use App\Livewire\Ppdb\StatusCheck;
+use App\Livewire\Student\StudentDashboard;
+use App\Livewire\Student\StudentGrades;
+use App\Livewire\Student\StudentLogin;
+use App\Livewire\Student\StudentProfile;
+use App\Livewire\Student\StudentSchedule;
 use App\Livewire\Teacher\TeacherClasses;
 use App\Livewire\Teacher\TeacherClassStudents;
 use App\Livewire\Teacher\TeacherDashboard;
@@ -92,4 +99,36 @@ Route::prefix('teacher')->name('teacher.')->middleware(EnsureTeacherPortalAccess
         ->whereNumber('classId')
         ->name('class-students');
     Route::get('/jadwal', TeacherSchedule::class)->name('schedule');
+});
+
+/*
+ * PORTAL-03 / API 4.11 — Student Portal.
+ *
+ * Siswa ditolak seluruh panel, persis seperti orang tua, jadi portal ini punya
+ * halaman masuknya sendiri. Syarat kelayakannya dibaca dari PortalEligibility,
+ * sumber yang sama dengan kedua portal lain (butir 180).
+ */
+Route::prefix('siswa')->name('student.')->group(function () {
+    Route::middleware('guest')->group(function () {
+        Route::get('/masuk', StudentLogin::class)->name('login');
+    });
+
+    Route::middleware(EnsureStudentPortalAccess::class)->group(function () {
+        Route::get('/', StudentDashboard::class)->name('dashboard');
+        Route::get('/jadwal', StudentSchedule::class)->name('schedule');
+        Route::get('/nilai', StudentGrades::class)->name('grades');
+        Route::get('/profil', StudentProfile::class)->name('profile');
+
+        Route::get('/nilai/rapor/{reportCardId}', StudentReportCardController::class)
+            ->whereNumber('reportCardId')
+            ->name('report-card');
+    });
+
+    Route::post('/keluar', function () {
+        Auth::logout();
+        session()->invalidate();
+        session()->regenerateToken();
+
+        return redirect()->route('student.login');
+    })->name('logout');
 });

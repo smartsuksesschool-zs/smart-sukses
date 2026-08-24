@@ -1,0 +1,87 @@
+<div>
+    @if ($data === null)
+        @include('livewire.student.partials.unlinked')
+    @else
+        <div class="portal-card" style="margin-bottom:1rem;">
+            <div class="portal-label">Beranda</div>
+            <div style="font-size:1.25rem;font-weight:700;">{{ $data['student']->full_name }}</div>
+            <div class="portal-muted">
+                NIS {{ $data['student']->nis }}
+                @if ($data['current_class'])
+                    — Kelas {{ $data['current_class']->name }}
+                @else
+                    — belum terdaftar di kelas pada tahun ajaran aktif
+                @endif
+                @if ($data['academic_year'])
+                    · {{ $data['academic_year']->name }}
+                @endif
+            </div>
+        </div>
+
+        {{-- API 4.11 — jadwal hari ini. --}}
+        <div class="portal-card" style="margin-bottom:1rem;">
+            <div class="portal-label" style="margin-bottom:.5rem;">
+                Jadwal Hari Ini — {{ $data['today']['day_label'] }}
+            </div>
+
+            @if (empty($data['today_schedule']))
+                <p class="portal-muted" style="margin:0;">Tidak ada pelajaran hari ini.</p>
+            @else
+                <ul class="portal-list">
+                    @foreach ($data['today_schedule'] as $lesson)
+                        <li>
+                            <span>
+                                <strong>{{ $lesson['start_time'] }}–{{ $lesson['end_time'] }}</strong>
+                                {{ $lesson['subject_name'] }}
+                                <div class="portal-muted">
+                                    {{ $lesson['teacher_name'] ?? 'Guru belum ditentukan' }}
+                                    @if ($lesson['room'])
+                                        — {{ $lesson['room'] }}
+                                    @endif
+                                </div>
+                            </span>
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+        </div>
+
+        {{-- API 4.11 — 5 nilai terbaru, satu entri per mata pelajaran. --}}
+        <div class="portal-card" style="margin-bottom:1rem;">
+            <div class="portal-label" style="margin-bottom:.5rem;">Nilai Terbaru</div>
+
+            @if (empty($data['latest_grades']))
+                <p class="portal-muted" style="margin:0;">
+                    Belum ada nilai pada tahun ajaran yang sedang berjalan.
+                </p>
+            @else
+                <ul class="portal-list">
+                    @foreach ($data['latest_grades'] as $subject)
+                        <li>
+                            <span>{{ $subject['subject_name'] }}</span>
+                            <strong>
+                                @if ($subject['final_score'] === null)
+                                    <span class="portal-muted">belum lengkap</span>
+                                @else
+                                    {{ number_format($subject['final_score'], 2, ',', '.') }}
+                                @endif
+                            </strong>
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
+        </div>
+
+        {{--
+            PORTAL-03 meminta notifikasi; subsistemnya milik Sprint 8. Yang
+            ditampilkan keadaan sebenarnya, bukan angka nol (butir 183).
+        --}}
+        <div class="portal-card">
+            <div class="portal-label">Notifikasi</div>
+            <div style="font-size:1rem;font-weight:600;margin-top:.25rem;">
+                Notifikasi belum tersedia
+            </div>
+            <div class="portal-muted">Modul notifikasi belum aktif pada tahap ini.</div>
+        </div>
+    @endif
+</div>
