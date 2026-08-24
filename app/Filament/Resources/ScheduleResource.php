@@ -7,6 +7,7 @@ use App\Filament\Resources\ScheduleResource\Pages;
 use App\Models\ClassSubject;
 use App\Models\Schedule;
 use App\Models\SchoolClass;
+use App\Support\TeacherClassVisibility;
 use Closure;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -14,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * KELAS-03 & KELAS-04 dan API 4.6 — /schedules.
@@ -197,6 +199,24 @@ class ScheduleResource extends Resource
                 ),
             ])
             ->all();
+    }
+
+    /**
+     * Guru hanya melihat jadwal mengajarnya sendiri.
+     *
+     * KELAS-04 menyebut "jadwal mengajar **saya**", dan PRD 1.1.1 mendefinisikan
+     * perannya sebagai "jadwal mengajar" — bukan jadwal seluruh cabang. Dua
+     * guru dapat mengajar di kelas yang sama, jadi penyaringnya guru pada
+     * `class_subjects`, bukan kelasnya (butir 176).
+     *
+     * Peran lain melewatinya tanpa perubahan.
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+        $user = Auth::user();
+
+        return TeacherClassVisibility::constrainSchedules($query, $user);
     }
 
     public static function getPages(): array

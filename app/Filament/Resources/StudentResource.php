@@ -9,6 +9,7 @@ use App\Filament\Resources\StudentResource\Pages;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\TeacherClassVisibility;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
@@ -264,6 +265,30 @@ class StudentResource extends Resource
     protected static function currentSchoolId(): ?int
     {
         return Auth::user()?->school_id;
+    }
+
+    /**
+     * Guru dan wali kelas hanya melihat siswa kelas ajarnya.
+     *
+     * PRD 1.1.1 mendefinisikan perannya sebagai "Input nilai, **lihat daftar
+     * siswa kelas ajar**, jadwal mengajar", dan SIS-04 menyebut "daftar siswa
+     * di kelas **yang saya ampu**". Matriks 1.1.2 memberi GURU/WALI ⭕ pada
+     * modul Data Siswa, tetapi ⭕ menyatakan boleh membaca modulnya — bukan
+     * boleh membaca setiap barisnya. Yang spesifik menang, dan tanpa pagar ini
+     * seorang guru melihat seluruh siswa cabang (butir 176).
+     *
+     * Kelas perwalian ikut, karena wali kelas memang bertanggung jawab atas
+     * rapor dan absensi kelas itu (PRD 1.1.1) walaupun tidak mengajar mata
+     * pelajaran di sana.
+     *
+     * Peran lain melewatinya tanpa perubahan sama sekali.
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+        $user = Auth::user();
+
+        return TeacherClassVisibility::constrainStudents($query, $user);
     }
 
     public static function getPages(): array
