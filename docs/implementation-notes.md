@@ -4079,6 +4079,148 @@ Mereka karena itu punya notifikasi yang belum ada tempatnya dibaca, kecuali lewa
 `GET /notifications`. Batch ini bercakupan portal, jadi itu di luar lingkupnya — bukan
 karena tidak diperlukan.
 
+## Sprint 8 Batch 8.3 — Notification Center di Panel Admin
+
+### 217. NOTIF-04 berlaku untuk "Pengguna", dan panel adalah tempat sebagian dari mereka bekerja
+
+| | |
+| --- | --- |
+| **Status** | Penutupan celah yang dicatat Batch 8.2 |
+| **Referensi** | NOTIF-04 — *"Sebagai **Pengguna**, saya dapat melihat notifikasi..."* |
+
+Butir 216 mencatatnya sebagai celah, dan batch ini menutupnya.
+
+Kalimat NOTIF-04 tidak menyebut peran. Yang menentukan siapa penerimanya adalah penargetan,
+dan penargetan ALL menjangkau **seluruh pengguna aktif cabang** (butir 198) — termasuk Admin
+Sekolah, Kepala Sekolah, dan Bendahara. Ketiganya karena itu benar-benar menerima notifikasi
+sejak Batch 8.1, tetapi sampai Batch 8.2 tidak punya satu pun tempat membacanya: portal
+bukan untuk mereka, dan yang tersisa hanya `GET /notifications` — sebuah endpoint, bukan
+halaman.
+
+Yang membuat celah ini mudah terlewat: ia tidak terlihat sebagai bug. Tidak ada yang error,
+tidak ada yang bocor, dan penerimanya tidak pernah tahu ada yang tidak sampai. Notifikasi
+mereka ada, tersimpan, dan tidak terbaca siapa pun.
+
+Halaman "Notifikasi Saya" di panel menutupnya. Ia tidak menambah endpoint, tidak menambah
+tabel, dan tidak mengubah satu pun aturan penargetan — ia hanya memberi tempat kepada data
+yang sudah ada.
+
+Guru dan Wali Kelas ikut mendapatkannya meskipun sudah punya kotak masuk di portal guru,
+dan itu keputusan yang perlu disebut alasannya. Mereka pengguna panel — Input Nilai ada di
+sana — jadi menutup halaman ini bagi mereka berarti menolak seseorang melihat notifikasinya
+**sendiri**, semata karena ia kebetulan sedang membuka permukaan yang lain. Kedua tampilan
+membaca `notification_reads` yang sama, sehingga keduanya tidak pernah dapat berbeda; yang
+ada bukan dua kotak masuk, melainkan satu kotak masuk yang terlihat dari dua tempat.
+
+### 218. Kotak masuk penerima dan manajemen pengumuman adalah dua hal, dan tetap dua
+
+| | |
+| --- | --- |
+| **Status** | Keputusan arsitektur |
+| **Referensi** | `01-prd/01-roles-and-access.md` — "Notifikasi (buat)"; API §4.10 |
+
+Panel kini punya dua menu bernotifikasi di grup Komunikasi, dan itu memang disengaja:
+
+- **Pengumuman** (`NotificationResource`) — sisi **pembuat**. Menulis, mengirim, dan riwayat
+  satu cabang **termasuk draf**. Dipagari izin `notification.manage`, yang dipegang
+  SUPER_ADMIN, SCHOOL_ADMIN, dan KEPALA_SEKOLAH.
+- **Notifikasi Saya** (`NotifikasiSaya`) — sisi **penerima**. Hanya yang ditujukan kepada
+  pengguna yang sedang masuk, tanpa draf siapa pun. **Tidak dipagari izin sama sekali.**
+
+Ketiadaan pagar izin pada yang kedua bukan kelalaian, melainkan konsekuensi butir 203:
+kepenerimaan bukan soal izin. Menuntut `notification.manage` di sana akan salah dua kali
+sekaligus. Ia akan menutup halaman bagi **Bendahara**, yang matriks tandai ❌ pada
+"Notifikasi (buat)" tetapi tetap penerima sah notifikasi ALL cabangnya — dan menolak
+seseorang membaca pesan yang memang dikirimkan kepadanya. Ia juga akan menyamakan "boleh
+membuat" dengan "boleh membaca", padahal justru kebalikannya yang benar: School Admin boleh
+membuat pengumuman dan **tidak** boleh membaca kotak masuk orang lain.
+
+Yang menjaga isinya bukan izin melainkan kepenerimaan. Pengguna yang bukan penerima apa pun
+membuka halaman kosong, bukan notifikasi orang lain — dan itu pagar yang lebih tepat, karena
+ia menjawab pertanyaan yang sebenarnya.
+
+Batch ini karena itu **tidak melebarkan** satu pun kewenangan pembuatan. Bendahara, Guru,
+dan Wali Kelas tetap ditolak `NotificationResource`; ketiga peran yang berwenang tetap
+berwenang. Ada test yang memeriksa keduanya sekaligus, supaya halaman baru ini tidak pernah
+menjadi pintu belakang bagi modul di sebelahnya.
+
+### 219. Lencana Filament tidak dapat menyegarkan dirinya, jadi ia tidak ditampilkan di tempat ia akan basi
+
+Filament merender navigasi sebagai bagian dari tata letak, dan tata letak hanya dirender saat
+halaman dimuat — bukan lagi ketika aksi Livewire berjalan. `getNavigationBadge()` karena itu
+tidak dipanggil ulang setelah pengguna menandai notifikasinya terbaca.
+
+Akibatnya persis sama dengan yang ditemukan di portal pada Batch 8.2 (butir 211): lencana
+akan menunjukkan angka lama tepat di halaman tempat pengguna baru saja menandai bacaannya —
+daftarnya berkata "semua sudah dibaca", loncengnya masih berkata tiga.
+
+Solusinya sama, dan disebut apa adanya sebagai **batas**, bukan fitur: di halaman Notifikasi
+Saya lencananya tidak ditampilkan, dan karena itu tidak dihitung. `getNavigationBadge()`
+mengembalikan `null` ketika rute yang sedang dibuka adalah rute halaman itu sendiri.
+
+Alternatif yang tidak diambil: menyegarkannya menuntut JavaScript sendiri, atau komponen
+lencana terpisah yang menghitung sekali lagi — keduanya berbiaya lebih besar daripada
+masalahnya. Halaman itu sudah menyebut jumlahnya sendiri di kepalanya, hidup, dengan
+`aria-live` sehingga perubahannya terdengar.
+
+Hasilnya: satu query hitungan per halaman panel, dan tidak ada satu tempat pun yang dapat
+menampilkan angka basi. Nol tidak pernah dicetak — lencananya hilang.
+
+### 220. Super Admin melewati izin dan scope, dan itu tetap tidak membuatnya penerima
+
+| | |
+| --- | --- |
+| **Status** | Pengerasan implementasi |
+| **Referensi** | Arsitektur 3.2.2; NOTIF-01 kriteria 2 |
+
+`Gate::before` di `AppServiceProvider` meluluskan SUPER_ADMIN untuk **setiap** ability, dan
+`SchoolScope` juga dilewatinya. Kalau kotak masuk ini dipagari policy, ia akan lolos; kalau
+isinya disaring policy, ia akan melihat segalanya.
+
+Ia tidak melihat apa pun, dan itu benar. Isinya disaring `NotificationCenter`, yang bertanya
+"apakah orang ini penerimanya" — bukan "apakah orang ini berwenang". Jawabannya untuk Super
+Admin adalah tidak: `school_id`-nya NULL, jadi ia bukan pengguna cabang mana pun, dan
+resolver menutup umpannya sepenuhnya (butir 198). Ia juga tidak dapat dijadikan target
+INDIVIDUAL, karena validasi target menuntut cabang yang sama.
+
+Kotak masuknya karena itu kosong, dan halaman ini menampilkannya kosong apa adanya —
+bukan diisi gabungan notifikasi seluruh cabang. Kotak masuk lintas cabang akan berarti
+mengarang penerima yang tidak pernah ditargetkan siapa pun, dan dasbor platform bukan tempat
+pengumuman cabang.
+
+Ini juga menunjukkan mengapa pagar berbasis kepenerimaan lebih kuat daripada pagar berbasis
+izin di tempat ini: `Gate::before` tidak punya apa pun untuk dilewati. Ada test yang
+memastikan Super Admin tidak menerima notifikasi ALL cabang mana pun, tidak memegang
+lencana, dan tetap dapat membuka halamannya.
+
+Bila kelak seorang Super Admin diberi `school_id` — model mengenalinya lewat peran, bukan
+lewat kolom NULL (butir 127) — ia akan menerima notifikasi cabang itu seperti pengguna lain.
+Itu konsisten, bukan pengecualian: yang menentukan tetap penargetan.
+
+### 221. Yang tidak dikerjakan di batch ini
+
+Batch ini hanya melengkapi sisi penerima bagi pengguna panel. Yang **belum** ada tidak
+berubah dari butir 216:
+
+| Belum ada | Sumber | Rencana |
+| --- | --- | --- |
+| `GET /notifications/{id}/wa-links` | `04-api/08-notifications.md`; NOTIF-02 | batch wa.me |
+| Normalisasi nomor & tombol "Buka WA" | NOTIF-02 kriteria 1, 3 | batch wa.me |
+| Trigger otomatis (PPDB, tagihan, rapor) | NOTIF-03 kriteria 1 | batch trigger |
+| Editor template notifikasi | NOTIF-03 kriteria 2 | batch trigger |
+| Retensi riwayat 90 hari | NOTIF-04 kriteria 3 | batch retensi |
+
+Retensi 90 hari tetap **tidak** dikerjakan dan tetap tidak dipalsukan: tidak ada scheduler,
+tidak ada job pembersih, dan tidak ada penyaring tanggal yang menyembunyikan notifikasi lama
+sehingga riwayatnya seakan-akan sudah dipangkas.
+
+Tidak ada skema yang berubah pada batch ini: tidak ada migrasi, tidak ada kolom, dan tidak
+ada endpoint API baru. Permukaan API tetap 40, dan `wa-links` tetap tidak ada.
+
+Dengan mendaratnya halaman ini, NOTIF-04 poin 1 dan 2 berlaku untuk **seluruh** peran yang
+dapat menerima notifikasi. Poin 3 — riwayat 90 hari — masih menunggu batch retensi, jadi
+NOTIF-04 belum dapat disebut selesai seluruhnya.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
