@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ParentPortalController;
 use App\Http\Controllers\Api\ParentPortalDetailController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\StudentFeeController;
+use App\Http\Controllers\Api\StudentPortalController;
 use App\Http\Controllers\Api\TeacherPortalController;
 use App\Http\Controllers\Api\TransactionController;
 use Illuminate\Support\Facades\Route;
@@ -93,6 +94,13 @@ Route::prefix('v1')->group(function (): void {
         Route::get('parent/children/{studentId}/schedule', [ParentPortalDetailController::class, 'schedule'])
             ->whereNumber('studentId');
 
+        // -------------------------------------------- 4.11 Student Portal
+        // Identitas siswanya selalu dari token, tidak pernah dari parameter
+        // (butir 181); perannya ditegakkan StudentPortalService.
+        Route::get('student/dashboard', [StudentPortalController::class, 'dashboard']);
+        Route::get('student/schedule', [StudentPortalController::class, 'schedule']);
+        Route::get('student/grades', [StudentPortalController::class, 'grades']);
+
         // -------------------------------------------- 4.11 Teacher Portal
         // Auth Level "Auth" pada API map; perannya (GURU/WALI_KELAS)
         // ditegakkan TeacherPortalService (butir 171).
@@ -117,7 +125,8 @@ Route::prefix('v1')->group(function (): void {
 | pengguna, yang di panel sudah berjalan lewat SchoolResource dan UserResource.
 | Lihat butir 145, 146.
 |
-| Dari API 4.11, endpoint orang tua dan guru kini ada. Yang tersisa — seluruh
-| /student — menyusul pada batch Sprint 7 berikutnya, dan sengaja tidak
-| didaftarkan sebagai placeholder (butir 155).
+| Seluruh API 4.11 kini ada: orang tua, guru, dan siswa. Yang tersisa dari
+| blueprint adalah 4.3/4.4 (manajemen tenant & pengguna) dan 4.10 notifikasi —
+| yang terakhir milik Sprint 8, dan sengaja tidak didaftarkan sebagai
+| placeholder (butir 183).
 */
