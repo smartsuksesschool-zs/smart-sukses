@@ -3519,6 +3519,289 @@ Phase 2), notifikasi (Sprint 8), dan pintasan Buat Pengumuman (konflik kewenanga
 belum diputuskan). Verdict-nya karena itu "implementation complete with declared deferred
 dependencies", bukan "100% acceptance criteria".
 
+## Sprint 8 Batch 8.1 — Fondasi Notifikasi, Pengumuman Manual, dan API Inti
+
+### 191. `GENERAL` diterima di pintu masuk, `ANNOUNCEMENT` yang tersimpan
+
+| | |
+| --- | --- |
+| **Status** | Penyelesaian konflik dokumen |
+| **Referensi** | `02-erd/07-tables-komunikasi.md` — Tabel: notifications, kolom `type` |
+| **Bertentangan dengan** | `01-prd/02-features-phase1.md` — NOTIF-01 kriteria 1 |
+
+NOTIF-01 menyebut kategori **ACADEMIC/BILLING/EMERGENCY/GENERAL**. ERD menyebut
+**ANNOUNCEMENT/BILLING/ACADEMIC/EMERGENCY/SYSTEM**. Dua daftar ini tidak dapat keduanya
+benar: `GENERAL` tidak ada di ERD, dan `ANNOUNCEMENT`/`SYSTEM` tidak ada di PRD.
+
+Yang tersimpan adalah nilai ERD. Alasannya bukan urutan dokumen semata, melainkan bahwa
+kolomnya sendiri yang didefinisikan di sana: menambahkan `GENERAL` ke ENUM berarti
+mengarang nilai skema yang tidak diminta siapa pun, sedangkan ERD sudah menyediakan
+padanan yang persis sama maknanya — kategori untuk pengumuman biasa, yaitu `ANNOUNCEMENT`.
+
+Maka `GENERAL` diperlakukan sebagai **alias masukan**, bukan nilai simpan.
+`NotificationType::fromInput()` menormalkannya ke `ANNOUNCEMENT`, sehingga klien yang
+menulis integrasinya dari PRD tetap bekerja tanpa satu pun baris tersimpan memakai kata
+yang tidak dikenal ERD.
+
+`SYSTEM` tidak ditawarkan sebagai pilihan pada pembuatan manual
+(`NotificationType::manualCases()`). Kategori itu milik notifikasi otomatis (NOTIF-03),
+dan membiarkannya dipilih tangan manusia membuat pengumuman biasa menyamar sebagai
+notifikasi sistem.
+
+### 192. `UNIQUE(notification_id, user_id)` pada `notification_reads`
+
+| | |
+| --- | --- |
+| **Status** | Pengerasan implementasi di luar ERD |
+| **Referensi** | `02-erd/07-tables-komunikasi.md` — Tabel: notification_reads |
+
+ERD tidak menyebutkan indeks unik pada pivot ini, tetapi menyebut arti kolomnya:
+`read_at` adalah *"Waktu pertama kali dibaca"*. Kalimat itu hanya dapat benar bila
+pasangan (notifikasi, pengguna) muncul paling banyak sekali — kalau ada dua baris, tidak
+ada yang tahu mana yang "pertama".
+
+Indeks unik ditambahkan sebagai penegak arti itu, bukan sebagai optimasi. Konsekuensinya:
+
+- `markRead()` memakai `firstOrCreate`, jadi pemanggilan kedua mengembalikan baris yang
+  sudah ada dan **tidak** menimpa `read_at`;
+- `markAllRead()` memakai `insertOrIgnore`, jadi menandai semua berulang kali tetap
+  idempoten tanpa perlu membaca dulu apa yang sudah ditandai;
+- dua permintaan yang tiba bersamaan tidak dapat menghasilkan dua baris — yang kedua
+  ditolak database, bukan diandalkan pada pemeriksaan di aplikasi.
+
+### 193. Pivot bacaan tidak punya `school_id`, dan itu memang tidak diperlukan
+
+| | |
+| --- | --- |
+| **Status** | Penyimpangan dari pola `BelongsToSchool` |
+| **Referensi** | `02-erd/07-tables-komunikasi.md` — Tabel: notification_reads |
+
+Hampir semua tabel di repo ini membawa `school_id` dan `SchoolScope`. `notification_reads`
+tidak, karena ERD memberinya persis empat kolom dan tidak satu pun di antaranya cabang.
+
+Menambahkannya akan menciptakan sumber kebenaran kedua tentang cabang sebuah notifikasi —
+dan sumber kedua yang dapat berbeda dari yang pertama adalah bug yang menunggu waktu.
+Pivot ini tidak pernah dipakai sebagai pagar tenant; ia selalu disandarkan pada query
+notifikasi yang **sudah** tersaring (`NotificationCenter::visible()`), sehingga baris
+bacaan tidak pernah menjadi jalan masuk ke notifikasi cabang lain.
+
+`public $timestamps = false;` mengikuti alasan yang sama: ERD tidak memberi tabel ini
+`created_at`/`updated_at`, dan `read_at` sudah menjawab satu-satunya pertanyaan waktu yang
+relevan.
+
+### 194. `target_id` tanpa foreign key
+
+| | |
+| --- | --- |
+| **Status** | Mengikuti ERD apa adanya |
+| **Referensi** | `02-erd/07-tables-komunikasi.md` — *"class_id atau user_id jika bukan ALL"* |
+
+Satu kolom yang menunjuk dua tabel berbeda tidak dapat diberi foreign key. ERD memang
+mendefinisikannya begitu, dan repo ini tidak mengubahnya menjadi dua kolom terpisah:
+perubahan itu akan menyimpang dari skema sumber demi kenyamanan yang tidak diminta.
+
+Konsekuensinya, makna kolom ini dijaga aplikasi, bukan database. `AnnouncementPublisher`
+memvalidasi bahwa target benar-benar ada, berada **di cabang yang sama**, dan — untuk
+INDIVIDUAL — masih aktif. Tanpa pemeriksaan itu, `target_id` hanyalah angka.
+
+### 195. Yang sudah terkirim tidak dapat diubah
+
+| | |
+| --- | --- |
+| **Status** | Keputusan implementasi (Phase 1), bukan isi dokumen |
+| **Referensi** | `04-api/08-notifications.md`; NOTIF-04 kriteria 3 |
+
+Blueprint tidak menyebutkan pengeditan pengumuman sama sekali: tidak ada `PUT`/`PATCH`
+untuk isinya, dan tidak ada `DELETE`. Yang disebut justru sebaliknya — riwayat notifikasi
+disimpan.
+
+Pilihan yang diambil adalah yang menjaga jejak: **draf** dapat diubah dan dihapus dari
+peredaran dengan tidak pernah dikirim, sedangkan **yang sudah terkirim** tidak dapat
+diubah maupun dihapus. Alasannya sederhana: penerimanya sudah membacanya. Mengubah isi
+sesudah itu membuat riwayat tidak lagi menggambarkan apa yang benar-benar dikirim, dan
+menghapusnya menghilangkan bukti bahwa pesan itu pernah ada.
+
+Ditegakkan berlapis: `NotificationPolicy::update()` menolak record yang sudah terkirim,
+`AnnouncementPublisher::update()` dan `::send()` menolaknya lagi di service, dan panel
+menyembunyikan tombol Ubah/Kirim. `delete()` mengembalikan `false` tanpa syarat.
+
+Ini keputusan implementasi, bukan keputusan owner. Bila kelak pemilik produk meminta
+pengumuman terkirim dapat diralat, yang tepat adalah menerbitkan pengumuman ralat —
+bukan menulis ulang yang lama.
+
+### 196. Satu definisi "penerima", dua bentuk
+
+| | |
+| --- | --- |
+| **Status** | Keputusan arsitektur |
+| **Referensi** | NOTIF-01 kriteria 2–3; `04-api/08-notifications.md` |
+
+Pertanyaan "siapa yang menerima notifikasi ini" dipakai setidaknya empat kali: umpan
+penerima, lencana belum dibaca, penandaan terbaca, dan nanti pembuatan tautan wa.me
+(NOTIF-02). Menuliskannya empat kali berarti empat definisi yang perlahan berbeda, dan
+perbedaannya baru ketahuan ketika seseorang menerima pengumuman yang bukan untuknya.
+
+`NotificationRecipientResolver` adalah satu-satunya tempat aturan itu ditulis. Ia
+menyediakan dua bentuk dari aturan yang **sama**:
+
+- `recipientsOf(Notification)` — daftar penerima satu notifikasi, untuk sisi admin;
+- `visibleTo(Builder, User)` — predikat query untuk umpan seorang pengguna.
+
+Keduanya wajib memutuskan hal yang sama, dan itu bukan janji di komentar:
+`NotificationFoundationTest::test_the_resolver_and_the_feed_predicate_agree()`
+membandingkan keduanya untuk setiap kombinasi target × pengguna dan gagal bila keduanya
+menyimpang.
+
+### 197. Umpan disaring predikat, bukan perulangan
+
+Godaan yang paling mudah adalah memuat 50 notifikasi lalu memanggil resolver untuk setiap
+baris. Itu 50 query untuk satu halaman, dan lencana belum dibaca akan menambah 50 lagi.
+
+Karena itu `visibleTo()` ditulis sebagai predikat SQL, keadaan terbaca ditempelkan lewat
+satu `selectSub`, dan `unreadCount()` adalah satu agregat yang tidak menarik satu pun
+baris notifikasi. Jumlah query untuk umpan tidak bergantung pada banyaknya notifikasi —
+ada test yang menghitungnya.
+
+Satu catatan portabilitas yang hanya muncul saat suite dijalankan terhadap MySQL: alias
+`read_at` hasil `selectSub` **tidak** dapat dipakai di `WHERE`. SQLite menerimanya, MySQL
+menolaknya dengan *Unknown column*. Filter `is_read` karena itu memakai
+`whereExists`/`whereNotExists` atas subquery yang sama dengan `unreadCount()` — yang
+sekaligus berarti "sudah dibaca" hanya punya satu definisi SQL di kelas ini.
+
+### 198. Target ALL berarti pengguna aktif cabang itu, bukan semua orang
+
+| | |
+| --- | --- |
+| **Status** | Pembacaan literal NOTIF-01 |
+| **Referensi** | NOTIF-01 kriteria 2 — *"mengirim ke semua user aktif di cabang"* |
+
+Tiga kata dalam kalimat itu masing-masing menutup satu kebocoran: **user** (bukan siswa
+sebagai entitas, melainkan akun), **aktif** (`is_active = 1`), dan **di cabang**
+(`school_id` notifikasi).
+
+Super Admin tidak ikut. `school_id`-nya NULL, jadi ia bukan pengguna cabang mana pun, dan
+`SchoolScope` yang dilewatinya tidak mengubah fakta itu. Ia juga tidak dapat dijadikan
+target INDIVIDUAL, karena validasi target menuntut cabang yang sama. Keduanya konsisten:
+dasbor platform bukan tempat pengumuman cabang.
+
+### 199. Target CLASS hanya orang tua, dan satu orang tua satu kali
+
+| | |
+| --- | --- |
+| **Status** | Pembacaan literal NOTIF-01 |
+| **Referensi** | NOTIF-01 kriteria 3 — *"hanya untuk orang tua siswa kelas tersebut"* |
+
+Bukan siswanya, bukan gurunya, bukan wali kelasnya. Kalimatnya menyebut orang tua, dan
+kata "hanya" ada di sana. Implementasinya menyaring peran `ORANG_TUA` **dan** kepemilikan
+anak dengan penempatan berstatus `ACTIVE` di kelas itu — penempatan yang sudah `MOVED`
+atau `GRADUATED` bukan keanggotaan kelas sekarang.
+
+Satu orang tua dengan dua anak di kelas yang sama muncul **sekali**. Ini bukan efek
+samping: penyaringannya memakai `whereHas`, yang bertanya "apakah ada anak yang cocok",
+bukan `join`, yang akan menghasilkan satu baris per anak. Untuk umpan, duplikasi hanya
+membuat daftar aneh; untuk NOTIF-02 nanti, duplikasi berarti orang tua yang sama menerima
+dua pesan WhatsApp yang identik.
+
+### 200. Pengirim dan waktu kirim tidak pernah datang dari klien
+
+Tiga nilai selalu ditentukan server, dan payload yang menyebutkannya diabaikan diam-diam:
+
+- `sender_id` — dari sesi/token yang membuat permintaan;
+- `sent_at` — dari jam server saat penerbitan;
+- `school_id` — dari cabang pelakunya, kecuali Super Admin (butir 202).
+
+Endpoint `POST /notifications` menerima `action: draft|send`, bukan `is_draft` dan
+`sent_at`. Dua kolom itu dapat saling bertentangan bila diisi terpisah (`is_draft = 1`
+dengan `sent_at` terisi berarti apa?), sedangkan satu kata kerja tidak bisa.
+
+Panel dan API memakai `AnnouncementPublisher` yang sama, sehingga tidak ada jalur yang
+dapat melewatkan pemeriksaan ini.
+
+### 201. Label "Admin" pada API tidak dipakai sebagai pagar kewenangan
+
+| | |
+| --- | --- |
+| **Status** | Penyelesaian konflik dokumen |
+| **Referensi** | `01-prd/01-roles-and-access.md` — baris "Notifikasi (buat)"; NOTIF-01 |
+| **Bertentangan dengan** | `04-api/08-notifications.md` — kolom Auth Level "Admin" |
+
+API 4.10 memberi `POST /notifications` label Auth Level **Admin**, yang menurut konvensi
+`04-api/01-conventions-and-auth.md` berarti SCHOOL_ADMIN dan SUPER_ADMIN saja. Sementara
+itu matriks hak akses memberi modul "Notifikasi (buat)" kepada **SUPER_ADMIN ✅,
+SCHOOL_ADMIN ✅, KEPALA ✅**.
+
+Yang menang adalah kewenangan fungsional yang spesifik, bukan label generik: menutup
+Kepala Sekolah berarti mencabut hak yang diberikan dokumen lain secara eksplisit,
+sedangkan membukanya untuk Kepala tidak melanggar apa pun kecuali sebuah label ringkas.
+
+Karena itu pagarnya adalah izin `notification.manage` — yang sudah dibagikan
+`RolePermissionSeeder` persis kepada ketiga peran itu — bukan middleware `auth_level:admin`.
+Tidak ada izin baru yang dibuat untuk Sprint 8.
+
+Konflik PORTAL-02 (pintasan "Buat Pengumuman" di dasbor guru) **tetap terbuka** dan tidak
+diselesaikan diam-diam dengan memberi guru izin ini. Statusnya masih seperti dicatat pada
+penutupan Sprint 7.
+
+### 202. Super Admin wajib memilih cabang, tidak mendapat gabungan semua cabang
+
+Super Admin melewati `SchoolScope`. Bila dibiarkan, `GET /admin/notifications` akan
+mengembalikan riwayat seluruh cabang tercampur tanpa penanda, dan `POST /notifications`
+tanpa `school_id` akan mencoba menulis baris dengan `school_id` NULL pada kolom NOT NULL.
+
+Keduanya ditutup dengan aturan yang sama, dan aturan itu sudah dipakai operasi
+satu-cabang lain di repo ini: Super Admin **wajib** menyebut cabangnya. Tanpa itu,
+jawabannya 422, bukan diam-diam menampilkan semuanya. Di panel, pilihan cabang muncul
+hanya untuk Super Admin; peran cabang tidak pernah melihat kolomnya, dan nilai cabang dari
+form mereka diabaikan.
+
+### 203. Membaca notifikasi bukan soal izin, melainkan soal kepenerimaan
+
+Sisi penerima (`/notifications*`) tidak dipagari izin sama sekali, dan itu disengaja.
+Tidak ada peran yang boleh membaca notifikasi orang lain — termasuk School Admin, yang
+boleh membuat pengumuman tetapi tidak boleh membaca kotak masuk seseorang. Yang
+menentukan seseorang boleh membaca sebuah notifikasi adalah apakah notifikasi itu memang
+ditujukan kepadanya, dan pertanyaan itu dijawab resolver (butir 196), bukan policy.
+
+Bentuk responsnya mengikuti prinsip yang sama. `NotificationResource` adalah daftar-izin;
+yang sengaja tidak ikut adalah `school_id`, `target_id` (id kelas atau pengguna lain),
+`wa_template` (milik NOTIF-02, berisi teks yang sudah diisi variabel dan dapat memuat data
+penerima lain), serta `is_draft` — penerima tidak pernah melihat draf, jadi menyebutkan
+statusnya pun tidak ada gunanya.
+
+Membaca daftar juga bukan tindakan "membaca notifikasi": `GET` tidak pernah menulis ke
+`notification_reads`. Hanya `PATCH /notifications/{id}/read` dan `POST
+/notifications/mark-all-read` yang menandai, sesuai NOTIF-04 kriteria 2 yang menyebut
+klik, bukan tampil.
+
+### 204. Notifikasi yang bukan untuknya adalah 404, bukan 403
+
+Mengembalikan 403 untuk notifikasi milik orang lain berarti mengonfirmasi bahwa
+notifikasi dengan id itu ada. Untuk sumber daya yang dipagari **baris**, bukan modul,
+konfirmasi itu sendiri adalah kebocoran: seseorang dapat menyusuri id untuk mengetahui
+berapa banyak pengumuman yang beredar dan kapan.
+
+Karena itu `NotificationCenter` menyaring lebih dulu lalu `findOrFail`: notifikasi cabang
+lain, notifikasi untuk kelas lain, dan draf semuanya menjadi 404 yang sama persis. Pola
+ini sama dengan pagar baris pada portal orang tua, guru, dan siswa di Sprint 7.
+
+### 205. Yang tidak dikerjakan di batch ini, dan disebut apa adanya
+
+Batch ini membangun fondasi, pengumuman manual, dan API inti. Yang **belum** ada, beserta
+tempatnya:
+
+| Belum ada | Sumber | Rencana |
+| --- | --- | --- |
+| `GET /notifications/{id}/wa-links` | `04-api/08-notifications.md`; NOTIF-02 | batch wa.me berikutnya |
+| Trigger otomatis (PPDB, tagihan, rapor) | NOTIF-03 kriteria 1 | batch trigger |
+| Editor template notifikasi | NOTIF-03 kriteria 2 | batch trigger |
+| Lonceng + halaman notifikasi di portal | NOTIF-03 kriteria 3; NOTIF-04 kriteria 1; PORTAL-03 | batch UI portal |
+| Retensi riwayat 90 hari | NOTIF-04 kriteria 3 | batch retensi |
+
+Kolom `wa_template` sudah ada di skema karena ERD mendefinisikannya, tetapi belum diisi
+siapa pun; ia sengaja tidak diekspos ke penerima (butir 203). Menu Notifikasi di portal
+siswa masih berupa penanda kosong seperti dicatat pada butir 183 — batch ini menyediakan
+datanya, bukan tampilannya.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
