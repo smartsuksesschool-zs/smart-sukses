@@ -3,14 +3,19 @@
 namespace App\Services\Grading;
 
 use App\Enums\AttitudePredicate;
+use App\Enums\NotificationType;
+use App\Models\AcademicYear;
 use App\Models\ClassSubject;
 use App\Models\Grade;
 use App\Models\GradeConfig;
 use App\Models\ReportCard;
+use App\Models\School;
 use App\Models\SchoolClass;
 use App\Models\Scopes\SchoolScope;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\Notification\SystemNotificationPublisher;
+use App\Support\StudentWaTemplate;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -25,6 +30,16 @@ use Illuminate\Validation\ValidationException;
  */
 class ReportCardGenerator
 {
+    /**
+     * Teks WA bawaan bila `schools.wa_template_rapor` belum diisi.
+     *
+     * Copy implementasi, bukan keputusan pemilik: kolomnya disebut blueprint,
+     * bunyinya tidak. Hanya memakai token yang sudah mapan (butir 238, 239).
+     */
+    protected const DEFAULT_REPORT_TEMPLATE = 'Assalamu\'alaikum Bapak/Ibu [ortu]. '
+        .'Rapor ananda [nama] di [sekolah] telah diterbitkan dan dapat dilihat pada portal orang tua. '
+        .'Terima kasih.';
+
     public function __construct(
         protected FinalScoreCalculator $calculator,
         protected ComponentScoreAggregator $aggregator,
@@ -283,15 +298,84 @@ class ReportCardGenerator
             ]);
         }
 
-        $reportCard->forceFill([
-            'is_published' => true,
-            'published_at' => now(),
-            'published_by' => $publisher->getKey(),
-        ])->save();
+        // Peralihan keadaan dan notifikasinya satu transaksi. Rapor yang
+        // terbit tanpa notifikasinya masih dapat diperbaiki; notifikasi yang
+        // terbit tanpa rapornya memberi tahu orang tua sesuatu yang tidak ada
+        // (butir 244).
+        DB::transaction(function () use ($reportCard, $publisher): void {
+            $reportCard->forceFill([
+                'is_published' => true,
+                'published_at' => now(),
+                'published_by' => $publisher->getKey(),
+            ])->save();
 
-        $this->lockConfigsFinalisedBy($reportCard);
+            $this->lockConfigsFinalisedBy($reportCard);
+
+            // NOTIF-03 poin 1 — "rapor diterbitkan". Hanya di sini, yaitu tepat
+            // pada peralihan is_published false → true: generate draf,
+            // membuka, mengunduh PDF, dan penerbitan kedua yang ditolak di atas
+            // tidak pernah sampai ke baris ini (butir 246).
+            $this->announcePublishedReport($reportCard);
+        });
 
         return $reportCard->refresh();
+    }
+
+    /**
+     * Notifikasi otomatis kepada orang tua siswa pemilik rapor.
+     *
+     * NOTIF-03 memusatkan alur ini pada orang tua, jadi akun siswa **tidak**
+     * dipakai sebagai pengganti ketika orang tuanya belum punya akun portal.
+     * Rapornya tetap terbit; yang tidak ada hanyalah notifikasinya
+     * (butir 240).
+     */
+    protected function announcePublishedReport(ReportCard $reportCard): void
+    {
+        $student = $reportCard->student()->withoutGlobalScope(SchoolScope::class)->first();
+
+        if ($student === null) {
+            return;
+        }
+
+        $schoolId = (int) $reportCard->school_id;
+
+        $school = School::query()->withoutGlobalScope(SchoolScope::class)->find($schoolId);
+
+        $parent = $student->parent_user_id === null
+            ? null
+            : User::query()
+                ->withoutGlobalScope(SchoolScope::class)
+                ->where('school_id', $schoolId)
+                ->active()
+                ->find((int) $student->parent_user_id);
+
+        $year = AcademicYear::query()
+            ->withoutGlobalScope(SchoolScope::class)
+            ->find($reportCard->academic_year_id);
+
+        app(SystemNotificationPublisher::class)->toUser(
+            $parent,
+            $schoolId,
+            // Tidak ada pemetaan kategori eksplisit di sumber; ACADEMIC dipilih
+            // karena rapor adalah hasil akademik (butir 236).
+            NotificationType::Academic,
+            'Rapor diterbitkan',
+            $year === null
+                ? sprintf('Rapor %s telah diterbitkan dan dapat dilihat pada portal orang tua.', $student->full_name)
+                : sprintf(
+                    'Rapor %s semester %s tahun ajaran %s telah diterbitkan dan dapat dilihat pada portal orang tua.',
+                    $student->full_name,
+                    (string) $year->semester,
+                    (string) $year->name,
+                ),
+            StudentWaTemplate::render(
+                $school?->wa_template_rapor,
+                self::DEFAULT_REPORT_TEMPLATE,
+                $student,
+                $school,
+                $parent,
+            ),
+        );
     }
 
     /**
