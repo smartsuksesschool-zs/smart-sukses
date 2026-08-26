@@ -4910,6 +4910,210 @@ tidak ada, dan yang tersedia hanya kanal wa.me manual. NOTIF-03 karena itu belum
 disebut selesai seluruhnya, dan butir 240 menyebutkan apa yang dibutuhkan untuk
 menutupnya.
 
+## Sprint 8 Batch 8.6 — Retensi 90 hari (NOTIF-04 poin 3)
+
+### 252. Lamanya disebut sumber, caranya tidak
+
+| | |
+| --- | --- |
+| **Status** | Penafsiran implementasi |
+| **Referensi** | NOTIF-04 kriteria 3 — "Riwayat notifikasi tersimpan 90 hari." |
+
+Kalimat itu seluruh sumbernya. Blueprint menyebut **lamanya** penyimpanan dan tidak
+menyebut satu pun mekanismenya: tidak ada penjadwal, perintah, job, kolom penanda,
+maupun penyaring yang dituliskan di mana pun. `CON-46` — yang sempat disebut sebagai
+rujukan — **tidak ada** di `smartsukses-docs/`; seluruh berkas sumber sudah ditelusuri
+dan satu-satunya kemunculan angka 90 pada konteks notifikasi adalah baris NOTIF-04 itu.
+
+Yang ada di sumber tentang retensi justru untuk hal lain: NFR 1.4 dan Security 3.4
+menetapkan **backup** harian dengan retensi **30 hari**. Angka itu tidak dipinjam ke
+sini — backup dan riwayat aplikasi adalah dua hal berbeda — tetapi ia dipakai sebagai
+pertimbangan penjadwalan (butir 259).
+
+Seluruh keputusan pada batch ini karena itu **penafsiran implementasi**, bukan
+keputusan pemilik: batas waktunya, perlakuan terhadap draf, jam eksekusinya, dan
+pilihan menghapus permanen alih-alih mengarsipkan.
+
+### 253. Batasnya dihitung dari `sent_at`, dan ditetapkan sekali
+
+| | |
+| --- | --- |
+| **Status** | Penafsiran implementasi |
+
+Yang disimpan 90 hari adalah **riwayat yang diterima penerima**, jadi yang menghitung
+mundur adalah saat pengumumannya terbit — `sent_at`, bukan `created_at`.
+
+`updated_at` khususnya tidak dipakai, dan itu bukan detail. Kalau ia yang dipakai,
+menandai notifikasi terbaca — atau menyentuh barisnya karena alasan teknis apa pun —
+akan memperpanjang umurnya, dan retensi berhenti menjadi soal waktu lalu menjadi soal
+aktivitas. Ada test yang men-`touch()` baris tua dan memastikan ia tetap terhapus.
+
+Batasnya ditetapkan **sekali** dan diuji dari kedua sisi: `sent_at < now - 90 hari`
+dihapus, sedangkan yang tepat berada di titik batas **tetap ada** — ia masih berada di
+dalam hari ke-90-nya, dan "tersimpan 90 hari" paling wajar dibaca sebagai mencakup hari
+terakhirnya. Test memakai waktu beku dan memeriksa tiga baris: satu detik sebelum
+batas, tepat di batas, dan satu detik sesudahnya.
+
+### 254. Draf tidak pernah ikut terpangkas
+
+| | |
+| --- | --- |
+| **Status** | Penafsiran implementasi |
+
+Retensi hanya menyentuh notifikasi yang **sudah terkirim**. Draf tidak pernah sampai
+kepada siapa pun, sehingga tidak ada "riwayat" yang sedang disimpan untuknya — dan
+NOTIF-04 seluruhnya berbicara tentang notifikasi yang diterima pengguna.
+
+Menghapus draf berarti menghapus pekerjaan Admin yang belum selesai semata karena
+tanggalnya tua. Itu kerusakan, bukan pembersihan, dan tidak ada satu pun kalimat sumber
+yang memintanya. Baris dengan `sent_at` NULL juga tidak pernah ikut, berapa pun umurnya.
+
+Sumber tidak menyatakan sebaliknya di mana pun; kalau kelak ternyata pemilik
+menghendaki draf ikut kedaluwarsa, aturannya ada di satu tempat dan tinggal diubah di
+sana.
+
+### 255. Satu ambang, satu tempat
+
+Aturan 90 hari hidup **hanya** di `NotificationRetentionService`. Perintah artisan dan
+penjadwal memanggilnya; tidak ada ambang kedua yang ditanam di controller, portal,
+panel, atau resolver.
+
+Konsekuensinya disengaja dan perlu disebut: **tidak ada penyaring per-permintaan.**
+Notifikasi yang sudah lewat 90 hari tetapi belum sempat dipangkas masih terlihat di
+umpan penerimanya sampai pemangkasan berikutnya berjalan. Menambahkan penyaring
+tanggal di sisi baca akan berarti dua definisi "kedaluwarsa" yang perlahan berbeda, dan
+riwayat yang tampak hilang padahal masih ada di basis data. Ada test yang justru
+memastikan notifikasi berumur 400 hari **masih terlihat** sebelum dipangkas — bukti
+bahwa tidak ada penyaring diam-diam.
+
+Retensi juga tidak pernah memanggil `NotificationRecipientResolver`. Yang menentukan
+sebuah baris kedaluwarsa hanyalah umurnya; siapa penerimanya tidak relevan, dan
+menghitung ulang penerima untuk memutuskan penghapusan akan membuat pemangkasan
+bergantung pada data yang bisa berubah. Notifikasi CLASS yang kelasnya sudah tidak ada
+pun tetap terpangkas seperti yang lain.
+
+### 256. Pemeliharaan sistem, lintas cabang, tanpa pengguna
+
+Pemangkasan melepas `SchoolScope`. Itu wajib: di dalam perintah CLI tidak ada pengguna
+terautentikasi, dan `SchoolScope` yang tidak menemukan pengguna tidak memasang batasan
+apa pun — tetapi bila perintahnya kebetulan berjalan dalam konteks seorang pengguna
+cabang, scope-nya justru akan mempersempit sapuan ke satu cabang saja, dan cabang lain
+diam-diam tidak pernah terpangkas. Ada test yang menjalankan pemangkasan sambil
+`actingAs` seorang Admin Sekolah dan memastikan kedua cabang tetap bersih.
+
+Pelonggarannya sempit — hanya di dalam service retensi. Ada test terpisah yang, setelah
+pemangkasan berjalan, memastikan permintaan biasa tetap terkurung cabangnya.
+
+### 257. Chunk, transaksi per chunk, dan tanpa memuat riwayat ke PHP
+
+Riwayat lama bisa panjang. Pemangkasan mengambil sekumpulan id, menghapusnya, lalu
+mengulang sampai habis — bukan menarik seluruhnya ke PHP lalu menyaring di memori.
+
+Sengaja bukan `chunkById()`: baris yang dibacanya ikut dihapus dalam putaran yang sama,
+dan paging di atas himpunan yang menyusut selalu berisiko melewatkan baris.
+
+Transaksinya **per putaran**, bukan satu untuk seluruh pemangkasan. Satu transaksi
+raksasa akan menahan kunci berjam-jam pada pemasangan yang riwayatnya panjang; putaran
+yang gagal hanya membatalkan putaran itu, dan tidak ada notifikasi yang setengah
+terhapus dengan jejak bacanya tertinggal.
+
+Ada test yang membandingkan jumlah SELECT untuk 3 baris dan 30 baris dan menuntut
+keduanya tetap kecil — pembacaannya per putaran, bukan per baris.
+
+### 258. Penghapusan lewat model, supaya jejaknya tetap ada
+
+| | |
+| --- | --- |
+| **Status** | Keputusan arsitektur |
+| **Referensi** | Security 3.4 — "Semua aksi CUD dicatat"; butir 45, 46 |
+
+Penghapusannya lewat model, bukan `delete()` massal query builder, dan itu keputusan
+yang perlu alasannya. Listener CUD mendengarkan `eloquent.deleted`, sedangkan
+penghapusan massal lewat query builder tidak memicu model event sama sekali (butir 46).
+Memakainya berarti pemangkasan tidak meninggalkan jejak sedikit pun — padahal justru
+penghapusan permanen yang paling perlu tercatat.
+
+Barisnya tercatat dengan `user_id` NULL, dan itu bukan tambalan: skema `audit_logs`
+memang sudah menyatakan "NULL sah: job antrean dan perintah CLI berjalan tanpa
+pengguna". Tidak ada aktor karangan yang dibuat untuk mengisi kolom itu. `ip_address`
+juga NULL, karena memang tidak ada request. `school_id`-nya diambil dari barisnya
+sendiri, sehingga jejak audit tetap benar per cabang meski sapuannya lintas cabang.
+
+Biayanya satu baris audit per notifikasi yang dipangkas. Itu diterima karena
+`audit_logs` menyimpan **metadata saja** — tabel, id, aksi, waktu — dan bukan isi
+notifikasinya. Kalau ia menyimpan salinan isinya, pencatatan ini justru akan membatalkan
+retensi: datanya hanya berpindah tabel. Ia tidak, jadi tidak.
+
+`notification_reads` ikut terhapus lewat `cascadeOnDelete()` yang sudah ada pada foreign
+key-nya sejak Batch 8.1 — bukan lewat penghapusan kedua yang ditulis tangan, yang justru
+dapat berbeda dari aturan basis datanya. Ada test yang memastikan tidak ada baris baca
+yatim yang tersisa.
+
+Penghapusannya **permanen**. Tidak ada `SoftDeletes` yang ditambahkan, tidak ada tabel
+arsip, dan tidak ada ekspor yang dikarang: "tersimpan 90 hari" berarti sesudah itu
+tidak tersimpan, dan soft delete akan membuat kalimat itu tidak benar sambil terlihat
+seolah-olah benar.
+
+### 259. Jam eksekusi adalah detail implementasi
+
+Pemangkasan dijadwalkan harian lewat penjadwal Laravel yang sudah ada, di
+`routes/console.php`. Sebelum batch ini berkas itu hanya memuat perintah `inspire`
+bawaan; inilah entri terjadwal pertama project ini.
+
+Blueprint tidak menyebut kapan pemangkasan berjalan, jadi jamnya **detail
+implementasi**. Yang dipilih 03:10, dengan alasan yang dapat diperiksa: Security 3.4
+menjadwalkan backup harian pukul 02:00 WIB, sehingga memangkas sesudahnya berarti baris
+yang dihapus sudah ikut terbawa backup malam itu dan masih dapat dipulihkan bila
+ternyata dibutuhkan. Itu pertimbangan operasional, bukan kebutuhan bisnis, dan test
+penjadwal sengaja memeriksa **cadence hariannya** — bentuk ekspresi cron-nya — bukan
+jam tertentu.
+
+`withoutOverlapping()` dipasang supaya dua eksekusi tidak berjalan bersamaan pada
+pemasangan yang pemangkasannya panjang. Perintahnya sendiri sudah idempoten; ini hanya
+menghindari usaha yang terbuang.
+
+Pemangkasannya **tidak** diantrekan. Antrean dipakai project ini untuk pekerjaan yang
+dipicu request dan tidak boleh menahan penggunanya (Tech stack 3.1 — generate tagihan
+massal, PDF rapor); perintah terjadwal sudah berjalan di luar request, sehingga
+menambahkan antrean hanya menambah satu titik gagal.
+
+**Syarat go-live:** penjadwal Laravel menuntut satu entri cron di server
+(`* * * * * php artisan schedule:run`). Tanpa itu perintahnya tidak akan pernah
+berjalan dan retensi tidak terjadi — tidak ada yang error, riwayatnya hanya tumbuh
+terus. Ini dicatat sebagai kebutuhan deployment; VPS produksi **tidak** dikonfigurasi
+pada batch ini.
+
+### 260. Yang terpangkas benar-benar hilang dari semua permukaan
+
+Karena pemangkasannya fisik, notifikasi yang lewat menghilang dengan sendirinya dari
+umpan penerima, hitungan belum-dibaca, detail notifikasi, ketiga kotak masuk portal,
+"Notifikasi Saya" di panel, dan riwayat admin. Tidak ada satu pun kode tambahan yang
+diperlukan untuk itu, dan tidak ada satu pun yang ditambahkan.
+
+`GET /notifications/{id}/wa-links` atas notifikasi yang sudah dipangkas menjawab 404
+biasa — perilaku record-tidak-ada yang sudah ada — dan tidak membocorkan satu digit pun
+nomor telepon. Tidak ada artefak tautan wa.me yang disimpan terpisah dan bisa
+tertinggal; tautannya selalu dibangun dari notifikasinya, jadi hilangnya notifikasi
+menghilangkan tautannya.
+
+### 261. Yang tersisa setelah Sprint 8
+
+Retensi menutup NOTIF-04 poin 3. Yang **tidak** ditutup Sprint 8, dan tetap terbuka:
+
+| Terbuka | Sifat | Perlu keputusan |
+| --- | --- | --- |
+| Penerima otomatis tanpa akun portal (butir 240) | celah struktural skema | pemilik produk/skema |
+| Shortcut "Buat Pengumuman" pada dasbor guru (butir 213) | konflik sumber PORTAL-02 vs matriks 1.1.2 | pemilik produk |
+| Normalisasi nomor HP (butir 222) | pengerasan implementasi | boleh ditinjau pemilik |
+| Kosakata placeholder SPP & rapor (butir 238) | tidak didefinisikan sumber | pemilik produk |
+
+Tidak ada skema yang berubah pada batch ini: tidak ada migrasi, tidak ada kolom, dan
+tidak ada endpoint baru — permukaan API tetap 41. Satu perintah artisan dan satu entri
+penjadwal ditambahkan; keduanya bukan skema.
+
+Ringkasan lengkap status Sprint 8 beserta buktinya ada di
+[`sprint-8-closure.md`](sprint-8-closure.md).
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
