@@ -9,6 +9,7 @@ use App\Filament\Resources\PpdbRegistrationResource\Pages;
 use App\Models\AcademicYear;
 use App\Models\PpdbRegistration;
 use App\Models\Student;
+use App\Services\Ppdb\PpdbStatusUpdater;
 use App\Support\PpdbWaTemplate;
 use App\Support\WhatsAppLink;
 use Filament\Forms;
@@ -198,10 +199,13 @@ class PpdbRegistrationResource extends Resource
                 'status_notes' => $record->status_notes,
             ])
             ->action(function (PpdbRegistration $record, array $data): void {
-                $record->update([
-                    'status' => $data['status'],
-                    'status_notes' => $data['status_notes'],
-                ]);
+                // Status dan notifikasi otomatisnya ditulis satu jalur, satu
+                // transaksi (butir 247).
+                app(PpdbStatusUpdater::class)->update(
+                    $record,
+                    PpdbStatus::from($data['status']),
+                    $data['status_notes'],
+                );
 
                 // NOTIF-03 poin 1 — trigger tersedia untuk "PPDB status berubah";
                 // Phase 1 memakai wa.me manual link (Ringkasan Eksekutif).
