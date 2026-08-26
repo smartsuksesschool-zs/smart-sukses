@@ -173,17 +173,18 @@ class SprintSevenClosureTest extends TestCase
 
     /**
      * Sprint 7 ditutup dengan 33 endpoint. Sprint 8 Batch 8.1 menambahkan tujuh
-     * endpoint notifikasi (API 4.10) dan tidak menyentuh satu pun yang lama.
-     * Angkanya tetap dijaga supaya penambahan berikutnya adalah keputusan, bukan
-     * tumpukan yang tidak disadari.
+     * endpoint notifikasi (API 4.10), dan Batch 8.4 menambahkan yang terakhir
+     * dari daftar itu — GET /notifications/{id}/wa-links (NOTIF-02). Angkanya
+     * tetap dijaga supaya penambahan berikutnya adalah keputusan, bukan tumpukan
+     * yang tidak disadari.
      */
-    public function test_the_api_surface_is_exactly_forty_routes(): void
+    public function test_the_api_surface_is_exactly_forty_one_routes(): void
     {
         $api = collect(app('router')->getRoutes())
             ->filter(fn ($route) => str_starts_with($route->uri(), 'api/'))
             ->count();
 
-        $this->assertSame(40, $api);
+        $this->assertSame(41, $api);
     }
 
     /**

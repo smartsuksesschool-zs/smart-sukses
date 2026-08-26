@@ -11,6 +11,7 @@ use App\Models\Notification;
 use App\Models\Scopes\SchoolScope;
 use App\Services\Notification\AnnouncementPublisher;
 use App\Services\Notification\NotificationCenter;
+use App\Services\Notification\NotificationWaLinkService;
 use App\Support\Api\ApiResponse;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
@@ -148,6 +149,51 @@ class NotificationController extends Controller
             'marked' => $marked,
             'unread_count' => app(NotificationCenter::class)->unreadCount($request->user()),
         ]);
+    }
+
+    /**
+     * GET /notifications/{id}/wa-links — "Generate daftar wa.me link untuk
+     * semua penerima notifikasi ini" (NOTIF-02).
+     *
+     * Urutannya disengaja. Notifikasinya diselesaikan lebih dulu **dengan**
+     * global scope-nya, sehingga id milik cabang lain berakhir 404 dan tidak
+     * pernah mengonfirmasi bahwa id itu ada (butir 116). Kewenangan diperiksa
+     * sesudahnya dan sebelum satu pun nomor telepon dibaca: respons ini memuat
+     * data pribadi, jadi pemeriksaannya tidak boleh terjadi setelah datanya
+     * terlanjur disusun (butir 227).
+     *
+     * @throws AuthorizationException
+     * @throws ModelNotFoundException
+     * @throws ValidationException
+     */
+    public function waLinks(Request $request, int $id): JsonResponse
+    {
+        $notification = Notification::query()->findOrFail($id);
+
+        if (! $request->user()->can('waLinks', $notification)) {
+            throw new AuthorizationException('Anda tidak berwenang membuka daftar link WhatsApp pengumuman ini.');
+        }
+
+        // Draf belum menjadi komunikasi kepada siapa pun. Mengirimkan tautannya
+        // lewat WhatsApp akan menyampaikan pengumuman yang menurut sistem tidak
+        // pernah diterbitkan, dan penerimanya tidak akan menemukannya di kotak
+        // masuk. 422, bukan 404: notifikasinya memang ada dan pelakunya memang
+        // boleh melihatnya — yang belum ada adalah keadaan "siap kirim"
+        // (butir 224).
+        if (! $notification->isSent()) {
+            throw ValidationException::withMessages([
+                'id' => 'Pengumuman ini masih draf, jadi belum ada tautan wa.me yang siap kirim.',
+            ]);
+        }
+
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'availability' => ['nullable', Rule::in(['available', 'unavailable'])],
+        ]);
+
+        return ApiResponse::success(
+            app(NotificationWaLinkService::class)->linksFor($notification, $filters),
+        );
     }
 
     /**

@@ -470,17 +470,25 @@ class PortalNotificationIntegrationTest extends TestCase
             ->assertSee('Semua notifikasi sudah dibaca');
     }
 
-    /** Tidak ada endpoint API baru pada batch ini, dan wa-links tetap tidak ada. */
-    public function test_the_api_surface_is_unchanged_and_wa_links_stays_absent(): void
+    /**
+     * Permukaan API 4.10 kini lengkap.
+     *
+     * Batch 8.2 menjaga angka ini di 40 dan menuntut wa-links **tidak** ada,
+     * karena saat itu memang belum dikerjakan. Batch 8.4 mengerjakannya, jadi
+     * yang dijaga sekarang kebalikannya: tepat satu endpoint tambahan, dan
+     * endpoint itu memang wa-links — bukan sesuatu yang lain ikut terbawa.
+     */
+    public function test_the_api_surface_gained_exactly_the_wa_links_endpoint(): void
     {
         $uris = collect(app('router')->getRoutes())
             ->filter(fn ($route) => str_starts_with($route->uri(), 'api/'))
             ->map(fn ($route) => $route->uri());
 
-        $this->assertSame(40, $uris->count());
+        $this->assertSame(41, $uris->count());
 
-        foreach ($uris as $uri) {
-            $this->assertStringNotContainsString('wa-links', $uri);
-        }
+        $this->assertSame(
+            ['api/v1/notifications/{id}/wa-links'],
+            $uris->filter(fn (string $uri) => str_contains($uri, 'wa-links'))->values()->all(),
+        );
     }
 }

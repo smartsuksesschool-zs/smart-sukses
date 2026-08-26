@@ -43,6 +43,28 @@ class NotificationPolicy
     }
 
     /**
+     * NOTIF-02 / API 4.10 — GET /notifications/{id}/wa-links.
+     *
+     * Pagarnya sama dengan sisi pengelolaan lainnya, dan itu keputusan yang
+     * perlu disebut alasannya. NOTIF-02 berbunyi "Sebagai **Admin**" — lebih
+     * umum, bukan lebih sempit, daripada NOTIF-01 yang menyebut "Admin
+     * Sekolah" — dan API 4.10 memberi endpoint ini label Auth Level yang
+     * **persis sama** dengan POST /notifications. Butir 201 sudah memutuskan
+     * label generik itu tidak dipakai sebagai pagar, karena akan menutup Kepala
+     * Sekolah yang justru diberi kewenangan penuh atas modul Notifikasi oleh
+     * matriks 1.1.2. Memakai aturan berbeda di sini akan berarti Kepala boleh
+     * menerbitkan pengumuman tetapi tidak boleh melihat daftar kirimnya
+     * (butir 223).
+     *
+     * Yang tetap dijaga adalah cabangnya: daftar ini memuat nomor telepon, dan
+     * `view()` sudah menuntut notifikasi itu milik cabang pelakunya.
+     */
+    public function waLinks(User $user, Notification $notification): bool
+    {
+        return $this->view($user, $notification);
+    }
+
+    /**
      * Hanya draf yang dapat diubah.
      *
      * Blueprint tidak menyebutkan pengeditan pengumuman sama sekali. Yang

@@ -108,6 +108,13 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('notifications/{id}/read', [NotificationController::class, 'markRead'])
             ->whereNumber('id');
 
+        // NOTIF-02 — daftar wa.me per penerima. Berada di kelompok penerima
+        // secara URL, tetapi kewenangannya kewenangan pengelolaan: isinya
+        // nomor telepon seluruh penerima, bukan notifikasi milik pemanggil
+        // (butir 223).
+        Route::get('notifications/{id}/wa-links', [NotificationController::class, 'waLinks'])
+            ->whereNumber('id');
+
         // Riwayat pengumuman satu cabang, termasuk draf. Dipagari izin
         // `notification.manage`, bukan `auth_level:admin` — label generik itu
         // akan menutup Kepala Sekolah yang justru berwenang (butir 201).
