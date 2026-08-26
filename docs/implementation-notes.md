@@ -4523,6 +4523,393 @@ Kepala Sekolah (butir 223). NOTIF-01 dan NOTIF-04 poin 1–2
 sudah selesai sejak batch sebelumnya. Yang tersisa di modul Notifikasi tinggal
 NOTIF-03 seluruhnya dan NOTIF-04 poin 3.
 
+## Sprint 8 Batch 8.5 — Trigger otomatis & template WhatsApp cabang (NOTIF-03)
+
+### 234. Tiga trigger, dan tepat tiga
+
+| | |
+| --- | --- |
+| **Status** | Ruang lingkup |
+| **Referensi** | NOTIF-03 kriteria 1 |
+
+NOTIF-03 menyebutkan daftarnya tertutup: "Trigger tersedia untuk: PPDB status
+berubah, tagihan baru terbit, rapor diterbitkan." Titik integrasinya karena itu tepat
+tiga, dan seluruhnya di dalam jalur bisnis yang sudah ada:
+
+| Kejadian | Tempat | Pemicu tepatnya |
+| --- | --- | --- |
+| Status PPDB berubah | `PpdbStatusUpdater::update()` | `status` lama ≠ status baru |
+| Tagihan baru terbit | `StudentFeeGenerator::issue()` | setiap `StudentFee` yang benar-benar baru dibuat |
+| Rapor diterbitkan | `ReportCardGenerator::publish()` | peralihan `is_published` false → true |
+
+Tidak ada yang keempat. Tidak ada pengingat jatuh tempo, tidak ada pengingat
+pembayaran, tidak ada pengingat ketidakhadiran, dan tidak ada penjadwal yang
+menerbitkan notifikasi atas dasar waktu. Ada test yang melewati tanggal jatuh tempo
+enam puluh hari dan memastikan tidak ada satu baris pun bertambah — bukan karena
+fiturnya dimatikan, melainkan karena memang tidak ada yang mendengarkan.
+
+### 235. Notifikasi tanpa penulis manusia butuh jalur tulisnya sendiri
+
+| | |
+| --- | --- |
+| **Status** | Keputusan arsitektur |
+| **Referensi** | ERD 2.2 — `notifications.sender_id` "NULL jika notifikasi sistem otomatis" |
+
+`AnnouncementPublisher` tidak dipakai untuk notifikasi otomatis, dan sebaliknya.
+Keduanya menulis tabel yang sama tetapi menjawab pertanyaan yang berbeda: pengumuman
+manual **selalu** punya pengirim dan wajib melewati pemeriksaan kewenangan
+pembuatnya, sedangkan notifikasi otomatis tidak punya siapa pun untuk diperiksa.
+Memaksa keduanya lewat satu kelas berarti salah satu pemeriksaan harus dilonggarkan —
+dan yang akan dilonggarkan adalah pemeriksaan pada jalur yang dipakai manusia.
+
+`SystemNotificationPublisher` karena itu berdiri sendiri, dengan aturan yang tetap:
+`sender_id` NULL, `is_draft` false, `sent_at` waktu server, `target_type` INDIVIDUAL,
+dan `target_id` sebuah `users.id` nyata.
+
+`sender_id` NULL adalah penanda asal-sistem yang memang disediakan ERD. Tidak ada
+akun palsu yang dibuat untuk menjadi "pengirim sistem": akun semacam itu akan muncul
+di daftar pengguna, dapat dipakai login bila kelak diberi sandi, dan membuat jejak
+audit menunjuk seseorang yang tidak ada.
+
+### 236. Pemetaan kategori — penafsiran implementasi
+
+| | |
+| --- | --- |
+| **Status** | Penafsiran implementasi |
+
+Tidak ada satu pun sumber yang memetakan ketiga kejadian ini ke nilai
+`notifications.type`. Yang dipakai:
+
+| Kejadian | Kategori | Alasan |
+| --- | --- | --- |
+| Status PPDB berubah | `SYSTEM` | ERD menyediakan SYSTEM justru untuk notifikasi yang dipicu sistem, dan perubahan status PPDB bukan akademik maupun tagihan |
+| Tagihan baru terbit | `BILLING` | ERD memang menyediakannya untuk tagihan |
+| Rapor diterbitkan | `ACADEMIC` | rapor adalah hasil akademik |
+
+Enum `NotificationType` tidak diubah — SYSTEM sudah ada sejak Batch 8.1 dan memang
+disiapkan untuk batch ini. Ia tetap tidak dapat dipilih pada pengumuman manual
+(`manualCases()`), sehingga pengumuman buatan manusia tidak dapat menyamar sebagai
+notifikasi sistem (butir 191).
+
+Ini penafsiran implementasi, bukan keputusan pemilik.
+
+### 237. Sintaks template tidak baru, dan tidak boleh baru
+
+| | |
+| --- | --- |
+| **Status** | Keputusan arsitektur |
+| **Referensi** | PPDB-04 poin 1; `App\Support\PpdbWaTemplate` (Sprint 3) |
+
+Sprint 3 sudah menetapkan bentuknya: token `[…]` di dalam teks biasa, diganti
+`str_replace`. Batch ini memakainya apa adanya. Template PPDB tetap ditangani
+`PpdbWaTemplate` dengan kosakatanya sendiri; tagihan dan rapor memakai
+`StudentWaTemplate` dengan sintaks yang sama persis.
+
+Yang **tidak** dilakukan, dan sengaja: tidak ada Blade yang dirender, tidak ada
+`eval`, tidak ada mesin template, tidak ada HTML, dan tidak ada kode pengguna yang
+dijalankan. Template adalah teks yang ditulis Admin Sekolah, dan teks yang ditulis
+pengguna tidak pernah menjadi kode — apalagi teks yang tujuan akhirnya dikirim ke
+orang tua.
+
+### 238. Kosakata token untuk tagihan dan rapor sengaja sempit
+
+| | |
+| --- | --- |
+| **Status** | Penafsiran implementasi |
+
+Blueprint menyebut ketiga kolom template ada dan dapat diedit, tetapi tidak pernah
+mendefinisikan daftar token untuk SPP maupun rapor. Yang disediakan karena itu hanya
+tiga, dan ketiganya **sudah** punya makna yang ditetapkan PPDB:
+
+- `[nama]` — nama siswa (di PPDB: nama calon siswa);
+- `[sekolah]` — nama cabang;
+- `[ortu]` — nama orang tua/wali.
+
+Token untuk nominal, jatuh tempo, periode, atau semester **tidak** disediakan.
+Mengarangnya berarti membuat kosakata template baru hanya demi kenyamanan, dan
+kosakata semacam itu sulit dicabut setelah sekolah menulis templatenya.
+
+Ada alasan kedua yang kebetulan searah. Teks WA dikirim **manual** ke nomor yang bisa
+saja salah — Batch 8.4 sudah menunjukkan nomor tersimpan tidak selalu benar — dan
+nominal tagihan bukan hal yang sebaiknya ikut terkirim ke nomor yang keliru. Rincian
+angkanya ada di pesan in-app dan di portal orang tua, yang keduanya hanya terbaca
+oleh akun yang memang berhak.
+
+Konsekuensinya perlu disebut jujur: sekolah yang menulis templatenya sendiri tidak
+dapat mencantumkan nominal di pesan WhatsApp-nya. Itu batas yang berasal dari
+sumbernya, bukan pilihan gaya, dan menutupnya menuntut kosakata token yang
+didefinisikan pemilik.
+
+### 239. Template kosong bukan kegagalan
+
+| | |
+| --- | --- |
+| **Status** | Copy implementasi |
+
+Ketiga kolom template nullable dan memang boleh kosong — pemasangan baru tidak punya
+satu pun template. Kejadian bisnisnya tidak boleh gagal karenanya: tagihan tetap
+terbit dan rapor tetap diterbitkan meskipun sekolah belum pernah menulis apa pun.
+
+Bila kosong, dipakai teks bawaan. Untuk PPDB teks itu sudah ada sejak Sprint 3
+(`PpdbStatus::waTemplate()`, satu per status). Untuk tagihan dan rapor, teksnya
+ditulis di batch ini dan hanya memakai tiga token yang sudah mapan.
+
+Teks bawaan itu **copy implementasi, bukan keputusan pemilik**. Blueprint menyebut
+kolomnya ada; bunyinya tidak pernah dituliskan siapa pun. Judul notifikasinya —
+"Status PPDB diperbarui", "Tagihan baru terbit", "Rapor diterbitkan" — juga copy
+implementasi dengan alasan yang sama. Judul dan isi tidak pernah kosong.
+
+### 240. Sebagian penerima otomatis tidak dapat diwakili skema ini
+
+| | |
+| --- | --- |
+| **Status** | **Celah struktural yang dinyatakan terbuka** |
+| **Referensi** | ERD 2.2 — `notifications.target_id`; ERD PPDB — `ppdb_registrations`; ERD Akademik — `students.parent_user_id` |
+
+Ini temuan terpenting batch ini, dan ia tidak ditutup.
+
+`notifications.target_id` pada target INDIVIDUAL berarti `users.id`. Itu satu-satunya
+artinya, dan `NotificationRecipientResolver` membacanya begitu. Sementara itu penerima
+ketiga kejadian otomatis adalah orang tua — dan orang tua tidak selalu punya akun:
+
+- **PPDB.** `ppdb_registrations` tidak menyimpan **satu pun** rujukan ke `users`.
+  Kolomnya `parent_name`, `parent_phone`, `parent_email` — nama, nomor, surel, bukan
+  akun. Calon siswa yang belum di-enroll karena itu tidak punya `users.id` sama
+  sekali. Alur enroll (PPDB-05) pun tidak membuat akun orang tua maupun mengisi
+  `students.parent_user_id`.
+- **Tagihan dan rapor.** `students.parent_user_id` nullable. Siswa yang orang tuanya
+  belum dibuatkan akun portal tidak punya penerima yang dapat ditulis.
+
+Yang **tidak** dilakukan, dan masing-masing punya akibatnya sendiri:
+
+| Jalan pintas | Akibatnya |
+| --- | --- |
+| Menaruh `ppdb_registrations.id` di `target_id` | resolver membacanya sebagai `users.id`; notifikasi itu akan muncul di kotak masuk pengguna yang kebetulan ber-id sama |
+| Menaruh `students.id` di `target_id` | sama persis, dan lebih mungkin terjadi karena id siswa dan id pengguna sama-sama kecil |
+| Memakai target ALL | seluruh cabang membaca tagihan atau rapor satu anak |
+| Memakai akun siswa sebagai pengganti orang tua | tagihan dikirim kepada anaknya |
+| Membuat akun pengguna palsu | akun yang tidak ada muncul di daftar pengguna dan dapat menjadi target notifikasi lain |
+
+Yang dilakukan: bila tidak ada penerima yang sah, **tidak ada baris notifikasi yang
+ditulis sama sekali**. `SystemNotificationPublisher::toUser()` mengembalikan NULL, dan
+kejadian bisnisnya berjalan seperti biasa. Kanal manualnya tetap ada dan tetap
+bekerja — untuk PPDB, tautan wa.me per pendaftar dari Sprint 3, yang membaca
+`parent_phone` langsung dan tidak membutuhkan akun apa pun.
+
+Satu tautan pengguna yang **memang** ada di repositori tetap dipakai: pendaftaran yang
+sudah menjadi siswa (`converted_student_id`) dan siswa itu punya `parent_user_id`.
+Dalam keadaan itu penerimanya nyata dan notifikasinya dibuat seperti biasa. Ada test
+untuk keduanya — yang punya tautan dan yang tidak.
+
+Menutup celah ini menuntut perubahan skema — kolom penerima eksternal, atau akun
+portal yang dibuat lebih awal pada alur PPDB — dan keduanya keputusan pemilik, bukan
+keputusan implementasi. Batch ini **tidak** menambahkannya.
+
+### 241. Notifikasi otomatis adalah potret, bukan tautan hidup
+
+| | |
+| --- | --- |
+| **Status** | Keputusan arsitektur |
+
+Pada saat kejadian, template cabang dibaca, placeholder-nya diisi, dan hasil akhirnya
+disimpan ke `notifications.wa_template`. Sesudah itu ia tidak pernah dihitung ulang.
+
+Kalau teksnya dirender ulang setiap kali daftar wa.me diminta, mengubah template hari
+ini akan mengubah bunyi notifikasi tahun lalu — dan riwayatnya berhenti menggambarkan
+apa yang benar-benar dikirim. Itu keberatan yang sama dengan butir 195 tentang
+pengumuman terkirim yang tidak dapat diubah.
+
+Batch 8.4 sudah memakai `wa_template` sebagai sumber teks tautan bila terisi, jadi
+tautan wa.me notifikasi otomatis memakai potret itu tanpa perubahan apa pun pada
+`NotificationWaLinkService`. Ada test untuk ketiga jalur: menyimpan template baru
+setelah notifikasi terbit tidak menggeser satu huruf pun.
+
+### 242. Idempotensi tagihan menumpang pada idempotensi yang sudah ada
+
+| | |
+| --- | --- |
+| **Status** | Keputusan arsitektur |
+| **Referensi** | butir 52 — lock dan pelewatan kombinasi yang sudah ada |
+
+Tidak ada kolom penanda kejadian yang tersedia, dan tidak ada yang ditambahkan.
+Idempotensinya seluruhnya berasal dari satu keputusan: **notifikasi dibuat di dalam
+transaksi yang sama, tepat setelah `StudentFee` yang benar-benar baru dibuat.**
+
+Konsekuensinya mengikuti sendirinya. Kombinasi `school_id + student_id + fee_type_id
++ period` yang sudah ada tidak pernah sampai ke baris pembuatan, sehingga job yang
+diulang — karena retry, klik ganda, maupun permintaan generate kedua — tidak
+menghasilkan notifikasi kedua. Pratinjau tidak menulis apa-apa, jadi tidak
+memberitahu siapa pun. Transaksi yang gagal membatalkan keduanya sekaligus, sehingga
+tidak ada notifikasi yatim yang menyebut tagihan yang tidak pernah ada.
+
+Ada test untuk keempatnya: penerbitan pertama, penerbitan ulang, tagihan yang sudah
+ada sebelumnya, dan transaksi yang dibatalkan.
+
+### 243. Cabang diperiksa di tempat seluruh jalur otomatis bertemu
+
+`SystemNotificationPublisher` menolak penerima yang `school_id`-nya tidak sama dengan
+cabang kejadiannya, dan menolak akun nonaktif. Pemeriksaan itu ada di publisher — bukan
+dipercayakan kepada tiga pemanggil — karena inilah satu-satunya tempat ketiganya
+bertemu.
+
+`students.parent_user_id` yang menunjuk akun cabang lain adalah data rusak. Yang benar
+adalah memperlakukannya sebagai tidak ada: notifikasi tidak boleh menjadi cara data
+rusak itu terbaca orang di cabang seberang. `StudentFeeGenerator` juga menyaring
+cabang saat memuat akun orang tua, jadi pagarnya dua lapis. Ada test yang sengaja
+membuat data rusak itu dan memastikan tidak ada baris yang ditulis.
+
+Siapa yang menjalankan aksinya tidak mengubah apa pun. Super Admin yang menerbitkan
+rapor cabang A tetap menghasilkan notifikasi milik cabang A.
+
+### 244. Batas transaksi milik kejadian bisnisnya
+
+| | |
+| --- | --- |
+| **Status** | Keputusan arsitektur |
+
+`SystemNotificationPublisher` tidak membuka transaksinya sendiri. Notifikasi harus
+hidup dan mati bersama tagihan atau rapor yang memicunya, bukan bersama dirinya
+sendiri.
+
+- **Tagihan** — sudah berada di dalam `DB::transaction` milik `issue()`; notifikasinya
+  ikut di sana.
+- **Rapor** — `publish()` sebelumnya menulis tanpa transaksi. Kini peralihan keadaan,
+  penguncian konfigurasi, dan notifikasinya satu transaksi. Rapor yang terbit tanpa
+  notifikasinya masih dapat diperbaiki; notifikasi yang terbit tanpa rapornya memberi
+  tahu orang tua sesuatu yang tidak ada.
+- **PPDB** — `PpdbStatusUpdater::update()` membungkus perubahan status dan
+  notifikasinya.
+
+Kejadian bisnisnya tetap yang berwenang: bila penerimanya tidak ada, tagihan tetap
+terbit dan rapor tetap diterbitkan. Yang tidak terjadi hanyalah notifikasinya.
+
+### 245. Biaya baca tidak tumbuh bersama jumlah siswa
+
+Penerbitan massal menulis satu tagihan dan satu notifikasi per siswa — itu memang
+jumlah kejadiannya, dan tidak dapat lebih sedikit. Yang tidak boleh tumbuh adalah
+**pembacaannya**.
+
+Cabang beserta templatenya dibaca **sekali** untuk seluruh angkatan penerbitan, dan
+akun orang tua seluruh siswa sasaran dimuat dalam **satu** query lalu dipetakan di
+memori. Tidak ada satu query pun yang dijalankan per siswa. Ada test yang
+membandingkan jumlah SELECT untuk lima siswa dengan tiga puluh siswa dan menuntut
+angka yang sama persis, ditambah satu yang menuntut tabel `schools` dibaca paling
+banyak sekali.
+
+Satu orang tua dengan dua anak yang sama-sama ditagih menerima **dua** notifikasi.
+Itu dua kejadian bisnis, bukan satu yang tergandakan, dan menggabungkannya akan
+menghilangkan informasi tentang anak mana yang ditagih. Tidak ada sumber yang meminta
+penggabungan.
+
+### 246. Rapor: hanya peralihan, dan hanya sekali
+
+Pemicunya peralihan `is_published` false → true, bukan permintaan penerbitan.
+Perbedaannya penting karena `publish()` menolak rapor yang sudah terbit dengan
+`ValidationException` **sebelum** menyentuh apa pun — sehingga permintaan kedua tidak
+pernah sampai ke baris notifikasi. Pagar keadaan yang sudah ada itulah pagar
+kejadiannya; tidak ada penanda baru yang ditambahkan, dan aturan penguncian rapor
+tidak dilonggarkan sedikit pun.
+
+Generate draf, membuka rapor, dan mengunduh PDF tidak memicu apa pun — ketiganya tidak
+melewati `publish()`. `publishClass()` menerbitkan satu per satu lewat `publish()`
+yang sama, jadi satu notifikasi per rapor yang benar-benar terbit.
+
+### 247. Pembaruan status PPDB dipindahkan ke service
+
+Sampai batch ini status PPDB ditulis langsung di dalam aksi Filament
+(`$record->update([...])`). Ia dipindahkan ke `App\Services\Ppdb\PpdbStatusUpdater`
+karena kini ada dua tulisan yang harus hidup atau mati bersama, dan karena
+"benar-benar berubah" menjadi pertanyaan yang perlu dijawab di satu tempat.
+
+Polanya mengikuti yang sudah ada di project ini — `StudentFeeGenerator`,
+`ReportCardGenerator`, `AnnouncementPublisher` — bukan pola baru. Aksi Filament tetap
+menjadi satu-satunya jalur masuknya; tidak ada endpoint API PPDB yang ditambahkan,
+dan API 4.7 memang tidak menyebutnya untuk batch ini.
+
+### 248. Menyimpan catatan pada status yang sama bukan perubahan status
+
+NOTIF-03 menyebut pemicunya "PPDB status **berubah**". Menyimpan ulang status yang
+sama dengan catatan alasan baru tetap tersimpan — itu perilaku yang sudah ada dan
+tidak diubah — tetapi tidak memicu notifikasi apa pun. Mengirim pesan kepada orang tua
+setiap kali Admin memperbaiki kalimat catatannya adalah gangguan, bukan pemberitahuan.
+
+`update()` mengembalikan `true` hanya bila statusnya benar-benar berpindah. Setiap
+perpindahan yang nyata punya notifikasinya sendiri, jadi
+REGISTERED → DOCUMENT_REVIEW → PASSED menghasilkan dua.
+
+### 249. Editor template: Admin Sekolah, dan hanya Admin Sekolah
+
+| | |
+| --- | --- |
+| **Status** | Keputusan kewenangan |
+| **Referensi** | NOTIF-03 kriteria 2 |
+
+NOTIF-03 poin 2 berbunyi "Template teks notifikasi dapat diedit oleh **Admin
+Sekolah**". Perannya diperiksa langsung, bukan lewat izin, dan alasannya sama persis
+dengan butir 223:
+
+- `notification.manage` juga dipegang Kepala Sekolah, sehingga memakainya akan memberi
+  Kepala kewenangan yang tidak disebut sumber mana pun.
+- `white_label.manage` kebetulan dipegang persis SUPER_ADMIN dan SCHOOL_ADMIN, tetapi
+  template WhatsApp bukan pengaturan white-label. Meminjam izinnya berarti dua hal
+  berbeda menjadi tidak dapat dipisahkan bila kelak salah satunya berubah.
+
+Kewenangannya: SUPER_ADMIN dan SCHOOL_ADMIN (cabangnya sendiri). Kepala Sekolah,
+Bendahara, Guru, dan Wali Kelas ditolak; Orang Tua dan Siswa tidak dapat membuka panel
+sama sekali. Setiap peran disebut namanya di test, karena kesalahan yang sama sudah
+terjadi sekali pada NOTIF-02.
+
+Halamannya `Pengaturan Notifikasi → Template WhatsApp`, mengikuti pola
+`PengaturanTampilan` dan `PengaturanPenilaian`: Admin Sekolah tidak boleh membuka
+`SchoolResource` — itu "Manajemen Tenant", baris matriks yang berbeda dan hanya untuk
+Super Admin — sehingga pengaturan cabangnya sendiri diberikan lewat halaman
+tersendiri, dan Super Admin yang tidak terikat cabang memilih cabangnya di form.
+Nilai cabang dari form hanya dipercaya dari Super Admin, dan policy diperiksa lagi
+sebelum menyimpan.
+
+Halamannya sengaja **terpisah** dari Pengaturan Tampilan. Menyatukannya berarti satu
+kewenangan tidak lagi dapat berubah tanpa ikut mengubah yang lain. `SchoolResource`
+tetap memuat ketiga kolom yang sama untuk Super Admin, tidak disentuh batch ini.
+
+Hanya tiga kolom itu yang ditulis; pengaturan cabang lainnya tidak ikut tertulis
+ulang. Kosong disimpan sebagai NULL, bukan string kosong, supaya "belum diisi" hanya
+punya satu bentuk.
+
+### 250. Jejak audit memakai yang sudah ada
+
+Penyuntingan template adalah `update` pada `schools`, dan listener CUD wildcard yang
+sudah ada (butir 45) menangkapnya seperti update apa pun. Tidak ada pencatatan baru
+yang ditambahkan, sehingga tidak ada baris ganda.
+
+Pembuatan notifikasi otomatis juga tercatat lewat listener yang sama, dengan
+`user_id` apa adanya — kosong bila berjalan di dalam worker antrean. Itu memang
+gambaran yang benar: tidak ada pengguna yang menekan tombol. Tidak ada aktor palsu
+yang dikarang untuk mengisi kolom itu.
+
+### 251. Yang tidak dikerjakan di batch ini
+
+| Belum ada | Sumber | Rencana |
+| --- | --- | --- |
+| Retensi riwayat 90 hari | NOTIF-04 kriteria 3 | Batch 8.6 |
+| Pengiriman WhatsApp otomatis | Phase 2 — Fonnte/Meta Cloud API | di luar Phase 1 |
+| Notifikasi in-app bagi penerima tanpa akun | celah struktural butir 240 | menunggu keputusan pemilik |
+
+Retensi 90 hari tetap **tidak** dikerjakan dan tetap tidak dipalsukan: tidak ada
+scheduler, tidak ada job pembersih, tidak ada perintah artisan, dan tidak ada
+penyaring tanggal yang menyembunyikan notifikasi lama sehingga riwayatnya
+seakan-akan sudah dipangkas.
+
+Tidak ada skema yang berubah: tidak ada migrasi, tidak ada kolom, dan tidak ada
+endpoint API baru — permukaannya tetap 41.
+
+**Status NOTIF-03.** Kriteria 1 dan 2 terpenuhi untuk seluruh penerima yang **dapat
+diwakili** skema saat ini, dan kriteria 3 ("notifikasi muncul di in-app notification
+center dan wa.me link tersedia") berlaku penuh untuk mereka. Untuk penerima tanpa akun
+portal — yang pada PPDB adalah keadaan **normal**, bukan pengecualian — sisi in-app-nya
+tidak ada, dan yang tersedia hanya kanal wa.me manual. NOTIF-03 karena itu belum dapat
+disebut selesai seluruhnya, dan butir 240 menyebutkan apa yang dibutuhkan untuk
+menutupnya.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
