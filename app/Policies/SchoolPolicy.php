@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Enums\PermissionName;
+use App\Enums\RoleName;
 use App\Models\School;
 use App\Models\User;
 
@@ -71,6 +72,28 @@ class SchoolPolicy
     public function configureBranding(User $user, School $school): bool
     {
         return $user->can(PermissionName::WhiteLabelManage->value)
+            && $this->isOwnSchool($user, $school);
+    }
+
+    /**
+     * NOTIF-03 poin 2 — "Template teks notifikasi dapat diedit oleh **Admin
+     * Sekolah**."
+     *
+     * Perannya diperiksa langsung, bukan lewat izin, dan alasannya sama dengan
+     * butir 223. `notification.manage` juga dipegang Kepala Sekolah, sehingga
+     * memakainya akan memberi Kepala kewenangan yang tidak disebut sumber mana
+     * pun. `white_label.manage` kebetulan dipegang persis SUPER_ADMIN dan
+     * SCHOOL_ADMIN, tetapi template WhatsApp bukan pengaturan white-label —
+     * meminjam izinnya berarti dua hal berbeda menjadi tidak dapat dipisahkan
+     * bila kelak salah satunya berubah (butir 249).
+     */
+    public function configureWaTemplates(User $user, School $school): bool
+    {
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        return $user->hasRole(RoleName::SchoolAdmin->value)
             && $this->isOwnSchool($user, $school);
     }
 
