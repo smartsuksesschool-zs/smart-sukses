@@ -4221,6 +4221,286 @@ Dengan mendaratnya halaman ini, NOTIF-04 poin 1 dan 2 berlaku untuk **seluruh** 
 dapat menerima notifikasi. Poin 3 — riwayat 90 hari — masih menunggu batch retensi, jadi
 NOTIF-04 belum dapat disebut selesai seluruhnya.
 
+## Sprint 8 Batch 8.4 — Tautan wa.me per penerima (NOTIF-02)
+
+### 222. Satu aturan normalisasi nomor, dan satu cacat di dalamnya yang diperbaiki
+
+| | |
+| --- | --- |
+| **Status** | Perbaikan cacat pada helper bersama |
+| **Referensi** | NOTIF-02 poin 1; PPDB-04 poin 2; ERD 2.2 — `users.phone`, `students.parent_phone` |
+
+Sprint 3 sudah meninggalkan `App\Support\WhatsAppLink`, lengkap dengan normalisasi
+nomor dan pembentuk URL, dan berkasnya bahkan sudah menyebut NOTIF-02 pada
+docblock-nya. Batch ini karena itu **memakainya**, bukan membuat yang kedua. Aturan
+normalisasi yang berbeda antara PPDB dan Notifikasi akan berarti nomor yang sama
+menghasilkan tautan berbeda tergantung modul mana yang membuatnya — dan yang
+menemukannya adalah orang tua yang menerima pesan di nomor yang salah.
+
+Satu hal di dalamnya perlu diperbaiki, dan perlu disebut sebagai perbaikan cacat,
+bukan sebagai preferensi. Cabang terakhir normalisasinya berbunyi "kalau tidak
+diawali 0 dan tidak diawali 62, tambahkan 62 di depannya". Untuk nomor Indonesia
+yang ditulis tanpa awalan — `81234567890` — itu benar dan memang lazim. Untuk nomor
+berkode negara lain, hasilnya bukan nomor orang itu: `+65 9123 4567` menjadi
+`626591234567`, yaitu **nomor Indonesia milik orang lain**, yang panjangnya lolos
+pemeriksaan dan tautannya terlihat wajar sepenuhnya.
+
+Di PPDB-04 kesalahan itu terjadi satu per satu dan Admin membaca nomornya sebelum
+menekan kirim. Di NOTIF-02 ia terjadi massal — satu baris per penerima, puluhan
+sekaligus — dan tidak ada yang membacanya satu per satu. Pesan sekolah akan sampai
+kepada orang yang tidak pernah ada hubungannya dengan sekolah itu.
+
+Yang diubah sekecil mungkin: awalan 62 hanya ditambahkan bila nomornya dimulai `8`,
+yaitu bentuk nasional nomor seluler Indonesia. Seluruh kasus yang sudah dikunci test
+PPDB tetap berlaku persis — `0…`, `+62…`, `62…`, `81…`, pemisah spasi/hubung/kurung,
+dan penolakan nomor terlalu pendek. Yang berubah **hanya** nomor tanpa awalan yang
+tidak dimulai `8`: sebelumnya diberi awalan 62, kini dilaporkan tidak dapat dipakai.
+Seluruh nomor pada factory dan seeder dimulai `0`, sehingga tidak ada data uji
+maupun demo yang terpengaruh, dan suite PPDB lengkap dijalankan ulang untuk
+membuktikannya.
+
+Ini **bukan** validasi awalan operator. Tidak ada daftar 811/812/813 di mana pun;
+yang dibedakan hanya "nomor Indonesia" dari "nomor negara lain".
+
+Aturan yang berlaku, seluruhnya, adalah aturan implementasi — bukan keputusan
+pemilik. Blueprint hanya menuliskan bentuk URL-nya (`wa.me/62[nomorHP]`) dan tidak
+pernah menyebut bagaimana `+62`, `0`, spasi, atau nomor asing diperlakukan.
+
+### 223. NOTIF-02 berbunyi "Sebagai Admin", dan yang menentukan tetap butir 201
+
+| | |
+| --- | --- |
+| **Status** | Penafsiran kewenangan |
+| **Referensi** | NOTIF-02; API 4.10; PRD 1.1.2 — "Notifikasi (buat)" |
+
+Perlu dicatat apa adanya, karena arahan batch ini menduga sebaliknya: NOTIF-02
+**tidak** menyebut Admin Sekolah. Kalimatnya "Sebagai **Admin**" — lebih umum, bukan
+lebih sempit, dibanding NOTIF-01 yang justru menulis "Sebagai **Admin Sekolah**".
+Dua baris bertetangga di tabel yang sama, dan yang lebih spesifik ada di NOTIF-01.
+
+API 4.10 memberi `GET /notifications/{id}/wa-links` label Auth Level "Admin" — label
+yang **sama persis** dengan `POST /notifications` di tabel yang sama. Butir 201 sudah
+memutuskan label generik itu tidak dipakai sebagai pagar untuk endpoint itu, karena
+akan menutup Kepala Sekolah yang diberi ✅ penuh atas modul Notifikasi oleh matriks
+1.1.2. Memakai penafsiran berbeda untuk baris di sebelahnya akan berarti Kepala
+Sekolah boleh menerbitkan sebuah pengumuman tetapi tidak boleh melihat daftar
+kirimnya sendiri.
+
+Pagarnya karena itu `NotificationPolicy::waLinks()`, yang meneruskan ke `view()`:
+izin `notification.manage` **dan** cabang yang sama. Hasilnya SUPER_ADMIN,
+SCHOOL_ADMIN, dan KEPALA_SEKOLAH; Bendahara, Guru, Wali Kelas, Orang Tua, dan Siswa
+ditolak. Guru dan Wali Kelas tetap tidak memperoleh kewenangan apa pun atas
+pembuatan maupun pengiriman pengumuman, dan konflik PORTAL-02 tetap terbuka.
+
+Yang dijaga terpisah dari izin adalah cabangnya, karena isinya nomor telepon:
+`view()` menuntut notifikasi itu milik cabang pelakunya, dan Super Admin — yang
+melewati `Gate::before` — tetap hanya melihat penerima **satu** notifikasi yang ia
+buka, bukan gabungan cabang.
+
+### 224. Draf tidak punya tautan siap kirim, dan jawabannya 422
+
+| | |
+| --- | --- |
+| **Status** | Penafsiran implementasi |
+| **Referensi** | NOTIF-02 — "daftar link wa.me **siap kirim**" |
+
+Blueprint tidak menyebut draf pada NOTIF-02 sama sekali. Yang dipilih mengikuti kata
+"siap kirim": draf belum menjadi komunikasi kepada siapa pun. Mengirimkan tautannya
+lewat WhatsApp akan menyampaikan pengumuman yang menurut sistem tidak pernah
+diterbitkan — penerimanya membaca pesannya di WhatsApp lalu tidak menemukannya di
+kotak masuk, dan riwayat cabang pun tidak mencatatnya sebagai terkirim. Dua kanal
+yang saling membantah.
+
+Jawabannya **422, bukan 404**. Notifikasinya memang ada, dan pelakunya memang boleh
+melihatnya — ia bahkan tampil di daftar Pengumuman lengkap dengan draf. Yang belum
+ada adalah keadaannya, dan 404 akan berbohong tentang hal yang lain. Di panel,
+halaman tautannya tetap terbuka dan menyatakan dengan jelas bahwa pengumumannya
+masih draf; pada kedua jalur, tidak satu pun nomor telepon dibaca untuk draf.
+
+Ini penafsiran implementasi, bukan keputusan pemilik.
+
+### 225. Nomor mana yang dipakai, dan kapan sistem menolak menebak
+
+| | |
+| --- | --- |
+| **Status** | Keputusan arsitektur |
+| **Referensi** | ERD 2.2 — `users.phone`; ERD 2.3 — `students.parent_phone` |
+
+Identitas penerima adalah **akun**, karena penerima ditentukan resolver dan resolver
+mengembalikan `User`. Urutannya karena itu:
+
+1. `users.phone` milik penerima;
+2. `students.parent_phone`, hanya bila akun itu tidak punya nomor **dan** hubungannya
+   jelas.
+
+Syarat kedua adalah hubungan `students.parent_user_id`, bukan label peran. Hubungan
+itulah yang membuat sebuah nomor relevan bagi sebuah akun; memeriksanya lewat relasi
+juga menghindari satu query peran tambahan. Ruang lingkupnya mengikuti target: pada
+notifikasi CLASS hanya anak **di kelas yang ditarget** yang dihitung, sedangkan pada
+ALL dan INDIVIDUAL seluruh anak di cabang notifikasi itu.
+
+Nomor siswa sendiri (`users.phone` milik akun siswa) tidak pernah dipakai sebagai
+nomor orang tuanya. Kolomnya memang bukan nomor mereka, dan ada test yang menjaganya.
+
+Yang paling perlu disebut adalah kasus yang sistem **tolak** jawab. Satu orang tua
+dengan dua anak yang `parent_phone`-nya berbeda tidak punya jawaban benar: keduanya
+tersimpan sebagai nomor orang yang sama, dan hanya sekolah yang tahu mana yang masih
+aktif. Memilih salah satunya — yang pertama, yang terbaru, mana pun — berarti
+mengirim ke nomor yang mungkin bukan miliknya sambil terlihat berhasil. Statusnya
+dilaporkan `AMBIGUOUS_PHONE`, dan nomornya dikosongkan. Dua anak dengan nomor yang
+**sama** bukan ambiguitas: nomornya dipakai sebagai kunci, sehingga duplikat runtuh
+menjadi satu calon.
+
+### 226. Penerima tanpa nomor tetap ada di daftar
+
+| | |
+| --- | --- |
+| **Status** | Keputusan arsitektur |
+
+Godaannya adalah membuang penerima yang tidak punya nomor: daftarnya jadi rapi dan
+setiap barisnya dapat diklik. Justru itu bahayanya. Admin akan membaca daftar yang
+memendekkan dirinya sendiri sebagai "semua penerima", padahal yang hilang persis
+orang-orang yang perlu dihubungi dengan cara lain — dan tidak ada apa pun di layar
+yang memberi tahu bahwa mereka ada.
+
+Setiap penerima karena itu selalu muncul, dengan `wa_available` dan alasannya bila
+tidak: `MISSING_PHONE`, `INVALID_PHONE`, atau `AMBIGUOUS_PHONE`. Di atas daftarnya
+ada tiga hitungan — jumlah penerima, yang terjangkau, dan yang tidak.
+
+Ketiga hitungan itu selalu menggambarkan **seluruh** penerima, bukan hanya baris yang
+lolos filter. Kalau ikut menyusut, menyaring ke "tidak terjangkau" akan memberi tahu
+Admin bahwa tidak ada seorang pun yang terjangkau — kebalikan dari yang benar.
+Halamannya menyebutkan hal ini di bawah angkanya, dan ada test yang menjaganya.
+
+### 227. Kewenangan diperiksa sebelum satu pun nomor dibaca
+
+| | |
+| --- | --- |
+| **Status** | Pengerasan implementasi |
+
+Respons ini memuat data pribadi orang yang bahkan tidak sedang memakai aplikasi.
+Urutan di controller karena itu disengaja: notifikasinya diselesaikan lebih dulu
+**dengan** global scope-nya — sehingga id milik cabang lain berakhir 404 dan tidak
+pernah mengonfirmasi bahwa id itu ada (butir 116) — lalu kewenangan diperiksa, lalu
+keadaan draf, dan baru sesudah semuanya lolos service-nya dipanggil. Penyaring
+pencarian pun divalidasi setelah itu, supaya percobaan lintas cabang selalu dijawab
+sama apa pun query string-nya.
+
+Daftar-putih responsnya ada di satu tempat, `NotificationWaLinkService`, dan API
+maupun panel memakainya. Notifikasinya hanya `id` dan `title`; penerimanya hanya
+`name`, `phone`, `normalized_phone`, `wa_available`, `wa_url`, `reason`, dan
+`reason_label`. Tidak ada surel, sandi, `school_id`, `target_id`, `is_draft`,
+`sender_id`, keadaan terbaca, maupun satu pun data anak — nama anak tidak ikut
+meskipun nomornya berasal dari sana. Ada test yang memeriksa kunci barisnya persis,
+bukan sekadar ketiadaan beberapa kata.
+
+Panel tidak memanggil API-nya sendiri lewat HTTP; ia memakai service yang sama, jadi
+kedua permukaan tidak dapat berbeda.
+
+### 228. Sistem hanya membuat tautan, dan tidak berpura-pura tahu lebih
+
+Phase 1 memakai wa.me manual (Ringkasan Eksekutif), dan itu dipatuhi seluruhnya.
+Tidak ada pesan WhatsApp yang dikirim, tidak ada antrean pengiriman, tidak ada
+integrasi WhatsApp Business API, dan **tidak ada apa pun yang ditandai "sudah
+terkirim ke WhatsApp"**.
+
+Yang terakhir itu keputusan, bukan kelalaian. Sistem tidak punya cara mengetahui
+apakah Admin jadi menekan kirim di aplikasi WhatsApp-nya; mencatat "terkirim" saat
+tautannya dibuat berarti menyimpan fakta yang tidak dimiliki siapa pun, dan riwayat
+itu akan dipercaya justru ketika ada yang mengaku tidak menerima pesan. Ada test yang
+memastikan tidak ada kunci semacam itu pada barisnya.
+
+Membuka daftar ini juga tidak menimbulkan efek samping apa pun: tidak ada
+`notification_reads` yang dibuat, `sent_at` tidak bergeser, isi notifikasi dan
+`wa_template` tidak berubah, dan nomor yang sudah dinormalkan **tidak** ditulis balik
+ke `users` maupun `students` — normalisasi dilakukan untuk membuat tautannya, bukan
+untuk memperbaiki data yang disimpan sekolah.
+
+### 229. Teks pesan: `wa_template` bila ada, isi pengumuman bila tidak
+
+`notifications.wa_template` sudah ada di skema sejak Batch 8.1 dan sampai kini tidak
+pernah diisi apa pun. Bila kelak berisi teks WA yang dimaksud, teks itu yang dipakai;
+bila kosong, `notifications.message` yang dikirim.
+
+Yang **tidak** dikerjakan di sini: tidak ada placeholder yang diproses, tidak ada
+editor template, dan tidak satu pun kolom `wa_template_ppdb`/`_spp`/`_rapor` milik
+`schools` yang disentuh. Semuanya milik NOTIF-03 dan menunggu batch tersendiri.
+
+### 230. Biaya query tidak tumbuh bersama jumlah penerima
+
+Daftar penerima target ALL sebesar satu cabang. Mencarikan nomor per baris akan
+berarti satu query per orang tua, dan pada cabang berisi ratusan akun itu bukan
+lambat melainkan tidak dapat dipakai.
+
+Nomor cadangan karena itu dimuat sekaligus: satu query untuk seluruh penerima yang
+akunnya tidak punya nomor, dikelompokkan di memori berdasarkan `parent_user_id`.
+Totalnya dua query — satu daftar penerima dari resolver, satu nomor cadangan — dan
+menjadi satu bila semua penerima punya nomornya sendiri. Ada test yang membandingkan
+5 penerima dengan 50, sedikit siswa dengan banyak siswa, dan satu anak dengan enam
+anak; ketiganya menuntut angka yang **sama persis**, bukan sekadar "tidak terlalu
+besar".
+
+Penyaringan pencarian dan ketersediaan dikerjakan atas daftar yang sudah tersusun,
+bukan sebagai query, karena nomor sebagian penerima berasal dari data anak — menyaring
+di database berarti menyaring atas kolom yang belum tentu dipakai. Daftarnya sendiri
+sudah dibatasi target notifikasinya.
+
+### 231. Daftar tautan milik sisi pembuat, dan tetap terpisah dari kotak masuk
+
+Aksi "Link WhatsApp" ada di tabel Pengumuman, dan halamannya hidup di bawah resource
+yang sama (`/admin/notifications/{record}/wa-links`). Ia **tidak** ada di Notifikasi
+Saya, dan itu lanjutan langsung dari butir 218.
+
+Kotak masuk menjawab "apa yang ditujukan kepada saya". Halaman ini menjawab "kepada
+siapa saja pengumuman ini ditujukan, dan bagaimana menghubungi mereka". Menaruhnya di
+kotak masuk berarti setiap penerima melihat nomor telepon seluruh penerima lain —
+persis kebalikan dari pemisahan yang dijaga sejak batch sebelumnya. Ada test yang
+membuka Notifikasi Saya dan memastikan tidak ada `wa.me` maupun "Buka WA" di sana.
+
+Aksinya hanya muncul untuk pengumuman yang sudah terkirim, dan hanya bagi yang
+kewenangannya lolos — visibilitasnya memakai policy yang sama dengan endpoint-nya,
+bukan pemeriksaan kedua yang dapat berbeda.
+
+### 232. Menyalin satu per satu, dan tidak pernah membuka tab sendiri
+
+NOTIF-02 poin 2 menyebut "disalin **satu per satu**", dan itu diikuti apa adanya:
+satu tombol Salin per penerima, tanpa salin massal — karena kirimnya pun satu per
+satu. Yang disalin adalah URL wa.me-nya, karena yang diminta memang daftar link.
+
+Penyalinannya memakai Alpine yang sudah dibundel Filament; tidak ada pustaka baru.
+Clipboard API tidak selalu tersedia — pada HTTP polos atau peramban lama ia tidak ada
+sama sekali — jadi kegagalannya tidak dibiarkan senyap: tautannya ditampilkan pada
+kotak teks yang otomatis terpilih saat diklik, dengan keterangan bahwa salin otomatis
+tidak tersedia.
+
+"Buka WA" adalah tautan biasa dengan `target="_blank"` dan `rel="noopener noreferrer"`,
+dan hanya terbuka bila diklik. Tidak ada `window.open` di halaman ini dan tidak ada
+aksi yang membuka banyak tab sekaligus: membuka puluhan tab WhatsApp bukan bantuan,
+dan sebagian besar peramban akan memblokirnya. Ada test yang memeriksa ketiganya.
+
+### 233. Yang tidak dikerjakan di batch ini
+
+| Belum ada | Sumber | Rencana |
+| --- | --- | --- |
+| Trigger otomatis (PPDB, tagihan, rapor) | NOTIF-03 kriteria 1 | batch trigger |
+| Editor template notifikasi per sekolah | NOTIF-03 kriteria 2 | batch trigger |
+| Retensi riwayat 90 hari | NOTIF-04 kriteria 3 | batch retensi |
+| Pengiriman WhatsApp otomatis | Phase 2 — Fonnte/Meta Cloud API | di luar Phase 1 |
+
+Retensi 90 hari tetap **tidak** dikerjakan dan tetap tidak dipalsukan: tidak ada
+scheduler, tidak ada job pembersih, dan tidak ada penyaring tanggal yang
+menyembunyikan notifikasi lama sehingga riwayatnya seakan-akan sudah dipangkas.
+
+Tidak ada skema yang berubah pada batch ini: tidak ada migrasi dan tidak ada kolom
+baru. Permukaan API bertambah tepat satu, dari 40 menjadi 41, dan tambahannya adalah
+`wa-links` itu sendiri.
+
+Dengan mendaratnya batch ini, **NOTIF-02 selesai seluruhnya** — ketiga kriterianya
+ada, dengan catatan bahwa normalisasi nomornya aturan implementasi (butir 222) dan
+penolakan draf penafsiran implementasi (butir 224). NOTIF-01 dan NOTIF-04 poin 1–2
+sudah selesai sejak batch sebelumnya. Yang tersisa di modul Notifikasi tinggal
+NOTIF-03 seluruhnya dan NOTIF-04 poin 3.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
