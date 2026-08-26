@@ -123,33 +123,98 @@ class NotificationWaLinkTest extends TestCase
         $this->assertNotContains($this->adminB->name, $names);
     }
 
-    public function test_the_kepala_sekolah_reads_the_wa_links_of_their_own_branch(): void
-    {
-        // NOTIF-02 berbunyi "Sebagai Admin" — lebih umum, bukan lebih sempit,
-        // daripada NOTIF-01 yang menyebut "Admin Sekolah" — dan API 4.10 memberi
-        // endpoint ini label Auth Level yang sama persis dengan POST
-        // /notifications. Butir 201 sudah memutuskan label itu tidak dipakai
-        // sebagai pagar karena akan menutup Kepala Sekolah, yang matriks 1.1.2
-        // beri akses penuh atas modul Notifikasi (butir 223).
-        $notification = $this->announceToAll();
-
-        $this->asUser($this->kepalaA)
-            ->getJson($this->waLinksUrl($notification))
-            ->assertOk();
-    }
-
     /**
+     * Peran yang NOTIF-02 tidak petakan.
+     *
+     * Kepala Sekolah ada di daftar ini meskipun ia **boleh** membuat pengumuman
+     * (NOTIF-01, butir 201). Kedua kewenangan itu berbeda dan dipagari terpisah:
+     * NOTIF-02 memetakan daftar wa.me hanya kepada Admin Sekolah, dan API 4.1
+     * mendefinisikan Auth Level "Admin" sebagai SCHOOL_ADMIN/SUPER_ADMIN
+     * (butir 223).
+     *
      * @return array<string, array<int, string>>
      */
     public static function deniedRoles(): array
     {
         return [
+            'kepala sekolah' => ['kepalaA'],
             'bendahara' => ['bendaharaA'],
             'guru' => ['teacherA'],
             'wali kelas' => ['waliA'],
             'orang tua' => ['parentA'],
             'siswa' => ['studentUserA'],
         ];
+    }
+
+    public function test_the_kepala_sekolah_is_refused_the_wa_links_of_their_own_branch(): void
+    {
+        // Notifikasi cabangnya sendiri, sudah terkirim, dan dibuat olehnya —
+        // sehingga yang menolak benar-benar aturan NOTIF-02, bukan cabang,
+        // bukan keadaan draf, dan bukan kepemilikan.
+        $notification = $this->announce(['title' => 'Dibuat Kepala'], $this->kepalaA);
+
+        $this->asUser($this->kepalaA)
+            ->getJson($this->waLinksUrl($notification))
+            ->assertForbidden()
+            ->assertJsonPath('success', false);
+    }
+
+    public function test_the_kepala_sekolah_may_still_create_and_send_announcements(): void
+    {
+        // NOTIF-01 tidak ikut menyempit. Kalau baris ini gagal, koreksi
+        // kewenangan NOTIF-02 sudah terlalu jauh.
+        $this->asUser($this->kepalaA)->postJson('/api/v1/notifications', [
+            'title' => 'Rapat Guru',
+            'message' => 'Rapat guru pekan depan.',
+            'type' => 'ANNOUNCEMENT',
+            'target_type' => 'ALL',
+            'action' => 'send',
+        ])->assertStatus(201);
+
+        $this->assertDatabaseHas('notifications', [
+            'title' => 'Rapat Guru',
+            'sender_id' => $this->kepalaA->getKey(),
+            'is_draft' => false,
+        ]);
+    }
+
+    public function test_the_refused_kepala_sekolah_reads_no_phone_data_and_changes_nothing(): void
+    {
+        $notification = $this->announceToAll();
+        $before = $notification->only(['title', 'message', 'wa_template', 'is_draft', 'sent_at']);
+
+        $response = $this->asUser($this->kepalaA)->getJson($this->waLinksUrl($notification));
+
+        $response->assertForbidden();
+        $response->assertDontSee((string) $this->parentA->phone);
+        $response->assertDontSee((string) $this->childA->parent_phone);
+        $response->assertDontSee('https://wa.me/');
+        $response->assertDontSee('recipients');
+
+        $this->assertDatabaseCount('notification_reads', 0);
+        $this->assertEquals($before, $notification->refresh()->only(array_keys($before)));
+        $this->assertSame($this->parentA->phone, $this->parentA->refresh()->phone);
+    }
+
+    public function test_only_the_school_admin_and_the_super_admin_hold_the_wa_link_ability(): void
+    {
+        // Matriks NOTIF-02 dibaca sekaligus, supaya perubahan pada salah satu
+        // peran tidak lolos hanya karena testnya terpisah-pisah.
+        $notification = $this->announceToAll();
+
+        foreach ([$this->adminA, $this->superAdmin] as $allowed) {
+            $this->assertTrue(
+                $allowed->can('waLinks', $notification),
+                $allowed->name.' seharusnya boleh membuka daftar link WhatsApp.',
+            );
+        }
+
+        foreach ([$this->kepalaA, $this->bendaharaA, $this->teacherA, $this->waliA, $this->parentA, $this->studentUserA, $this->adminB] as $denied) {
+            $this->assertFalse(
+                $denied->can('waLinks', $notification),
+                $denied->name.' seharusnya ditolak.',
+            );
+        }
     }
 
     #[DataProvider('deniedRoles')]
@@ -951,11 +1016,32 @@ class NotificationWaLinkTest extends TestCase
             ->assertNotFound();
     }
 
-    public function test_the_kepala_sekolah_can_open_the_page(): void
+    public function test_the_kepala_sekolah_cannot_open_the_wa_link_page(): void
     {
         $this->actingAs($this->kepalaA)
             ->get(NotificationResource::getUrl('wa-links', ['record' => $this->announceToAll()]))
-            ->assertOk();
+            ->assertForbidden();
+    }
+
+    public function test_the_wa_link_action_is_hidden_from_the_kepala_sekolah(): void
+    {
+        // Kepala tetap melihat Pengumuman dan tetap dapat mengirim drafnya;
+        // yang hilang hanya jalan menuju daftar nomor penerima.
+        $sent = $this->announceToAll();
+
+        Livewire::actingAs($this->kepalaA)
+            ->test(NotificationResource\Pages\ListNotifications::class)
+            ->assertTableActionHidden('waLinks', $sent)
+            ->assertSee($sent->title);
+    }
+
+    public function test_the_wa_link_action_stays_visible_for_the_school_admin(): void
+    {
+        $sent = $this->announceToAll();
+
+        Livewire::actingAs($this->adminA)
+            ->test(NotificationResource\Pages\ListNotifications::class)
+            ->assertTableActionVisible('waLinks', $sent);
     }
 
     public function test_the_wa_link_page_belongs_to_the_management_side_only(): void

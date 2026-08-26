@@ -4266,36 +4266,56 @@ Aturan yang berlaku, seluruhnya, adalah aturan implementasi — bukan keputusan
 pemilik. Blueprint hanya menuliskan bentuk URL-nya (`wa.me/62[nomorHP]`) dan tidak
 pernah menyebut bagaimana `+62`, `0`, spasi, atau nomor asing diperlakukan.
 
-### 223. NOTIF-02 berbunyi "Sebagai Admin", dan yang menentukan tetap butir 201
+### 223. Membuat pengumuman dan membuka daftar nomornya adalah dua kewenangan
 
 | | |
 | --- | --- |
-| **Status** | Penafsiran kewenangan |
-| **Referensi** | NOTIF-02; API 4.10; PRD 1.1.2 — "Notifikasi (buat)" |
+| **Status** | Keputusan kewenangan |
+| **Referensi** | User Flow — pemetaan peran per fitur; NOTIF-01; NOTIF-02; API 4.1 — Auth Level "Admin"; API 4.10 |
 
-Perlu dicatat apa adanya, karena arahan batch ini menduga sebaliknya: NOTIF-02
-**tidak** menyebut Admin Sekolah. Kalimatnya "Sebagai **Admin**" — lebih umum, bukan
-lebih sempit, dibanding NOTIF-01 yang justru menulis "Sebagai **Admin Sekolah**".
-Dua baris bertetangga di tabel yang sama, dan yang lebih spesifik ada di NOTIF-01.
+NOTIF-02 dipetakan **hanya kepada Admin Sekolah**. User Flow memetakan Admin Sekolah
+ke NOTIF-01…02 dan Kepala Sekolah **hanya** ke NOTIF-01, dan API 4.1 mendefinisikan
+Auth Level "Admin" — label yang dipakai API 4.10 untuk `GET
+/notifications/{id}/wa-links` — sebagai SCHOOL_ADMIN / SUPER_ADMIN.
 
-API 4.10 memberi `GET /notifications/{id}/wa-links` label Auth Level "Admin" — label
-yang **sama persis** dengan `POST /notifications` di tabel yang sama. Butir 201 sudah
-memutuskan label generik itu tidak dipakai sebagai pagar untuk endpoint itu, karena
-akan menutup Kepala Sekolah yang diberi ✅ penuh atas modul Notifikasi oleh matriks
-1.1.2. Memakai penafsiran berbeda untuk baris di sebelahnya akan berarti Kepala
-Sekolah boleh menerbitkan sebuah pengumuman tetapi tidak boleh melihat daftar
-kirimnya sendiri.
+Kewenangannya karena itu:
 
-Pagarnya karena itu `NotificationPolicy::waLinks()`, yang meneruskan ke `view()`:
-izin `notification.manage` **dan** cabang yang sama. Hasilnya SUPER_ADMIN,
-SCHOOL_ADMIN, dan KEPALA_SEKOLAH; Bendahara, Guru, Wali Kelas, Orang Tua, dan Siswa
-ditolak. Guru dan Wali Kelas tetap tidak memperoleh kewenangan apa pun atas
-pembuatan maupun pengiriman pengumuman, dan konflik PORTAL-02 tetap terbuka.
+| Peran | Buat pengumuman (NOTIF-01) | Daftar wa.me (NOTIF-02) |
+| --- | --- | --- |
+| SUPER_ADMIN | ✅ | ✅ |
+| SCHOOL_ADMIN | ✅ | ✅ (cabangnya sendiri) |
+| KEPALA_SEKOLAH | ✅ (butir 201) | ❌ |
+| BENDAHARA, GURU, WALI_KELAS, ORANG_TUA, SISWA | ❌ | ❌ |
 
-Yang dijaga terpisah dari izin adalah cabangnya, karena isinya nomor telepon:
-`view()` menuntut notifikasi itu milik cabang pelakunya, dan Super Admin — yang
-melewati `Gate::before` — tetap hanya melihat penerima **satu** notifikasi yang ia
-buka, bukan gabungan cabang.
+Baris Kepala Sekolah itulah inti butir ini, dan pembacaan pertama pada batch ini
+sempat salah di sana. Alasannya perlu ditulis supaya tidak terulang: butir 201
+meluluskan Kepala pada `POST /notifications` karena NOTIF-01 memang memetakan
+pembuatan kepadanya. Pengecualian itu **berhenti di NOTIF-01**. Meneruskannya ke
+NOTIF-02 berarti melebarkan kewenangan lewat kemiripan label — dua endpoint yang
+kebetulan sama-sama berlabel "Admin" — bukan lewat sumber yang memetakan fiturnya.
+
+Yang dilebarkan pun bukan hal kecil. Daftar ini memuat nomor telepon **seluruh**
+penerima, termasuk orang tua yang tidak pernah membuka aplikasi ini. Ketika dua
+pembacaan sama-sama mungkin dan yang dipertaruhkan data pribadi pihak ketiga, yang
+lebih sempit yang dipilih — dan di sini pembacaan yang lebih sempit juga yang
+didukung pemetaan peran.
+
+`NotificationPolicy::waLinks()` karena itu **tidak** meneruskan ke `view()` dan
+**tidak** memakai `notification.manage`. Izin itu justru dipegang Kepala Sekolah
+juga, sehingga memakainya akan menghasilkan jawaban yang salah. Yang diperiksa
+perannya: Super Admin lulus (ditulis eksplisit meski `Gate::before` sudah
+meluluskannya, supaya pagarnya terbaca utuh dari satu tempat), Admin Sekolah lulus
+untuk cabangnya sendiri, sisanya ditolak.
+
+Kepala Sekolah tidak kehilangan apa pun yang memang miliknya: ia tetap membuat,
+menyimpan draf, mengirim, dan membaca riwayat pengumuman cabangnya, dan ada test
+yang menjaga NOTIF-01 tetap hijau justru di berkas yang sama dengan penolakan
+NOTIF-02-nya. Guru dan Wali Kelas tetap tidak memperoleh kewenangan apa pun atas
+pembuatan maupun pengiriman, dan konflik PORTAL-02 tetap terbuka.
+
+Cabangnya dijaga terpisah dari peran: Admin Sekolah dituntut satu cabang dengan
+notifikasinya, dan Super Admin — yang melewati `SchoolScope` — tetap hanya melihat
+penerima **satu** notifikasi yang ia buka, bukan gabungan cabang (butir 227).
 
 ### 224. Draf tidak punya tautan siap kirim, dan jawabannya 422
 
@@ -4497,7 +4517,9 @@ baru. Permukaan API bertambah tepat satu, dari 40 menjadi 41, dan tambahannya ad
 
 Dengan mendaratnya batch ini, **NOTIF-02 selesai seluruhnya** — ketiga kriterianya
 ada, dengan catatan bahwa normalisasi nomornya aturan implementasi (butir 222) dan
-penolakan draf penafsiran implementasi (butir 224). NOTIF-01 dan NOTIF-04 poin 1–2
+penolakan draf penafsiran implementasi (butir 224). Kewenangannya sendiri bukan
+tafsir: pemetaan peran User Flow menyebut NOTIF-02 milik Admin Sekolah, bukan
+Kepala Sekolah (butir 223). NOTIF-01 dan NOTIF-04 poin 1–2
 sudah selesai sejak batch sebelumnya. Yang tersisa di modul Notifikasi tinggal
 NOTIF-03 seluruhnya dan NOTIF-04 poin 3.
 

@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Enums\PermissionName;
+use App\Enums\RoleName;
 use App\Models\Notification;
 use App\Models\User;
 
@@ -45,23 +46,41 @@ class NotificationPolicy
     /**
      * NOTIF-02 / API 4.10 — GET /notifications/{id}/wa-links.
      *
-     * Pagarnya sama dengan sisi pengelolaan lainnya, dan itu keputusan yang
-     * perlu disebut alasannya. NOTIF-02 berbunyi "Sebagai **Admin**" — lebih
-     * umum, bukan lebih sempit, daripada NOTIF-01 yang menyebut "Admin
-     * Sekolah" — dan API 4.10 memberi endpoint ini label Auth Level yang
-     * **persis sama** dengan POST /notifications. Butir 201 sudah memutuskan
-     * label generik itu tidak dipakai sebagai pagar, karena akan menutup Kepala
-     * Sekolah yang justru diberi kewenangan penuh atas modul Notifikasi oleh
-     * matriks 1.1.2. Memakai aturan berbeda di sini akan berarti Kepala boleh
-     * menerbitkan pengumuman tetapi tidak boleh melihat daftar kirimnya
-     * (butir 223).
+     * Aturannya **sengaja tidak** meneruskan ke `view()`, dan itu inti butir
+     * 223. Membuat pengumuman dan membuka daftar nomor penerimanya adalah dua
+     * kewenangan berbeda, jadi keduanya dipagari terpisah:
      *
-     * Yang tetap dijaga adalah cabangnya: daftar ini memuat nomor telepon, dan
-     * `view()` sudah menuntut notifikasi itu milik cabang pelakunya.
+     *  - NOTIF-01 memetakan pembuatan kepada Admin Sekolah **dan** Kepala
+     *    Sekolah, dan butir 201 memang meluluskan Kepala di sana.
+     *  - NOTIF-02 memetakan daftar wa.me hanya kepada **Admin Sekolah**, dan
+     *    API 4.1 mendefinisikan Auth Level "Admin" sebagai SCHOOL_ADMIN /
+     *    SUPER_ADMIN.
+     *
+     * Pengecualian butir 201 karena itu berhenti di NOTIF-01. Meneruskannya ke
+     * sini akan melebarkan kewenangan lewat kemiripan label, bukan lewat
+     * sumber — dan yang dilebarkan adalah akses ke nomor telepon **seluruh**
+     * penerima, termasuk orang yang tidak pernah memakai aplikasi ini. Kalau
+     * dua pembacaan sama-sama mungkin, yang lebih sempit yang dipilih.
+     *
+     * `notification.manage` tidak dipakai di sini justru karena izin itu
+     * dipegang Kepala Sekolah juga. Yang menentukan perannya, bukan izin
+     * pembuatannya.
      */
     public function waLinks(User $user, Notification $notification): bool
     {
-        return $this->view($user, $notification);
+        // Ditulis eksplisit meski `Gate::before` sudah meluluskan Super Admin:
+        // pagar ini harus terbaca utuh dari satu tempat. Cabangnya tetap aman
+        // karena yang diselesaikan lebih dulu adalah **satu** notifikasi, dan
+        // penerimanya hanya penerima notifikasi itu (butir 227).
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        if (! $user->hasRole(RoleName::SchoolAdmin->value)) {
+            return false;
+        }
+
+        return $this->sharesTenant($user, $notification);
     }
 
     /**
