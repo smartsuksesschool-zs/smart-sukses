@@ -213,6 +213,7 @@ class NotificationResource extends Resource
                     // Hanya draf yang dapat diubah (butir 195).
                     ->visible(fn (Notification $record): bool => Auth::user()?->can('update', $record) ?? false),
                 static::sendAction(),
+                static::waLinksAction(),
             ])
             ->bulkActions([])
             ->defaultSort(fn (Builder $query): Builder => $query
@@ -251,6 +252,25 @@ class NotificationResource extends Resource
             });
     }
 
+    /**
+     * NOTIF-02 — "Daftar Link WhatsApp" untuk pengumuman yang sudah terkirim.
+     *
+     * Sengaja hanya di sisi pengelolaan. Menaruhnya di Notifikasi Saya akan
+     * berarti penerima melihat nomor penerima lain, dan itu justru kebalikan
+     * dari pemisahan yang dijaga butir 218 (butir 231).
+     */
+    protected static function waLinksAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('waLinks')
+            ->label('Link WhatsApp')
+            ->icon('heroicon-o-chat-bubble-left-right')
+            ->color('success')
+            // Draf belum punya tautan siap kirim (butir 224).
+            ->visible(fn (Notification $record): bool => $record->isSent()
+                && (Auth::user()?->can('waLinks', $record) ?? false))
+            ->url(fn (Notification $record): string => static::getUrl('wa-links', ['record' => $record]));
+    }
+
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist->schema([
@@ -279,6 +299,7 @@ class NotificationResource extends Resource
             'create' => Pages\CreateNotification::route('/create'),
             'view' => Pages\ViewNotification::route('/{record}'),
             'edit' => Pages\EditNotification::route('/{record}/edit'),
+            'wa-links' => Pages\NotificationWaLinks::route('/{record}/wa-links'),
         ];
     }
 }
