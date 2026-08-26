@@ -47,8 +47,18 @@ class PpdbWaLinkTest extends TestCase
             'dengan pemisah' => ['+62 812-3456-7890', '6281234567890'],
             'sudah 62' => ['6281234567890', '6281234567890'],
             'tanpa awalan' => ['81234567890', '6281234567890'],
+            'dengan tanda kurung' => ['(0812) 3456 7890', '6281234567890'],
             'kosong' => ['', null],
             'terlalu pendek' => ['0812', null],
+            // Nomor berkode negara lain tidak lagi diberi awalan 62. Sebelumnya
+            // +65… menjadi 6265…, yaitu nomor Indonesia milik orang lain yang
+            // akan menerima pesan sekolah tanpa pernah ada hubungannya — dan
+            // pada NOTIF-02 kesalahan itu terjadi massal, satu baris per
+            // penerima, tanpa Admin sempat memeriksa nomornya satu per satu
+            // (butir 222).
+            'kode negara lain' => ['+6591234567', null],
+            'kode negara jauh' => ['+12025550123', null],
+            'bukan angka sama sekali' => ['tidak punya', null],
         ];
     }
 
