@@ -6254,6 +6254,156 @@ Tidak ada layar nilai khusus CBT yang dibuat, dan tidak ada kolom tambahan pada 
 - penutupan celah `GradePolicy::create()` terhadap rapor terbit secara global (butir 332)
   — pagarnya lokal pada jembatan, dan kebijakan globalnya keputusan pemilik.
 
+## Halaman muka publik — Batch L1
+
+Provenance: [`owner-scope-changes.md`](owner-scope-changes.md) bagian A.
+
+Tambahan langsung atas permintaan pemilik. **Bukan** Sprint 9 versi roadmap, dan bukan
+bagian dari penutupan CBT ([`cbt-mvp-closure.md`](cbt-mvp-closure.md) menyatakannya
+tegas).
+
+### 344. Halaman muka memakai warna platform, bukan warna cabang
+
+Ini jebakan yang paling mudah tidak terlihat. `SchoolBranding::currentSchool()` membaca
+cabang dari **pengguna yang sedang login**. Bagi tamu ia NULL, sehingga halaman muka
+tampil dengan warna platform dan semuanya tampak benar.
+
+Tetapi seorang admin cabang yang sedang login lalu membuka `/` akan melihat halaman muka
+umum memakai warna sekolahnya — white-label satu tenant menyamar sebagai identitas
+seluruh platform, dan tidak ada yang menyadarinya karena orang yang melihatnya justru
+merasa itu wajar.
+
+`layouts/landing.blade.php` karena itu memakai konstanta
+`SchoolBranding::FALLBACK_PRIMARY` dan `FALLBACK_SECONDARY` **secara langsung**, dan
+tidak pernah memanggil `currentSchool()`. Diuji dua kali: warna cabang tidak ikut, dan
+halaman yang dilihat tamu **sama persis** — byte demi byte — dengan yang dilihat pengguna
+yang login.
+
+### 345. Tanpa Vite, dan itu keputusan deployment
+
+Vite dan Tailwind memang terkonfigurasi di project ini, tetapi `public/build` **tidak
+pernah ada**: `public/css` dan `public/js` hanya berisi aset terbitan Filament, dan kedua
+tata letak yang benar-benar terpasang — `layouts/portal` dan `layouts/ppdb` — memakai CSS
+inline dengan CSS custom properties.
+
+Menjadikan `npm run build` syarat untuk merender `/` berarti menambah satu langkah
+deployment yang belum pernah dijalankan siapa pun, pada minggu yang sama dengan go-live.
+Halaman muka karena itu mengikuti konvensi yang sudah terpasang.
+
+Ada test yang menjaganya: tidak ada rujukan `@vite`, tidak ada `/build/`, dan setiap aset
+yang dirujuk halaman ini benar-benar ada di `public/`.
+
+### 346. Tanpa menu hamburger
+
+Pada layar sempit tautan navigasinya menggulung ke samping, bukan dilipat ke dalam menu.
+Itu konvensi yang sudah dipakai `layouts/portal.blade.php` (`.portal-nav__inner`), dan ia
+tidak menuntut satu baris JavaScript pun.
+
+Menu hamburger menuntut tombol, keadaan buka-tutup, penanganan fokus, dan perilaku yang
+masuk akal ketika JavaScript-nya gagal dimuat — empat hal yang harus benar demi
+menyembunyikan lima tautan.
+
+### 347. Naskahnya naskah implementasi
+
+Pemilik belum menyerahkan teks pemasaran. Yang tertulis di halaman ini karena itu
+**naskah implementasi**, dan hanya menyebut kemampuan yang benar-benar sudah berjalan.
+
+Yang sengaja tidak ada, dan tidak boleh ditambahkan tanpa sumbernya: jumlah sekolah,
+jumlah pengguna, persentase keberhasilan, testimoni, penghargaan, nama mitra, nomor
+telepon, alamat surel, dan alamat kantor. Tidak satu pun dari itu punya sumber di project
+ini, dan mengarangnya berarti menaruh kebohongan di halaman paling depan.
+
+Bagian "Ujian Online" khususnya ditulis hati-hati: ia menyebut pilihan ganda, penyimpanan
+otomatis, dan penilaian otomatis — bukan uraian, bank soal, pengacakan, atau anti-curang,
+yang seluruhnya masih scope Phase 2 yang belum dikerjakan.
+
+Teksnya berada langsung di dalam `resources/views/landing.blade.php` supaya mudah
+diganti ketika naskah pemiliknya datang.
+
+### 348. Tidak ada logo yang dikarang
+
+Tidak ada berkas logo Smart Sukses School di repository — `public/` hanya berisi
+`favicon.ico` dan aset Filament. Yang dipakai karena itu **wordmark**: nama aplikasi dari
+`config('app.name')`, didampingi ikon hiasan bertanda `aria-hidden`.
+
+Ikon itu bukan logo dan tidak diperlakukan sebagai logo. Ketika berkas logo yang
+sebenarnya tersedia, yang perlu diganti hanya satu elemen.
+
+### 349. Tidak ada `/login` umum, dan halaman muka tidak berpura-pura ada
+
+Project ini punya tiga pintu masuk: `/admin/login` (Filament, untuk peran sekolah),
+`/siswa/masuk`, dan `/portal/masuk`. Tidak ada rute bernama `login`.
+
+Tombol utama "Masuk ke Sistem" karena itu mengantar ke bagian **Akses Pengguna**, bukan ke
+satu halaman masuk yang tidak ada. Membuat `/login` yang menebak peran pengunjung berarti
+membangun arsitektur masuk keempat — persis yang dilarang batch ini.
+
+Ada test yang menjaga ketiadaannya: tidak ada tautan ke `/login`, dan tidak ada rute
+bernama itu.
+
+### 350. Data cabang yang tampil sama persis dengan yang sudah publik
+
+Bagian cabang menampilkan **nama, kode, dan alamat** — tepat yang sudah tampil di halaman
+PPDB publik sejak Sprint 3. Telepon, surel, nama kepala sekolah, dan template WhatsApp
+tidak ikut, walaupun ketiganya ada di tabel yang sama.
+
+Diuji dengan menanam nilai bertanda pada seluruh kolom itu lalu membuktikan tidak satu pun
+muncul di halaman. Naskah yang berasal dari database dicetak lewat Blade biasa, tanpa
+`{!! !!}`, dan ada test yang menanam `<script>` pada nama cabang untuk membuktikannya.
+
+### 351. Controller biasa, bukan komponen Livewire
+
+Halaman ini statis dan satu-satunya data yang dibacanya adalah daftar cabang. Menjadikannya
+komponen Livewire berarti memuat runtime-nya — beserta `@livewireStyles` dan
+`@livewireScripts` — pada halaman yang tidak punya satu pun interaksi.
+
+`LandingController` karena itu controller invokable biasa yang mengembalikan sebuah view.
+Tanpa middleware, tanpa sesi, tanpa konteks tenant.
+
+### 352. Daftar cabang memakai semantik yang sudah ada
+
+`School::query()->active()->orderBy('name')` — sama persis dengan
+`App\Livewire\Ppdb\SchoolList`. `School` tidak memakai `BelongsToSchool`; ia justru tabel
+tenantnya sendiri, sehingga tidak ada SchoolScope yang dapat menyembunyikan seluruh cabang
+dari pengunjung yang tidak login.
+
+Konsekuensinya diuji berpasangan: cabang nonaktif tidak muncul di halaman muka **dan**
+tidak muncul di halaman PPDB — satu perilaku, bukan dua yang kebetulan mirip.
+
+Query-nya satu, dan jumlahnya tidak bertambah mengikuti jumlah cabang.
+
+### 353. Yang **tidak** dikerjakan Batch L1
+
+- CMS, berita/blog, formulir kontak, newsletter, chatbot, live chat, SDK analitik, peta,
+  pembayaran — tidak satu pun ditambahkan;
+- arsitektur masuk baru, refactor peran, panel SEO;
+- halaman muka dwibahasa — teksnya bahasa Indonesia saja;
+- pekerjaan CBT baru;
+- Sprint 9 versi roadmap (Polish & QA) — belum tersentuh sama sekali.
+
+Yang disentuh di luar halaman muka hanya satu: rute `/` yang sebelumnya mengembalikan
+`view('welcome')`. Berkas `resources/views/welcome.blade.php` — halaman bawaan Laravel yang
+tidak pernah disunting sejak instalasi — ikut dihapus karena tidak ada lagi yang
+memanggilnya.
+
+### 354. Halaman muka menyentuh database, dan `/` sebelumnya tidak
+
+Ditemukan suite penuh, bukan suite fokus: `tests/Feature/ExampleTest.php` — test bawaan
+Laravel yang tidak pernah disunting sejak instalasi — memanggil `GET /` **tanpa**
+`RefreshDatabase`.
+
+Selama `/` mengembalikan view statis, itu tidak menjadi soal. Halaman muka yang
+menggantikannya membaca daftar cabang aktif, dan test itu langsung gagal dengan
+`no such table: schools`.
+
+Yang diperbaiki test-nya, bukan halamannya: `RefreshDatabase` dinyalakan. Membuat halaman
+muka menoleransi tabel yang tidak ada akan menyembunyikan kesalahan konfigurasi database
+yang sesungguhnya di halaman paling depan.
+
+Yang perlu dicatat sebagai konsekuensi nyata: `/` kini satu query lebih mahal daripada
+sebelumnya, dan ia bergantung pada database. Bila database tidak dapat dihubungi,
+halaman muka ikut gagal — sama seperti seluruh halaman lain di aplikasi ini.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

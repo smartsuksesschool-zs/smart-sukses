@@ -26,8 +26,27 @@ dan tidak pernah didefinisikan Phase 1.
 **Karena itu:** landing page umum adalah **penambahan scope**, bukan penyelesaian
 kekurangan. Tidak boleh disebut bagian dari Phase 1.
 
-**Keadaan `/` saat ini:** `routes/web.php` mengembalikan `view('welcome')` — halaman
-bawaan Laravel yang belum pernah disentuh. Halaman ini **tidak** diubah pada Batch C1.
+**Keadaan `/` sekarang:** **terkirim pada Batch L1.** Halaman bawaan Laravel diganti
+halaman muka publik Smart Sukses School, dan `resources/views/welcome.blade.php` dihapus.
+
+| | |
+| --- | --- |
+| Rute | `GET /` → `LandingController`, bernama `landing` |
+| Tata letak | `resources/views/layouts/landing.blade.php` |
+| Halaman | `resources/views/landing.blade.php` |
+| Isi | navbar · hero · tentang · fitur · akses pengguna · cabang/PPDB · ajakan · footer |
+| Pintu masuk | `/admin/login` · `/siswa/masuk` · `/portal/masuk` · `/ppdb` |
+| Cabang | `School::active()`, semantik yang sama dengan halaman PPDB publik |
+| CSS | ditulis tangan, inline, tanpa Vite — `npm run build` **tidak** dibutuhkan |
+| Warna | konstanta platform, bukan white-label cabang mana pun |
+| Naskah | naskah implementasi; pemilik belum menyerahkan teks pemasaran |
+| Logo | tidak ada berkas logo di repository, dan tidak ada yang dikarang — dipakai wordmark |
+
+Yang **tidak** ada, dan tidak boleh ditambahkan tanpa sumbernya: jumlah sekolah, jumlah
+pengguna, persentase keberhasilan, testimoni, penghargaan, nama mitra, nomor telepon,
+alamat surel, dan alamat kantor.
+
+Rinciannya di [`implementation-notes.md`](implementation-notes.md) butir 344–353.
 
 ---
 
@@ -97,5 +116,5 @@ Belum dijawab, dan **tidak** diputuskan sendiri oleh implementasi:
 | --- | --- |
 | R-2 | Bolehkah Admin Sekolah membuat soal ujian, atau hanya guru pengampunya? Batch C1 mengikuti arsitektur yang berlaku sekarang — matriks PRD 1.1.2 memberi Admin Sekolah ✅ penuh pada Input Nilai — dan itu dicatat sebagai mengikuti preseden, bukan sebagai keputusan pemilik. |
 | R-4 | Apakah "satu percobaan per ujian" sesuai dengan cara sekolahnya bekerja? Bawaan implementasi menyatakan satu, tanpa reset. Kebutuhan mengulang karena koneksi putus adalah fitur tersendiri. |
-| R-5 | Landing page ada di `apps.smartsukses.sch.id` (subdomain aplikasi) atau di domain lain? |
-| R-6 | Isi landing page — cabang mana yang ditampilkan, teksnya, kontaknya. |
+| ~~R-5~~ | **Terjawab untuk penyerahan ini.** Halaman muka ditempatkan di `apps.smartsukses.sch.id/`, yaitu satu-satunya domain aplikasi yang sudah didefinisikan. Tidak ada arsitektur domain apex baru yang ditambahkan. Bila pemilik kelak menyediakan domain pemasaran tersendiri, pemindahannya pekerjaan terpisah. |
+| R-6 | Naskah landing page. Yang terpasang sekarang naskah implementasi. Cabang ditampilkan otomatis dari cabang aktif. Kontak **belum** ada karena tidak ada sumbernya — bila pemilik menghendaki telepon/surel/alamat tampil, datanya harus disediakan lebih dulu. |
