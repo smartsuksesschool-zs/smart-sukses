@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\LandingController;
 use App\Http\Controllers\Portal\ReportCardDownloadController;
 use App\Http\Controllers\Portal\StudentReportCardController;
 use App\Http\Middleware\EnsureParentPortalAccess;
@@ -29,9 +30,16 @@ use App\Livewire\Teacher\TeacherSchedule;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+/*
+ * Halaman muka publik — tambahan langsung atas permintaan pemilik, di luar
+ * blueprint Phase 1 (docs/owner-scope-changes.md bagian A).
+ *
+ * Publik sepenuhnya: tanpa middleware, tanpa sesi, dan tanpa pengalihan ke
+ * halaman masuk mana pun. Sistem ini punya tiga pintu masuk yang berbeda, jadi
+ * halaman ini mengantar pengunjung ke pintu yang tepat alih-alih menebak
+ * (butir 349).
+ */
+Route::get('/', LandingController::class)->name('landing');
 
 /*
  * API 4.7 PPDB Online — Auth Level: Public.
