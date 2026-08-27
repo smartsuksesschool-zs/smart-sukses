@@ -128,7 +128,31 @@ class LandingPageTest extends TestCase
 
         $authenticated = $this->actingAs($admin)->get('/')->assertOk()->getContent();
 
-        $this->assertSame($guest, $authenticated, 'Halaman muka berubah ketika ada yang login.');
+        // Yang dibandingkan **blok warnanya**, bukan seluruh dokumen.
+        //
+        // Membandingkan seluruh HTML pernah lulus dan kemudian gagal tergantung
+        // urutan test: Livewire menyuntikkan aset dan token CSRF-nya sendiri ke
+        // dalam balasan HTML utuh, dan sudah-belumnya penyuntikan itu terjadi
+        // berbeda antar proses. Tidak satu pun dari itu ada hubungannya dengan
+        // yang sedang dibuktikan — yaitu bahwa identitas visualnya tidak
+        // berubah ketika ada pengguna cabang yang login (butir 366).
+        $this->assertSame(
+            $this->brandingBlockOf($guest),
+            $this->brandingBlockOf($authenticated),
+            'Warna halaman muka berubah ketika ada yang login.',
+        );
+    }
+
+    /**
+     * Blok `:root { ... }` — tempat seluruh warna halaman muka ditetapkan.
+     */
+    protected function brandingBlockOf(string $html): string
+    {
+        preg_match('/:root\s*\{(.*?)\}/s', $html, $matches);
+
+        $this->assertNotEmpty($matches[1] ?? '', 'Blok warna tidak ditemukan di halaman.');
+
+        return preg_replace('/\s+/', ' ', trim($matches[1]));
     }
 
     // ---------------------------------------------------- pintu masuk peran
