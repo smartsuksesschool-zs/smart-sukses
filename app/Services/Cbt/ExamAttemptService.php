@@ -222,6 +222,43 @@ class ExamAttemptService
     }
 
     /**
+     * Menutup pengerjaan yang batas waktunya lewat pada **satu ujian**.
+     *
+     * Titik penyelesaian kedua, di samping akses siswa sendiri (butir 313):
+     * ketika gurunya membuka daftar hasil. Tanpa ini, pengerjaan siswa yang
+     * tidak pernah membuka halamannya lagi akan tampak "sedang dikerjakan"
+     * selamanya di layar guru, dan nilainya tidak pernah muncul.
+     *
+     * Cakupannya sengaja sempit — satu ujian yang sedang dibuka, bukan seluruh
+     * cabang dan bukan seluruh sekolah. Penyapuan global akan menjadi pekerjaan
+     * latar yang menyamar sebagai permintaan halaman (butir 334).
+     *
+     * Algoritma penilaiannya tidak disalin: yang dipanggil `finalizeIfExpired()`
+     * yang sama dengan jalur siswa, yang pada gilirannya memanggil
+     * `ExamScoringService::finalize()` yang sama.
+     *
+     * @return int jumlah yang ditutup
+     */
+    public function settleExpiredForExam(Exam $exam, ?CarbonInterface $now = null): int
+    {
+        $moment = CarbonImmutable::instance($now ?? now());
+
+        $stale = ExamAttempt::query()
+            ->withoutGlobalScope(SchoolScope::class)
+            ->where('school_id', $exam->school_id)
+            ->where('exam_id', $exam->getKey())
+            ->inProgress()
+            ->where('expires_at', '<=', $moment)
+            ->get();
+
+        foreach ($stale as $attempt) {
+            $this->finalizeIfExpired($attempt, $moment);
+        }
+
+        return $stale->count();
+    }
+
+    /**
      * Pengerjaan yang sedang berjalan dan masih boleh menerima jawaban.
      *
      * @throws ValidationException

@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Enums\ExamStatus;
 use App\Filament\Resources\ExamResource\Pages;
+use App\Filament\Resources\ExamResource\RelationManagers\AttemptsRelationManager;
 use App\Filament\Resources\ExamResource\RelationManagers\QuestionsRelationManager;
 use App\Models\AcademicYear;
 use App\Models\ClassSubject;
@@ -483,6 +484,7 @@ class ExamResource extends Resource
     {
         return [
             QuestionsRelationManager::class,
+            AttemptsRelationManager::class,
         ];
     }
 

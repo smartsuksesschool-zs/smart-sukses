@@ -129,6 +129,47 @@ class ExamPolicy
     }
 
     /**
+     * Melihat hasil pengerjaan siswa.
+     *
+     * Lebih sempit daripada `view()` dengan sengaja. Melihat **ujiannya** adalah
+     * hal biasa di dalam satu cabang — pola yang sama dengan daftar nilai
+     * (GradeResource tidak menyaring per guru). Melihat **hasil siswa per nama
+     * beserta nilainya** adalah hal lain: itu data penilaian orang, dan yang
+     * berkepentingan atasnya adalah guru pengampunya, administrator cabang, dan
+     * kepala sekolah sebagai pengawas (butir 324).
+     */
+    public function viewResults(User $user, Exam $exam): bool
+    {
+        if (! $user->can(PermissionName::GradeView->value) || ! $this->sharesTenant($user, $exam)) {
+            return false;
+        }
+
+        // Kepala Sekolah mengawasi seluruh cabang, tetapi tidak mengelola —
+        // lihat `bridgeToGrade()` yang menolaknya.
+        if ($user->hasRole(RoleName::KepalaSekolah->value)) {
+            return true;
+        }
+
+        return $this->teachesClassSubject($user, (int) $exam->class_subject_id);
+    }
+
+    /**
+     * Memasukkan hasil CBT menjadi nilai akademik.
+     *
+     * Kewenangan **menulis**, terpisah dari melihat hasil: Kepala Sekolah boleh
+     * membaca daftar nilainya, tetapi yang menempatkan angka ke dalam rapor
+     * adalah guru pengampunya atau administrator cabang (butir 325).
+     *
+     * Ini baru separuh pemeriksaan. Separuh lainnya milik penilaian akademik
+     * sendiri — `GradePolicy::gradeClassSubject()` — dan ExamGradeBridge
+     * memanggil keduanya.
+     */
+    public function bridgeToGrade(User $user, Exam $exam): bool
+    {
+        return $this->manages($user, $exam);
+    }
+
+    /**
      * Kunci jawaban.
      *
      * Sengaja terpisah dari `view`. Kepala Sekolah berwenang mengawasi — ia
