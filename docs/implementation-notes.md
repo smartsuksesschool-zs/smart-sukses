@@ -5764,6 +5764,237 @@ berbeda".
   tidak tersedia tanpa mengubah statusnya. Menambahkan penjadwal hanya untuk mengubah
   satu kolom berarti menambah titik gagal yang tidak menghasilkan apa pun.
 
+## MVP CBT yang dipercepat — Batch C3 (alur siswa)
+
+Provenance: [`owner-scope-changes.md`](owner-scope-changes.md).
+Batas scope: [`cbt-mvp-scope.md`](cbt-mvp-scope.md).
+
+Batch ini membangun sisi **siswa**: melihat ujiannya, mengerjakannya, dan menerima
+nilainya. Jembatan ke nilai akademik tetap belum ada.
+
+### 306. Keadaan ujian bagi siswa diturunkan, tidak disimpan
+
+`StudentExamState` — UPCOMING, AVAILABLE, IN_PROGRESS, SUBMITTED, MISSED — adalah enum
+PHP tanpa kolom database. Ia dihitung dari tiga hal yang memang tersimpan: status
+ujiannya, jadwalnya, dan ada-tidaknya pengerjaan milik siswa itu.
+
+Menyimpannya berarti menyimpan **kesimpulan**, dan kesimpulan yang tersimpan basi tepat
+pada detik jadwalnya lewat — tanpa ada yang menuliskannya ulang. Yang menyimpannya akan
+menuntut penjadwal hanya untuk menjaga sebuah kolom tetap jujur.
+
+### 307. Identitas siswa hanya dari sesi
+
+`StudentExamService` dan `ExamAttemptService` mengambil siswanya lewat
+`StudentPortalService::student()` — akun yang login, bukan `student_id` dari rute, query
+string, properti publik Livewire, maupun payload request.
+
+Aturannya sudah berlaku sejak Sprint 7 untuk nilai, jadwal, dan rapor (butir 181), dan
+CBT tidak boleh menjadi pengecualian pertamanya. Alamat halamannya karena itu hanya
+menyebut **ujiannya**: `/siswa/ujian/{examId}`. Test menjaga ketiadaan `{studentId}` di
+seluruh rute `siswa/`, meneruskan penjagaan yang sudah ada sejak butir 186.
+
+### 308. Yang bukan miliknya **tidak ada**, bukan "tidak boleh"
+
+Ujian dari cabang lain, kelas lain, atau yang masih draf menghasilkan
+`ModelNotFoundException` — 404, bukan 403. Membedakan keduanya sudah memberi tahu bahwa
+ujiannya ada, dan pada portal siswa itu berarti memberi tahu bahwa ada sesuatu yang
+layak ditebak id-nya.
+
+Himpunan yang terlihat: cabang yang sama, tahun ajaran aktif, kelas yang sedang
+ditempati, dan status PUBLISHED atau CLOSED. Draf tidak pernah termasuk. Ujian yang sudah
+**ditutup** tetap termasuk supaya hasil yang sudah ada tidak ikut hilang ketika gurunya
+menutup ujian — menutup ujian mengakhiri pengerjaan, bukan menghapus nilai.
+
+Siswa tanpa kelas aktif atau tanpa tahun ajaran aktif tidak melihat satu ujian pun.
+Gagal tertutup, bukan terbuka.
+
+### 309. Membuka halaman pengerjaan **berarti** memulai
+
+Tidak ada tombol "Mulai" yang terpisah dari tautannya. Daftar ujian menuliskan "Mulai
+Ujian" atau "Lanjutkan" menurut keadaannya, dan keduanya menuju alamat yang sama;
+`startOrResume()` memutuskan mana yang terjadi.
+
+Konsekuensinya harus dinyatakan lurus: membuka alamat itu memakai jatah percobaan
+satu-satunya. Itu memang yang dimaksud tombolnya, dan alternatifnya — halaman perantara
+berisi tombol Mulai — hanya memindahkan detik yang sama satu klik lebih jauh sambil
+menambah satu keadaan yang harus diuji.
+
+### 310. Kunci jawaban tidak punya jalan menuju peramban
+
+Tiga lapis, seluruhnya struktural — bukan penyembunyian:
+
+1. **Tidak pernah diambil.** `StudentExamService::questionsFor()` menyebut kolomnya satu
+   per satu: `id`, `exam_question_id`, `option_text`, `position`. `is_correct` tidak ikut
+   dalam SELECT-nya. Mengambil seluruh kolom lalu berharap Blade tidak mencetaknya adalah
+   jaminan yang bergantung pada disiplin, bukan pada bentuk datanya.
+
+2. **Tidak pernah berupa model.** Yang keluar dari layanan adalah array biasa. Livewire
+   menyimpan properti publik ke dalam snapshot yang bolak-balik ke peramban; menaruh
+   model soal di sana berarti menaruh seluruh kolomnya di dalam jangkauan siapa pun yang
+   membuka panel jaringan. Properti publik `StudentExam` karena itu hanya angka: id
+   ujian, nomor soal yang sedang dibuka, peta jawaban, dan satu pesan.
+
+3. **Tidak pernah dapat dibedakan.** Teks pilihan yang benar tentu terlihat — siswa harus
+   dapat memilihnya. Yang tidak boleh bocor adalah **mana** di antaranya yang benar, dan
+   itu diuji dengan membandingkan markup keempat tombol pilihan setelah id dan teksnya
+   dinormalisasi: bila yang benar membawa apa pun yang tidak dibawa yang lain — atribut,
+   kelas, urutan, `data-*` apa pun — hasilnya tidak sama dan test-nya jatuh.
+
+Satu-satunya tempat `is_correct` dimuat pada alur siswa adalah `ExamScoringService`, di
+sisi server, dan yang keluar dari sana hanyalah angka.
+
+### 311. Waktu dan nilai milik server
+
+Yang dikirim peramban hanyalah **pilihan mana yang diambil**. Tidak ada `score`,
+`is_correct`, maupun `points_earned` di antara parameter jalur penyimpanan jawaban —
+bukan diabaikan, melainkan tidak ada, sehingga tidak ada bentuk request apa pun yang
+dapat menyentuhnya. Ada test yang memeriksa daftar parameternya lewat refleksi.
+
+Hitung mundur di layar adalah gambar. `expires_at` ditetapkan server sekali saat memulai,
+dan setiap aksi membandingkannya dengan jam server. Menghentikan hitung mundur lewat
+konsol, memundurkan jam perangkat, atau mengubah nilai tersembunyi tidak memperpanjang
+apa pun.
+
+Penilaian membaca kunci dari database setiap kali, bukan dari kolom `is_correct` pada
+baris jawaban. Ada test yang menulis `is_correct = true` dan `points_earned = 99` ke
+seluruh jawaban salah, lalu membuktikan nilainya tetap 0.
+
+### 312. Daftar ujian mengambil pengerjaan sekali
+
+Seluruh pengerjaan milik siswa yang sedang login diambil dalam satu query lalu dibagikan
+ke tiap baris. Menanyakannya per ujian akan menjadi satu query per baris untuk sesuatu
+yang bentuknya satu query saja. Diuji dengan menghitung query: enam ujian harus sama
+mahalnya dengan satu, dan begitu juga enam soal dengan satu soal.
+
+### 313. Kedaluwarsa ditutup tanpa penjadwal
+
+Tidak ada cron, tidak ada job. Pengerjaan yang batas waktunya lewat ditutup ketika siswa
+itu sendiri menyentuhnya — membuka daftar ujian, membuka halaman pengerjaan, atau menekan
+Kumpulkan.
+
+Yang menutupnya adalah `ExamScoringService::finalize()`, mesin yang sama persis dengan
+pengumpulan biasa. Tidak ada jalur kedua yang dapat memberi angka berbeda, dan tidak ada
+aturan penilaian yang tersalin.
+
+Cakupan penyapuannya sengaja sempit — hanya pengerjaan milik siswa yang sedang login —
+supaya tidak menjelma menjadi pekerjaan latar yang menyamar sebagai permintaan halaman.
+
+Konsekuensi yang diterima: pengerjaan siswa yang tidak pernah membuka halamannya lagi
+tetap berstatus IN_PROGRESS sampai ada yang membukanya. Nilainya tidak hilang — ia
+dihitung pada akses berikutnya, dari jawaban yang sudah tersimpan, dengan waktu
+berakhirnya yang sebenarnya. Guru yang butuh rekap lengkap sebelum itu adalah kebutuhan
+Batch C4, bukan alasan menambah penjadwal sekarang.
+
+### 314. Soal yang dilewati mendapat barisnya, bernilai nol
+
+Penilaian membuat baris jawaban untuk **setiap** soal, termasuk yang tidak dijawab.
+Tanpa itu, "tidak dijawab" dan "belum dinilai" akan terlihat sama persis di database —
+keduanya ketiadaan baris — dan tidak ada cara membedakannya kemudian.
+
+Barisnya berisi `exam_option_id` NULL, `is_correct` false, `points_earned` 0.00.
+
+### 315. Mengumpulkan bersifat idempoten
+
+Barisnya dikunci di dalam transaksi (`lockForUpdate`), lalu statusnya diperiksa. Klik
+ganda pada koneksi lambat karena itu tidak menghasilkan nilai kedua, tidak menggeser
+`submitted_at`, dan tidak menggandakan baris jawaban. Pengumpulan kedua mengembalikan
+pengerjaan yang sama apa adanya.
+
+### 316. Pengerjaan yang lewat batas dicap pada saat berakhirnya
+
+`submitted_at` diisi `expires_at`, bukan detik penemuannya. Itulah waktu pengerjaannya
+benar-benar berhenti menerima jawaban.
+
+Memakai waktu penemuan akan membuat waktu pengumpulan bergantung pada kapan siswanya
+kebetulan membuka halaman lagi — bisa berhari-hari kemudian — dan menghasilkan rekap yang
+menyesatkan tanpa satu pun tanda bahwa angkanya bukan yang sebenarnya.
+
+Keduanya sama-sama "waktu server"; yang dipilih adalah yang jujur.
+
+### 317. Batas waktu tidak pernah melewati penutupan ujian
+
+`expires_at` adalah yang **lebih awal** antara akhir durasi dan `available_until`. Siswa
+yang memulai pukul 09.45 pada ujian berdurasi 60 menit yang ditutup pukul 10.00 mendapat
+15 menit, bukan sampai 10.45.
+
+Tanpa ini, memulai di menit-menit terakhir justru menjadi cara memperpanjang ujian.
+
+### 318. Hasil menampilkan nilai, bukan kunci
+
+Halaman hasil menyebut nilai, waktu pengumpulan, dan durasinya. Tidak ada ulasan per
+soal, dan tidak ada kunci jawaban — bahkan setelah dikumpulkan.
+
+Alasannya bukan kemalasan: selama jendela ujian masih terbuka, siswa yang mengumpulkan
+lebih awal akan menjadi sumber kunci bagi teman sekelasnya, dan halaman ulasan per soal
+adalah cara paling langsung membuat itu terjadi. Ulasan setelah jendelanya tertutup
+adalah pekerjaan tersendiri yang belum dikerjakan.
+
+### 319. Fiksur siswa menuntut dua hal, bukan satu
+
+Alur siswa bergantung pada `students.user_id` **dan** penempatan kelas aktif. Fiksur yang
+hanya membuat akun berperan SISWA akan membuat setiap test lulus karena akun itu tidak
+melihat apa pun — bukan karena aturannya bekerja. `BuildsStudentExamFixture` karena itu
+menautkan akun dan menempatkan kelasnya sekaligus.
+
+### 320. C3 tidak menulis satu baris `grades` pun
+
+Keputusan pemilik (R-1). Pengumpulan menghitung dan menyimpan nilai CBT, dan berhenti di
+situ.
+
+Dijaga tiga lapis: test yang menghitung `grades` sebelum dan sesudah pengumpulan, test
+yang membandingkan snapshot nilai dan rapor yang sudah ada, dan test yang membaca kode
+ketiga layanan CBT setelah komentarnya dibuang lalu membuktikan tidak satu pun menyebut
+`Models\Grade`, `GradeConfig`, atau `ReportCard`.
+
+Yang terakhir yang paling berguna: ia gagal pada saat seseorang **menambahkan**
+ketergantungan itu, bukan menunggu sampai akibatnya terlihat.
+
+### 321. Jejak audit menyimpan metadata, bukan isi
+
+Pengerjaan dan jawaban terekam listener CUD yang sudah ada, dengan aktor akun siswa yang
+bersangkutan — tidak ada aktor palsu yang dikarang (butir 250).
+
+`audit_logs` tidak punya kolom yang dapat menampung isi: hanya tabel, id, aksi, cabang,
+pengguna, alamat IP, dan waktu. Kunci jawaban maupun jawaban siswa karena itu **tidak
+mungkin** ikut tercatat di sana, dan test menjaga daftar kolomnya tetap seperti itu.
+
+### 322. Yang **tidak** dikerjakan Batch C3
+
+- jembatan "Masukkan ke Nilai" — C4;
+- rekap hasil untuk guru di luar yang sudah ada pada C2 — C4;
+- ulasan jawaban per soal setelah jendela ujian tertutup — belum dikerjakan;
+- soal uraian, pengacakan, percobaan ulang, reset, anti-curang — tetap scope Phase 2;
+- notifikasi apa pun terkait ujian;
+- permukaan CBT untuk orang tua — tidak diminta;
+- endpoint REST CBT — permukaan API tetap 41;
+- landing page (L1), dan `/` **tidak** disentuh batch ini.
+
+### 323. Test yang gagal sesekali tanpa ada yang rusak
+
+Ditemukan pada batch ini, dan bukan oleh CBT: satu kasus `ParentNotificationTest` gagal
+pada suite MySQL, lalu lulus delapan kali berturut-turut ketika dijalankan sendiri.
+
+Sebabnya `assertDontSee('Rp')`. Halaman yang dirender memuat token CSRF — 40 karakter
+acak — dan token pada eksekusi itu berbunyi `...B89XS1bRpREAggw7...`. Dua huruf yang
+dicari kebetulan ada di dalamnya, dan tidak ada satu pun angka rupiah yang bocor.
+
+Peluangnya kira-kira satu dari seratus eksekusi. Itu cukup jarang untuk tidak pernah
+terlihat saat test-nya ditulis, dan cukup sering untuk menjatuhkan gerbang batch mana pun
+secara acak — lalu lulus ketika diperiksa, sehingga tampak seperti gangguan yang tidak
+dapat ditelusuri.
+
+Yang diperbaiki maksudnya, bukan hanya keluhannya: yang dicari sekarang **nominal** —
+"Rp" yang diikuti angka — lewat `assertDoesNotMatchRegularExpression('/Rp\s?\d/')`.
+Pemeriksaan kolom internal di sekitarnya tetap berupa pencocokan string; nama kolom
+memuat garis bawah, dan token CSRF tidak.
+
+Pola yang sama ada di `StudentNotificationTest` dan ikut diperbaiki. `SPP` di sana
+dibiarkan sebagai string: peluang tiga huruf berurutan muncul di dalam token sekitar satu
+dari enam ribu, dan kata itu sendiri memang penanda kebocoran yang bermakna.
+
+Perbaikan ini di luar scope C3 dan dikerjakan karena gerbangnya tidak dapat dipercaya
+selama ia ada.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

@@ -135,12 +135,11 @@ karena matriks itu ditulis untuk Phase 1.
 | --- | --- | --- |
 | **C1** | dokumen provenance, skema, model, enum, policy, factory, test integritas & isolasi | **selesai** |
 | **C2** | UI penulis: daftar & CRUD ujian, soal, pilihan jawaban, siklus terbit/tarik/tutup | **selesai** |
-| C3 | alur siswa: daftar, mengerjakan, simpan otomatis, mengumpulkan, penilaian server, halaman hasil | belum |
+| **C3** | alur siswa: daftar, mengerjakan, simpan otomatis, pengatur waktu, mengumpulkan, penilaian server, halaman hasil | **selesai** |
 | C4 | daftar hasil untuk guru, jembatan "Masukkan ke Nilai", penutupan | belum |
 | L1 | landing page publik (terpisah dari CBT) | belum |
 
-C1 dan C2 **tidak** menyentuh satu pun permukaan siswa, tidak menilai, dan tidak
-menyentuh `/`.
+C1-C3 **tidak** menulis satu baris `grades` pun, dan tidak menyentuh `/`.
 
 ---
 
@@ -200,3 +199,73 @@ kunci adalah yang boleh menulisnya.**
 Kunci tidak pernah muncul sebagai kolom daftar mana pun — daftar soal hanya menampilkan
 **jumlah** pilihan. Ia hanya ada di form penyuntingan soal, yang tertutup bagi siapa pun
 yang tidak dapat mengubah ujiannya.
+
+---
+
+## 9. Alur siswa (C3)
+
+### Rute
+
+| URI | Nama |
+| --- | --- |
+| `/siswa/ujian` | `student.exams` |
+| `/siswa/ujian/{examId}` | `student.exam` |
+| `/siswa/ujian/{examId}/hasil` | `student.exam-result` |
+
+Tidak ada id siswa di mana pun. Identitasnya selalu dari akun yang login lewat
+`StudentPortalService` — pola yang sama dengan seluruh halaman portal lain.
+
+Menu **Ujian** ditambahkan ke navigasi portal siswa, di antara Nilai dan Notifikasi.
+Ia tambahan scope pemilik, di luar keempat menu PORTAL-03.
+
+### Keadaan yang dilihat siswa
+
+Diturunkan, tidak disimpan — bukan kolom database:
+
+| Keadaan | Syarat | Tindakan |
+| --- | --- | --- |
+| Belum dibuka | terbit, `available_from` belum tiba | — |
+| Dapat dikerjakan | terbit, di dalam rentang, belum dikerjakan | Mulai Ujian |
+| Sedang dikerjakan | ada pengerjaan, belum lewat batas | Lanjutkan |
+| Sudah dikumpulkan | pengerjaan berstatus SUBMITTED | Lihat Hasil |
+| Terlewat | rentangnya habis tanpa pernah dikerjakan, atau ujiannya ditutup | — |
+
+Ujian **draf** tidak pernah terlihat. Ujian yang sudah **ditutup** tetap terlihat bila
+siswa punya hasil di sana.
+
+### Yang dijamin server
+
+| | |
+| --- | --- |
+| Identitas | dari sesi, tidak pernah dari request |
+| `started_at`, `expires_at`, `submitted_at` | ditetapkan server |
+| `expires_at` | `min(mulai + durasi, available_until)` |
+| Hitung mundur di layar | gambar; setiap aksi memeriksa ulang jam server |
+| `is_correct`, `points_earned`, `score` | hanya ditulis penilaian; bukan parameter jalur mana pun yang dapat dipanggil peramban |
+| Kunci jawaban | tidak pernah ikut dalam SELECT alur siswa |
+
+### Simpan otomatis
+
+Tersimpan per soal saat dipilih, lewat upsert atas UNIQUE
+`(exam_attempt_id, exam_question_id)`. Mengganti pilihan memperbarui baris yang sama.
+Setelah dikumpulkan, tidak ada jawaban yang dapat berubah.
+
+### Kedaluwarsa
+
+Tanpa penjadwal. Pengerjaan yang lewat batas ditutup saat siswa menyentuhnya lagi,
+memakai jawaban yang sudah tersimpan dan mesin penilaian yang sama dengan pengumpulan
+biasa. `submitted_at` diisi `expires_at` — detik pengerjaannya benar-benar berakhir.
+
+Konsekuensi yang diterima: pengerjaan siswa yang tidak pernah kembali tetap
+IN_PROGRESS sampai ada yang membukanya. Nilainya tidak hilang, hanya belum dihitung.
+
+### Hasil
+
+Nilai 0–100, waktu pengumpulan, durasi. **Tidak** ada kunci jawaban dan **tidak** ada
+ulasan per soal — siswa yang mengumpulkan lebih awal tidak boleh menjadi sumber kunci
+bagi teman sekelasnya.
+
+### Nilai akademik
+
+C3 tidak membuat, mengubah, atau menghapus satu baris `grades` pun, dan tidak menyentuh
+rapor maupun GradeConfig. Jembatan "Masukkan ke Nilai" adalah C4.
