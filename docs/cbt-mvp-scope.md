@@ -136,10 +136,13 @@ karena matriks itu ditulis untuk Phase 1.
 | **C1** | dokumen provenance, skema, model, enum, policy, factory, test integritas & isolasi | **selesai** |
 | **C2** | UI penulis: daftar & CRUD ujian, soal, pilihan jawaban, siklus terbit/tarik/tutup | **selesai** |
 | **C3** | alur siswa: daftar, mengerjakan, simpan otomatis, pengatur waktu, mengumpulkan, penilaian server, halaman hasil | **selesai** |
-| C4 | daftar hasil untuk guru, jembatan "Masukkan ke Nilai", penutupan | belum |
+| **C4** | daftar hasil untuk guru, jembatan "Masukkan ke Nilai", penutupan | **selesai** |
 | L1 | landing page publik (terpisah dari CBT) | belum |
 
-C1-C3 **tidak** menulis satu baris `grades` pun, dan tidak menyentuh `/`.
+C1–C3 tidak menulis satu baris `grades` pun. C4 menulisnya **hanya** lewat tindakan guru
+yang disengaja. Tidak satu pun dari keempatnya menyentuh `/`.
+
+Penutupannya: [`cbt-mvp-closure.md`](cbt-mvp-closure.md).
 
 ---
 
@@ -269,3 +272,61 @@ bagi teman sekelasnya.
 
 C3 tidak membuat, mengubah, atau menghapus satu baris `grades` pun, dan tidak menyentuh
 rapor maupun GradeConfig. Jembatan "Masukkan ke Nilai" adalah C4.
+
+---
+
+## 10. Hasil & jembatan nilai (C4)
+
+### Daftar hasil
+
+Relation manager **"Hasil Ujian"** pada ExamResource: siswa, waktu mulai, waktu
+dikumpulkan, status, nilai, dan keadaan integrasi nilai ("Belum masuk nilai" / "Sudah
+masuk nilai"). Tidak ada kunci jawaban di tabel ini.
+
+Membukanya juga menutup pengerjaan yang batas waktunya sudah lewat — **hanya untuk ujian
+yang sedang dibuka**, memakai mesin penilaian yang sama dengan jalur siswa. Tetap tanpa
+penjadwal.
+
+### Kewenangan — dua hal yang berbeda
+
+| Peran | Melihat hasil | Masukkan ke Nilai |
+| --- | --- | --- |
+| SUPER_ADMIN | ya | ya |
+| SCHOOL_ADMIN (cabangnya) | ya | ya |
+| GURU / WALI (kelas yang diampu) | ya | ya |
+| GURU (kelas orang lain) | **tidak** | tidak |
+| KEPALA_SEKOLAH | ya | **tidak** |
+| BENDAHARA / SISWA / ORANG_TUA | tidak | tidak |
+
+Kewenangan jembatan diperiksa dari **dua** sisi: `ExamPolicy::bridgeToGrade()` dan
+`GradePolicy::gradeClassSubject()` — kewenangan yang sama yang menjaga input nilai biasa.
+
+### Jembatan
+
+```
+hasil CBT (SUBMITTED, bernilai)
+   → guru memilih jenis nilai + jenis penilaian
+      → Grade::query()->create()   [snapshot bobot berlaku]
+         → exam_attempts.grade_id
+```
+
+| Aturan | |
+| --- | --- |
+| Jenis nilai | DAILY · ASSIGNMENT · MIDTERM · FINAL |
+| Tidak ditawarkan | ATTITUDE, SKILL |
+| Jenis penilaian | **FORMATIF** (bawaan) · SUMATIF (sengaja) |
+| Nilai | disalin apa adanya dari `exam_attempts.score` |
+| Keterangan | `"CBT: <judul>"` pada kolom `description` yang sudah ada |
+| Penilai | aktor yang login, pada `graded_by` |
+| Ganda | ditolak — barisnya dikunci, `grade_id` diperiksa ulang di dalam transaksi |
+| Rapor sudah terbit | **ditolak** |
+| Konfigurasi LOCKED | nilai tetap tersimpan tanpa bobot — perilaku input nilai yang sudah ada |
+| Nilai dihapus | `grade_id` kembali NULL, dan hasilnya dapat dimasukkan lagi |
+| Aksi massal | ada; yang gagal dilaporkan beserta namanya, tidak disembunyikan |
+
+### Apa yang **tidak** berubah
+
+`GradeConfig`, `ComponentScoreAggregator`, `FinalScoreCalculator`, `ReportCardGenerator`,
+`Grade::isLocked()`, dan `GradePolicy` tidak disentuh sama sekali. Nilai formatif tidak
+menggeser nilai akhir, dan nilai sumatif mengikuti rata-rata komponen serta bobot Grade
+Config — keduanya karena aturan yang sudah ada, bukan karena aturan CBT.

@@ -5995,6 +5995,265 @@ dari enam ribu, dan kata itu sendiri memang penanda kebocoran yang bermakna.
 Perbaikan ini di luar scope C3 dan dikerjakan karena gerbangnya tidak dapat dipercaya
 selama ia ada.
 
+## MVP CBT yang dipercepat — Batch C4 (hasil & jembatan nilai)
+
+Provenance: [`owner-scope-changes.md`](owner-scope-changes.md).
+Batas scope: [`cbt-mvp-scope.md`](cbt-mvp-scope.md).
+Penutupan: [`cbt-mvp-closure.md`](cbt-mvp-closure.md).
+
+Batch terakhir implementasi MVP CBT: guru melihat hasil siswanya, dan — bila ia
+menghendaki — memindahkan hasil itu menjadi nilai akademik.
+
+### 324. Melihat ujian dan melihat hasil siswa adalah dua hal
+
+`ExamPolicy::viewResults()` lebih sempit daripada `view()`, dan itu disengaja.
+
+Melihat **ujiannya** adalah hal biasa di dalam satu cabang — pola yang sama dengan
+daftar nilai, yang memang tidak menyaring per guru. Melihat **nama siswa beserta
+nilainya** adalah hal lain: itu data penilaian orang, dan yang berkepentingan atasnya
+adalah guru pengampunya, administrator cabang, dan kepala sekolah sebagai pengawas.
+
+Guru mata pelajaran lain karena itu dapat membuka ujiannya, tetapi tidak daftar hasilnya.
+
+### 325. Membaca hasil dan menuliskannya ke nilai adalah dua kewenangan
+
+`viewResults` dan `bridgeToGrade` terpisah. Kepala Sekolah punya yang pertama dan tidak
+punya yang kedua: ia mengawasi, tetapi yang menempatkan angka ke dalam rapor adalah guru
+pengampunya atau administrator cabang.
+
+Dan `bridgeToGrade` sendiri hanya **separuh** pemeriksaan. Separuh lainnya milik
+penilaian akademik: `GradePolicy::gradeClassSubject()`, kewenangan yang sama yang menjaga
+input nilai biasa. `ExamGradeBridge` memanggil keduanya.
+
+Alasannya sederhana: jembatan yang memutuskan sendiri siapa boleh menilai adalah pintu
+belakang menuju penilaian akademik. Yang boleh menilai lewat CBT harus persis yang boleh
+menilai lewat jalur biasa — tidak lebih.
+
+### 326. Jembatan berdiri sendiri, dan itu yang menjaga penjagaan C3
+
+C3 menutup ketiga layanan CBT dengan test yang membaca kodenya dan membuktikan tidak satu
+pun menyebut `Grade`, `GradeConfig`, atau `ReportCard` (butir 320). Menaruh jembatan ini
+di dalam salah satunya akan melumpuhkan penjagaan itu tepat ketika ia paling dibutuhkan.
+
+`App\Services\Cbt\ExamGradeBridge` karena itu berkas tersendiri, dan test-nya sekarang
+menjaga **dua arah**: kelima layanan CBT lain tetap tidak mengetahui apa pun tentang nilai
+akademik, dan jembatannya memang mengetahuinya.
+
+### 327. Jembatan menempatkan satu baris, lalu berhenti
+
+Yang **tidak** dikerjakannya, dengan sengaja: ia tidak menghitung bobot, tidak menyentuh
+GradeConfig, tidak membuat ulang rapor, dan tidak memicu apa pun.
+
+Ia menempatkan satu baris `grades` lewat jalur yang sama persis dengan input nilai biasa,
+lalu selesai. Seluruh semantik penilaian yang sudah ada tetap yang berlaku — bukan
+salinannya, dan bukan versi CBT-nya.
+
+### 328. SKILL tidak ditawarkan, dan alasannya perlu ditulis
+
+Jenis nilai yang ditawarkan: DAILY, ASSIGNMENT, MIDTERM, FINAL.
+
+ATTITUDE dikecualikan karena bukan nilai akademik — ia dilaporkan sebagai predikat
+terpisah (keputusan Sprint 4 butir 3).
+
+SKILL juga tidak, dan ini yang perlu dijelaskan. Seluruh `smartsukses-docs/` menyebut
+SKILL **tepat satu kali**, yaitu sebagai nilai enum di `02-erd/05-tables-penilaian.md`.
+Tidak ada satu pun sumber yang menyatakan tes objektif termasuk penilaian keterampilan.
+
+Menawarkannya berarti menebak makna sebuah komponen rapor — dan tebakan itu akan tercetak
+di rapor siswa. Ujian pilihan ganda dinilai sebagai pengetahuan; bila sebuah sekolah
+memang memakainya untuk keterampilan, itu keputusan pemilik yang belum diambil.
+
+### 329. Satu hasil, satu nilai — dijamin penguncian baris
+
+Klik ganda pada koneksi lambat adalah kejadian biasa, dan akibatnya di sini adalah dua
+baris nilai untuk satu ujian yang sama.
+
+`bridge()` karena itu membuka transaksi, mengunci baris pengerjaannya
+(`lockForUpdate`), lalu memeriksa **seluruh** syaratnya — termasuk `grade_id` — setelah
+penguncian. Memeriksanya sebelum mengunci berarti memeriksa keadaan yang masih dapat
+berubah di antara pemeriksaan dan penulisan.
+
+Percobaan kedua ditolak dengan kalimat yang jelas, bukan diam-diam membuat nilai kedua.
+
+### 330. Nilai dibuat lewat siklus hidup model, bukan insert
+
+`Grade::query()->create()`, bukan `DB::table()->insert()` dan bukan insert massal.
+
+`Grade::booted()` yang mengambil snapshot bobot dan `grade_config_id` dari konfigurasi
+ACTIVE (keputusan Sprint 4 butir 2). Insert massal akan melewatinya, dan nilainya lahir
+tanpa bobot — tanpa satu pun error, dan tanpa ada yang menyadarinya sampai rapor dihitung.
+
+Diuji: dengan konfigurasi aktif berbobot 0.40, nilai hasil jembatan menerima `weight`
+0.40 dan `grade_config_id` yang benar.
+
+### 331. Tombolnya cermin, servicenya pagar
+
+Pemeriksaan lengkap `ExamGradeBridge::reasonToRefuse()` **tidak** dipakai untuk memutuskan
+visibilitas tombol. Terukur mengapa: pemeriksaan itu menanyakan ujian, integritasnya,
+siswanya, kewenangannya, dan rapornya — dan Filament menimbang visibilitas sekali per
+baris. Enam baris membayar 102 query; satu baris 22 (butir 341).
+
+Yang dipakai UI hanya bahan yang sudah ada di tangan: kewenangan tingkat ujian (dijawab
+sekali per render), kolom yang memang sudah termuat di barisnya, dan satu daftar siswa
+berapor terbit yang diambil sekali.
+
+Penegaknya tetap `bridge()`, yang mengulang seluruh pemeriksaan di dalam transaksi setelah
+mengunci barisnya. Tombol yang tersembunyi bukan pagar.
+
+### 332. Pagar rapor terbit — celah yang nyata, ditutup secara lokal
+
+Audit pra-implementasi menemukan ini, dan C4 adalah batch pertama yang benar-benar
+menabraknya.
+
+`Grade::isLocked()` menjaga **pengubahan** dan **penghapusan** nilai
+(`GradePolicy::update()`). `GradePolicy::create()` tidak pernah menanyakannya. Nilai
+**baru** karena itu masih dapat lahir setelah rapor terbit.
+
+Pada input nilai manual keadaan itu tidak berbahaya: rapor yang sudah terbit dilewati saat
+generate ulang, dan `ConfigurationGapWarner` memberi tahu gurunya. Pada jembatan ini
+taruhannya lain — satu tindakan massal dapat memindahkan sekelas nilai sekaligus, dan
+tidak seorang pun akan menyadari bahwa riwayat nilai kini bercerita lain daripada rapor
+yang sudah dipegang orang tua.
+
+Pagarnya karena itu dipasang **di dalam ExamGradeBridge saja**. `Grade::isLocked()`,
+`GradePolicy`, dan `ReportCardGenerator` tidak disentuh sama sekali.
+
+Bentuk query-nya sengaja sama dengan `Grade::isLocked()`, dan ada test yang menjaga
+keduanya tetap sependapat. Celahnya sendiri tetap **temuan terbuka** yang keputusannya
+milik pemilik: apakah input nilai manual juga harus ditutup setelah rapor terbit adalah
+pertanyaan kebijakan, bukan pertanyaan implementasi.
+
+### 333. Asal-usul nilai ditulis di kolom yang sudah ada
+
+`grades.description` — `VARCHAR(200)`, nullable, sudah ada sejak Sprint 4. Diisi
+`"CBT: <judul ujian>"` bila guru tidak menuliskan keterangannya sendiri.
+
+Tidak ada migrasi yang ditambahkan hanya untuk mencatat sumber. Konsekuensinya jujur:
+keterkaitan yang dapat diandalkan mesin adalah `exam_attempts.grade_id`, bukan teks ini —
+teksnya untuk manusia yang membaca daftar nilai.
+
+### 334. Titik penyelesaian kedua bagi pengerjaan kedaluwarsa
+
+C3 sengaja tidak punya penjadwal (butir 313), dan menerima konsekuensinya: pengerjaan
+siswa yang tidak pernah membuka halamannya lagi tetap IN_PROGRESS.
+
+C4 menambahkan titik sentuh kedua yang wajar — **ketika gurunya membuka daftar hasil**.
+Tanpa itu, pengerjaan seperti itu akan tampak "sedang dikerjakan" selamanya di layar guru,
+dan nilainya tidak pernah muncul.
+
+Cakupannya sempit dengan sengaja: `settleExpiredForExam()` hanya menyentuh satu ujian yang
+sedang dibuka, disaring `school_id`, `exam_id`, status, dan `expires_at`. Penyapuan global
+akan menjadi pekerjaan latar yang menyamar sebagai permintaan halaman.
+
+Algoritmanya tidak disalin: yang dipanggil `finalizeIfExpired()` yang sama dengan jalur
+siswa, yang memanggil `ExamScoringService::finalize()` yang sama. Semantik `submitted_at`
+tetap seperti butir 316 — dicap pada saat berakhirnya, bukan saat penemuannya.
+
+Dipanggil dari `mount()`, bukan dari pembangun query: query yang menulis akan berjalan
+ulang pada setiap pengurutan dan setiap perpindahan halaman.
+
+### 335. Tabel hasil memuat siswa dan nilainya sekali
+
+`with(['student', 'grade'])` pada query tabel; keadaan integrasi dibaca dari `grade_id`
+yang memang sudah ada di barisnya. Diuji dengan menghitung query: enam baris harus sama
+mahalnya dengan satu.
+
+Satu jebakan Filament yang sempat menjatuhkannya: kolom yang menunjuk `grade_id` **tidak
+pernah** melewati `formatStateUsing()` ketika nilainya NULL — dan NULL justru keadaan yang
+paling sering. Keterangan "Belum masuk nilai" karena itu tidak pernah tercetak. Yang benar
+`state()` yang menghitung sendiri, pola yang sudah dipakai `ReportCardResource`.
+
+### 336. Bawaannya FORMATIF, dan itu keputusan keamanan
+
+Nilai sumatif ikut menghitung rapor; nilai formatif tidak
+(`ComponentScoreAggregator::valid()`, keputusan Sprint 4 butir 3).
+
+Guru yang membuka aksi "Masukkan ke Nilai" lalu menekan simpan tanpa membaca tidak boleh
+diam-diam menggeser nilai rapor siswanya. Karena itu bawaan formulirnya **Formatif**, dan
+Sumatif harus dipilih dengan sengaja.
+
+Sumatif tidak disembunyikan, dan bawaannya tidak berubah mengikuti jenis nilai yang
+dipilih: menebak maksud guru dari pilihan lain justru mengembalikan masalah yang sama.
+
+### 337. Aksi massal dikerjakan, dan kegagalan sebagiannya dilaporkan
+
+Satu kelas berisi puluhan siswa; menekan aksi satu per satu adalah pekerjaan yang tidak
+menghasilkan apa-apa. Aksi massalnya karena itu dikerjakan — tetapi tanpa aturan sendiri:
+yang dipanggil `ExamGradeBridge::bridge()` yang sama, sekali per hasil, masing-masing
+dengan transaksinya sendiri.
+
+Yang gagal **dilaporkan**, tidak disembunyikan. Rapor yang sudah terbit menolak sebagian
+siswa sementara yang lain lolos, dan guru harus mengetahui angkanya beserta namanya.
+Laporan "semua berhasil" pada keadaan itu adalah kebohongan yang paling mudah dipercaya.
+
+### 338. Konfigurasi LOCKED: perilaku yang sudah ada dipertahankan
+
+Diaudit ulang sebelum diimplementasikan. Pada input nilai biasa, konfigurasi yang sudah
+LOCKED membuat nilai baru tersimpan **tanpa bobot**, disertai peringatan
+`ConfigurationGapWarner` ("Grade Config sudah terkunci... Nilai ini belum akan masuk rapor
+sampai Admin membuat versi baru").
+
+Jembatan ini tidak mengubah perilaku itu: nilainya tetap tersimpan, bobotnya NULL, dan
+tidak ada konfigurasi yang dibuka otomatis. Mengubahnya berarti mengubah semantik
+GradeConfig secara global dari dalam CBT — persis yang dilarang.
+
+### 339. Menghapus nilainya melepaskan tautannya
+
+`exam_attempts.grade_id` adalah `nullOnDelete` (butir 269). Menghapus baris nilai —
+tindakan yang punya kewenangan dan jejak auditnya sendiri — mengembalikan `grade_id`
+menjadi NULL, dan hasil itu kembali dapat dimasukkan.
+
+Semantiknya sederhana dan disengaja: yang mencegah nilai ganda adalah **keberadaan
+tautannya**, bukan catatan bahwa pernah ada. Tidak ada skema batu nisan yang ditambahkan
+untuk mengingat jembatan yang sudah dibatalkan.
+
+### 340. Formatif dan sumatif membuktikan bahwa tidak ada jalur CBT
+
+Dua test yang paling menenangkan di batch ini, dan keduanya membuktikan hal yang sama:
+tidak ada perhitungan khusus CBT.
+
+Nilai formatif bernilai 0 yang dimasukkan ke sebelah nilai sumatif 80 **tidak** menggeser
+nilai akhir — tetap 80. Yang menolaknya bukan kode CBT melainkan
+`ComponentScoreAggregator` yang sudah ada, yang menyaring `assessment_type` sebelum
+menghitung apa pun.
+
+Nilai sumatif bernilai 0 di sebelah 80 menghasilkan 40 — rata-rata komponen, aturan yang
+sudah berlaku sejak Sprint 4. `FinalScoreCalculator` tidak disentuh untuk membuat test ini
+lulus.
+
+### 341. Visibilitas per baris tidak boleh memanggil pemeriksaan lengkap
+
+Terukur, bukan diduga: enam baris hasil membayar **102** query, satu baris **22**.
+Penyebabnya `visible()` yang memanggil `reasonToRefuse()` — pemeriksaan lengkap — sekali
+per baris.
+
+Setelah tombolnya memakai cermin murah (butir 331): jumlahnya tidak lagi bertambah
+mengikuti jumlah baris.
+
+Ini pengulangan pelajaran butir 304 pada bentuk yang berbeda, dan pengulangannya sendiri
+adalah datanya: setiap kali sebuah aksi Filament menimbang sesuatu yang mahal, biayanya
+dikalikan jumlah baris.
+
+### 342. Nilai hasil jembatan muncul lewat permukaan yang sudah ada
+
+Portal siswa, portal orang tua, dan panel menampilkannya tanpa mengetahui apa pun tentang
+CBT — karena yang mereka tampilkan memang baris `grades` biasa. Diuji lewat
+`/siswa/nilai`, memakai pemformat angka yang sudah dipakai halaman itu.
+
+Tidak ada layar nilai khusus CBT yang dibuat, dan tidak ada kolom tambahan pada `grades`.
+
+### 343. Yang **tidak** dikerjakan Batch C4
+
+- landing page (L1), dan `/` **tidak** disentuh;
+- Sprint 9 versi roadmap (Polish & QA) — belum tersentuh sama sekali;
+- soal uraian, bank soal, pengacakan, percobaan ulang, anti-curang, soal bermedia, impor
+  soal, analitik, dasbor real-time — tetap scope Phase 2;
+- ulasan jawaban per soal untuk siswa setelah jendela ujian tertutup;
+- notifikasi apa pun terkait ujian atau nilai;
+- endpoint REST CBT — permukaan API tetap 41;
+- penutupan celah `GradePolicy::create()` terhadap rapor terbit secara global (butir 332)
+  — pagarnya lokal pada jembatan, dan kebijakan globalnya keputusan pemilik.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
