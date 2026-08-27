@@ -10,6 +10,7 @@ use App\Policies\UserPolicy;
 use App\Support\AuditLogger;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -34,10 +35,37 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->configureTrustedProxies();
         $this->configureAuthorization();
         $this->configurePasswordRules();
         $this->recordLastLogin();
         $this->recordAuditTrail();
+    }
+
+    /**
+     * Arsitektur 3.3.1 — Internet → Cloudflare → Nginx → PHP-FPM.
+     *
+     * Disetel di sini, bukan di `bootstrap/app.php`: callback middleware pada
+     * berkas itu dijalankan sebelum .env dimuat, sehingga nilainya akan selalu
+     * kosong. Nilainya sendiri dibaca dari **config**, bukan langsung dari
+     * `env()`, supaya tetap ada setelah `config:cache` dijalankan di produksi
+     * (butir 357).
+     *
+     * Tanpa proxy tepercaya, `TrustProxies` tidak berbuat apa pun — itulah
+     * keadaan bawaan dan keadaan pemasangan lokal.
+     */
+    protected function configureTrustedProxies(): void
+    {
+        $proxies = config('trustedproxy.proxies');
+
+        if (filled($proxies)) {
+            TrustProxies::at($proxies);
+        }
+
+        // Selalu dipersempit, bahkan ketika tidak ada proxy yang dipercaya:
+        // daftar header yang lebih sempit tidak dapat menjadi lebih longgar
+        // secara tidak sengaja (butir 358).
+        TrustProxies::withHeaders((int) config('trustedproxy.headers'));
     }
 
     /**
