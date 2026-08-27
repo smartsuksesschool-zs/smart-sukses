@@ -370,9 +370,16 @@ class ParentNotificationTest extends TestCase
             ->get(route('portal.notifications'))
             ->assertOk();
 
-        foreach (['Rp', 'wa_template', 'school_id', 'target_id', 'is_draft', 'sender_id'] as $forbidden) {
+        foreach (['wa_template', 'school_id', 'target_id', 'is_draft', 'sender_id'] as $forbidden) {
             $response->assertDontSee($forbidden);
         }
+
+        // Nominal rupiah dicari sebagai **nominal** — "Rp" yang diikuti angka —
+        // bukan sebagai dua huruf itu saja. Token CSRF adalah 40 karakter acak,
+        // dan kira-kira satu dari seratus di antaranya kebetulan memuat "Rp";
+        // mencari dua huruf telanjang membuat test ini gagal sesekali tanpa ada
+        // yang bocor sama sekali (butir 323).
+        $this->assertDoesNotMatchRegularExpression('/Rp\s?\d/', $response->getContent());
 
         // Id kelas yang menjadi target tidak pernah ikut ke halaman.
         $response->assertDontSee('"'.$notification->target_id.'"', false);

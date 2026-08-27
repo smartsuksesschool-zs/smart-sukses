@@ -279,9 +279,12 @@ class StudentNotificationTest extends TestCase
             ->get(route('student.notifications'))
             ->assertOk();
 
-        foreach (['Tagihan', 'Pembayaran', 'Rp', 'SPP'] as $forbidden) {
+        foreach (['Tagihan', 'Pembayaran', 'SPP'] as $forbidden) {
             $response->assertDontSee($forbidden);
         }
+
+        // Sebagai nominal, bukan sebagai dua huruf telanjang — lihat butir 323.
+        $this->assertDoesNotMatchRegularExpression('/Rp\s?\d/', $response->getContent());
 
         $response->assertDontSee(route('portal.fees'), false);
     }
