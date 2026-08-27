@@ -128,12 +128,39 @@ class Exam extends Model
     }
 
     /**
-     * Apakah sudah ada yang mengerjakan. Menjadi syarat aturan-aturan yang
-     * dibangun batch berikutnya (soal beku, tarik-kembali hanya bila kosong),
-     * sehingga jawabannya ditulis sekali di sini.
+     * Apakah sudah ada yang mengerjakan.
+     *
+     * Menjadi syarat beberapa aturan sekaligus — soal beku, tarik-kembali hanya
+     * bila kosong, hapus hanya bila kosong — sehingga jawabannya ditulis sekali
+     * di sini.
+     *
+     * Memakai `withCount('attempts')` bila sudah dimuat. Tanpa itu, satu baris
+     * tabel ujian akan menanyakannya sekali per aksi yang menimbangnya, dan
+     * daftar berisi dua puluh ujian membayarnya seratus kali (butir 289).
      */
     public function hasAttempts(): bool
     {
+        if ($this->attempts_count !== null) {
+            return (int) $this->attempts_count > 0;
+        }
+
+        if ($this->relationLoaded('attempts')) {
+            return $this->attempts->isNotEmpty();
+        }
+
         return $this->attempts()->exists();
+    }
+
+    /**
+     * Isinya masih boleh diubah: masih draf, dan belum ada yang mengerjakan.
+     *
+     * Keduanya diperiksa walaupun yang kedua sudah tersirat pada yang pertama —
+     * ujian berstatus draf tidak dapat punya pengerjaan, karena menariknya
+     * kembali sudah ditolak begitu ada satu saja. Pemeriksaan kedua adalah yang
+     * tetap benar seandainya aturan pertama suatu saat dilonggarkan.
+     */
+    public function isContentEditable(): bool
+    {
+        return $this->status?->isEditable() === true && ! $this->hasAttempts();
     }
 }

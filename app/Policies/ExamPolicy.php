@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\ExamStatus;
 use App\Enums\PermissionName;
 use App\Enums\RoleName;
 use App\Models\ClassSubject;
@@ -64,16 +65,92 @@ class ExamPolicy
         return $user->can(PermissionName::GradeManage->value);
     }
 
+    /**
+     * Mengubah ujian **dan isinya**.
+     *
+     * Selain izin, cabang, dan kelas yang diampu, ada syarat keadaan: hanya
+     * ujian yang masih draf dan belum dikerjakan siapa pun. Syarat itu diletakkan
+     * di sini, bukan hanya di tombol, karena tombol yang tersembunyi bukan pagar
+     * — halaman edit tetap dapat dibuka lewat alamatnya (butir 290).
+     *
+     * Konsekuensi yang dikehendaki: ujian yang sudah terbit tidak dapat diedit
+     * sampai ditarik kembali, dan menariknya kembali mustahil setelah ada yang
+     * mengerjakan. Satu aturan sederhana yang menutup seluruh jalan menuju
+     * perubahan soal di tengah ujian.
+     */
     public function update(User $user, Exam $exam): bool
+    {
+        return $this->manages($user, $exam) && $exam->isContentEditable();
+    }
+
+    /**
+     * Menghapus ujian.
+     *
+     * Skema memang meneruskan penghapusan ke soal, pengerjaan, dan jawaban
+     * (cascade, butir 269) — dan justru karena itu penghapusan harus berhenti di
+     * sini. Aplikasi tidak boleh menyediakan jalan menghapus pekerjaan siswa
+     * yang sudah tersimpan, walaupun database mampu melakukannya (butir 291).
+     */
+    public function delete(User $user, Exam $exam): bool
+    {
+        return $this->manages($user, $exam)
+            && $exam->status === ExamStatus::Draft
+            && ! $exam->hasAttempts();
+    }
+
+    /**
+     * DRAFT → PUBLISHED. Kesiapan isinya bukan urusan policy — itu milik
+     * ExamPublisher. Yang dijawab di sini hanya kewenangan dan status.
+     */
+    public function publish(User $user, Exam $exam): bool
+    {
+        return $this->manages($user, $exam)
+            && $exam->status?->canBePublished() === true;
+    }
+
+    /**
+     * PUBLISHED → DRAFT, dan hanya selama belum ada yang mengerjakan.
+     */
+    public function unpublish(User $user, Exam $exam): bool
+    {
+        return $this->manages($user, $exam)
+            && $exam->status === ExamStatus::Published
+            && ! $exam->hasAttempts();
+    }
+
+    /**
+     * PUBLISHED → CLOSED. Termasuk pengelolaan, jadi Kepala Sekolah — yang
+     * hanya melihat — tidak dapat menutup ujian orang lain.
+     */
+    public function close(User $user, Exam $exam): bool
+    {
+        return $this->manages($user, $exam)
+            && $exam->status?->canBeClosed() === true;
+    }
+
+    /**
+     * Kunci jawaban.
+     *
+     * Sengaja terpisah dari `view`. Kepala Sekolah berwenang mengawasi — ia
+     * boleh melihat ujian, soal, dan pilihan jawabannya — tetapi pengawasan
+     * tidak menuntut mengetahui kuncinya, dan setiap mata tambahan yang
+     * melihat kunci adalah satu jalan kebocoran tambahan. Yang boleh melihat
+     * kunci adalah yang boleh menulisnya (butir 292).
+     */
+    public function viewAnswerKey(User $user, Exam $exam): bool
+    {
+        return $this->manages($user, $exam);
+    }
+
+    /**
+     * Syarat bersama seluruh kewenangan pengelolaan: izin, cabang, dan kelas
+     * yang diampu. Tanpa syarat keadaan — itu ditambahkan masing-masing.
+     */
+    protected function manages(User $user, Exam $exam): bool
     {
         return $user->can(PermissionName::GradeManage->value)
             && $this->sharesTenant($user, $exam)
             && $this->teachesClassSubject($user, (int) $exam->class_subject_id);
-    }
-
-    public function delete(User $user, Exam $exam): bool
-    {
-        return $this->update($user, $exam);
     }
 
     /**
