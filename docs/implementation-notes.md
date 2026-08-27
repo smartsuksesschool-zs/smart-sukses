@@ -5114,6 +5114,345 @@ penjadwal ditambahkan; keduanya bukan skema.
 Ringkasan lengkap status Sprint 8 beserta buktinya ada di
 [`sprint-8-closure.md`](sprint-8-closure.md).
 
+## MVP CBT yang dipercepat — Batch C1 (fondasi)
+
+Provenance: [`owner-scope-changes.md`](owner-scope-changes.md).
+Batas scope: [`cbt-mvp-scope.md`](cbt-mvp-scope.md).
+
+### 262. Ini bukan Sprint 9
+
+`05-roadmap/01-implementation-order.md` mendefinisikan Sprint 9 sebagai "Polish & QA —
+Bilingual (EN), Responsive mobile, Load testing, Security audit, Bug fixing". CBT dan
+landing page bukan itu; keduanya dikerjakan **mendahului** Sprint 9 atas permintaan
+langsung pemilik.
+
+Penamaannya karena itu **Batch C1, C2, …**, lepas dari penomoran sprint. Menyebutnya
+"Sprint 9" akan membuat isi Sprint 9 yang sebenarnya tampak sudah tertutup padahal belum
+tersentuh sama sekali — dan itu jenis kekeliruan yang baru ketahuan saat seseorang
+mencari pekerjaan yang dikiranya sudah selesai.
+
+CBT sendiri ada di blueprint sebagai Phase 2 dengan estimasi 6–8 minggu. Yang dikerjakan
+adalah **potongannya**, dan tidak boleh dinyatakan selesai dengan menunjuk baris Phase 2
+itu.
+
+### 263. Tabel CBT mengikuti konvensi akademik yang sudah ada
+
+Kelima tabel baru berada di luar ERD 2.2 — tidak ada satu pun padanannya di sana. Justru
+karena itu bentuknya tidak boleh dikarang: `school_id` sebagai kolom pertama setelah
+`id`, FK bergaya `constrained()`, ENUM lewat `Enum::values()`, `timestamps()` penuh,
+indeks komposit yang mengikuti bentuk query — semuanya sama dengan `grades`,
+`report_cards`, dan `notifications`.
+
+Pola kedua yang dibuat sendiri akan menjadi pola yang harus diingat sendiri.
+
+### 264. Tidak ada REST API untuk CBT
+
+Permukaan API tetap **41** endpoint, dan dua test menjaganya
+(`SprintSevenClosureTest::test_the_api_surface_is_exactly_forty_one_routes`,
+`PortalNotificationIntegrationTest::test_the_api_surface_gained_exactly_the_wa_links_endpoint`).
+
+Alasannya bukan penghematan angka. Seluruh portal di project ini berjalan lewat
+web/Livewire dengan identitas dari sesi, dan CBT adalah alur portal — bukan integrasi.
+Menambah permukaan REST berarti menambah kewenangan kedua yang harus diuji terpisah,
+untuk sesuatu yang tidak ada yang memanggilnya.
+
+### 265. Siklus hidup ujian meniru siklus yang sudah ada
+
+`ExamStatus` DRAFT → PUBLISHED → CLOSED sengaja berbentuk sama dengan
+`GradeConfigStatus` DRAFT → ACTIVE → LOCKED: keadaan yang bebas diedit dipisahkan dari
+keadaan yang sudah dilihat orang lain, dan keadaan terakhir bersifat final.
+
+`isEditable()` hanya menjawab soal status. Aturan "boleh ditarik kembali selama belum ada
+yang mengerjakan" menyangkut **jumlah percobaan**, bukan status, sehingga tempatnya
+bukan di enum — ia tinggal di `Exam::hasAttempts()`.
+
+### 266. ESSAY ada di skema, ditolak aplikasi
+
+`ExamQuestionType` memuat `ESSAY` dan kolom `exam_questions.question_type` menerimanya.
+`exam_answers.answer_text` juga sudah ada. Keduanya **tidak** berarti uraian termasuk
+rilis ini — uraian tetap scope Phase 2 yang belum dikerjakan.
+
+Yang dipertimbangkan adalah biaya kebalikannya. Menambah nilai ke kolom ENUM MySQL yang
+sudah berisi data, dan menambah kolom teks ke tabel jawaban yang sudah menyimpan
+pekerjaan siswa, keduanya perubahan skema pada tabel hidup. Menuliskannya sekarang, saat
+tabelnya masih kosong, tidak berbiaya apa pun.
+
+Yang menahan uraian tetap tertutup adalah `ExamQuestionType::supportedCases()`, dipakai
+validasi dan UI. Konsekuensinya jujur: skema menerima soal uraian, jadi penolakannya
+adalah tanggung jawab aplikasi dan harus diuji sebagai aturan aplikasi — bukan dianggap
+mustahil oleh database.
+
+### 267. Dua keadaan pengerjaan, bukan tiga
+
+`ExamAttemptStatus` hanya IN_PROGRESS dan SUBMITTED. Tidak ada "menunggu dinilai guru",
+karena tanpa soal uraian tidak ada yang perlu menunggu: seluruh soal dapat dinilai
+sistem, dan nilainya final pada detik pengumpulan.
+
+Keadaan ketiga itu akan dibutuhkan bila uraian masuk. Menambahkannya sekarang berarti
+memelihara keadaan yang tidak pernah dimasuki apa pun.
+
+### 268. `exam_questions.points` bukan `grades.weight`
+
+Keduanya "bobot", dan keduanya `decimal(5,2)`, tetapi mengukur hal yang sama sekali
+berbeda:
+
+- `exam_questions.points` — bobot satu soal **di dalam ujiannya**; penyebutnya total
+  bobot seluruh soal ujian itu;
+- `grades.weight` — bobot satu komponen **di dalam rapor**; penyebutnya 1.00 menurut
+  Grade Config.
+
+Keduanya tidak pernah bertemu. Nilai ujian dinormalisasi ke 0–100 lebih dulu, dan baru
+setelah itu — bila gurunya memilih demikian — ia menjadi satu baris `grades` dengan
+bobot rapornya sendiri. Presisinya sengaja disamakan supaya tidak ada pembulatan kedua
+di perbatasan.
+
+### 269. Perilaku hapus: dua preseden, dan mengapa yang dipilih berbeda per kolom
+
+Project ini punya dua pola, dan keduanya benar untuk kasusnya masing-masing:
+
+| Kolom CBT | Pilihan | Preseden |
+| --- | --- | --- |
+| `exams.class_subject_id` | cascade | `grades.class_subject_id` |
+| `exams.academic_year_id` | cascade | `grades.academic_year_id` |
+| `exams.created_by` | **nullOnDelete**, nullable | `report_cards.published_by` |
+| `exam_attempts.grade_id` | nullOnDelete | `grades.grade_config_id` |
+| sisanya (exam→soal→pilihan, exam→percobaan→jawaban) | cascade | kepemilikan penuh |
+
+Yang perlu dijelaskan adalah `created_by`. Preseden yang tampak paling dekat adalah
+`grades.graded_by`, yang cascade — tetapi cascade di sana berarti menghapus akun guru
+ikut menghapus **angka-angka yang ia berikan**. Pada CBT taruhannya lain: satu ujian
+adalah wadah yang berisi pekerjaan banyak siswa. Menghapus akun guru yang berhenti tidak
+boleh ikut menghapus jawaban dan nilai murid-muridnya.
+
+Yang dipakai karena itu `report_cards.published_by`: nullable, nullOnDelete — barisnya
+tetap milik cabang, yang hilang hanya penunjuk akunnya. Alasan yang sama sudah pernah
+ditulis untuk `notifications.sender_id` (butir 194).
+
+Cascade dari `class_subject_id` **tidak** dilunakkan. Menghapus kelas-mapel di project
+ini sudah berarti menghapus seluruh penilaiannya, dan CBT tidak boleh punya aturan
+sendiri untuk hal yang sama. Keduanya diuji, bukan diasumsikan
+(`ExamSchemaTest::test_deleting_the_creator_account_keeps_the_exam_and_its_attempts`,
+`…::test_deleting_an_exam_removes_its_questions_attempts_and_answers`).
+
+### 270. Kunci jawaban tidak boleh punya jalan ke peramban
+
+`exam_options.is_correct` adalah kunci jawaban. Satu kolom boolean yang ikut
+terserialisasi ke dalam payload halaman sudah cukup untuk membocorkan seluruh kunci
+ujian, dan kebocoran seperti itu tidak meninggalkan jejak apa pun.
+
+Karena itu `ExamQuestion` punya dua relasi yang sengaja dipisah:
+
+- `options()` — teks pilihan dan urutannya; ini yang dimuat halaman pengerjaan siswa;
+- `correctOption()` — kuncinya; hanya boleh dimuat jalur penilaian dan jalur guru.
+
+Pemisahan ini belum menegakkan apa pun sendirian — penegakannya ada di lapisan baca yang
+dibangun batch berikutnya. Yang dikerjakan sekarang adalah membuat jalan yang benar
+tersedia, sehingga jalan yang salah harus ditempuh dengan sengaja.
+
+### 271. "Satu percobaan" berada di database
+
+`UNIQUE (exam_id, student_id)`. Pemeriksaan di PHP — "sudah punya percobaan belum?" lalu
+membuat — akan lolos pada dua request yang datang bersamaan, dan hasilnya dua percobaan
+untuk satu siswa: dua nilai, dan tidak ada yang tahu mana yang berlaku. Klik ganda pada
+koneksi lambat sudah cukup memicunya.
+
+Diuji pada **kedua** mesin, karena SQLite dan MySQL menegakkan UNIQUE lewat jalan yang
+berbeda.
+
+### 272. `grade_id` menyiapkan jembatan, dan tidak lebih
+
+Keputusan pemilik (R-1): pengumpulan siswa **tidak pernah** membuat baris `grades`.
+Nilai akademik hanya lahir dari tindakan guru "Masukkan ke Nilai", memakai `GradeType`
+dan `AssessmentType` yang sudah ada, berbawaan FORMATIVE.
+
+Yang ada di Batch C1 hanya tempatnya: `exam_attempts.grade_id`, nullable, nullOnDelete.
+Gunanya nanti dua — menandai percobaan yang sudah pernah dimasukkan sehingga tidak masuk
+dua kali, dan menyediakan jalan dari nilai kembali ke asalnya.
+
+Jembatannya sendiri **tidak** dibangun di sini. Yang sudah harus benar sekarang adalah
+perilakunya: menghapus baris nilai tidak boleh ikut menghapus hasil ujiannya, dan itu
+diuji.
+
+Arahnya sengaja satu: CBT tahu tentang `grades`, `grades` tidak tahu apa pun tentang CBT.
+Itulah yang membuat batch ini secara struktural tidak dapat menyentuh perhitungan rapor
+— dan `ExamSchemaTest` menguji ketiadaan arah sebaliknya, bukan sekadar mempercayainya.
+
+### 273. Jawaban: satu per soal, dan nilainya snapshot
+
+`UNIQUE (exam_attempt_id, exam_question_id)` melayani dua hal sekaligus. Ia menyatakan
+aturan bisnisnya, dan ia membuat penyimpanan otomatis saat siswa berpindah soal dapat
+berupa satu upsert — bukan baca-lalu-tulis yang dapat berlomba dengan dirinya sendiri
+ketika siswa mengklik cepat.
+
+`is_correct` dan `points_earned` adalah **snapshot penilaian**, pola yang sama dengan
+`grades.weight` (keputusan Sprint 4 butir 2). Keduanya ditulis sekali oleh penilaian di
+sisi server, dan tidak dihitung ulang saat hasilnya dibuka. Konsekuensinya yang
+dikehendaki: guru yang memperbaiki kunci jawaban setelah ada yang mengerjakan tidak
+menggeser nilai yang sudah terjadi.
+
+### 274. Foreign key tidak menjamin makna
+
+FK hanya menjamin baris tujuannya **ada**. Ia tidak menjamin bahwa baris itu milik cabang
+yang sama, tahun ajaran yang sama, atau ujian yang sama. Seluruh jaminan itu milik
+aplikasi, dan project ini sudah punya pelajarannya: `notifications.target_id` menunjuk
+dua tabel berbeda tanpa FK, dan maknanya divalidasi aplikasi (butir 194).
+
+`App\Services\Cbt\ExamIntegrity` menuliskan pemeriksaan itu **sekali**, sehingga UI guru,
+alur pengerjaan siswa, dan penilaian server tidak dapat mulai berbeda pendapat tentang
+apa yang sah. Delapan aturannya:
+
+1. ujian ↔ kelas-mapel satu cabang;
+2. tahun ajaran ujian = tahun ajaran kelas-mapelnya;
+3. pembuat ujian berada dalam konteks cabang yang sah;
+4. soal ↔ ujian satu cabang;
+5. pilihan ↔ soal satu cabang;
+6. percobaan ↔ ujian ↔ siswa satu cabang;
+7. soal yang dijawab benar-benar bagian dari ujian yang sedang dikerjakan;
+8. pilihan jawaban benar-benar milik soal yang dijawab.
+
+Bentuknya meniru `PortalEligibility`: satu alasan penolakan sebagai string, atau NULL
+bila memang sah. Alasannya kalimat, bukan kode, karena satu-satunya pembaca yang penting
+adalah orang yang sedang mencari tahu mengapa sesuatu ditolak.
+
+Aturan 7 dan 8 adalah yang paling mudah dilupakan dan paling langsung dapat
+dieksploitasi: menukar satu id di dalam form sudah cukup untuk menjawab soal ujian lain,
+atau menunjuk pilihan bertanda benar milik soal yang berbeda. Keduanya diterima FK tanpa
+keberatan sedikit pun.
+
+### 275. Pemeriksaan integritas melepas SchoolScope dengan sengaja
+
+`ExamIntegrity` membaca baris terkait tanpa global scope. Itu terdengar seperti
+melonggarkan isolasi, dan justru kebalikannya: baris dari cabang lain harus dapat
+**ditemukan** supaya dapat **ditolak dengan alasan yang benar**. Bila scope
+menyembunyikannya, yang dilaporkan hanya "tidak ditemukan", dan penyebab sesungguhnya —
+lintas cabang — hilang dari pesan maupun dari log.
+
+Kelas ini hanya membaca, tidak pernah mengembalikan isi baris cabang lain, dan tidak
+pernah menjadi jalan mengambil data. Yang keluar darinya hanya satu kalimat penolakan.
+
+### 276. Pembuat berperan Platform Level bukan ketidaksesuaian
+
+Akun Super Admin punya `school_id` NULL menurut Arsitektur 3.2.2. Membandingkannya
+dengan `school_id` ujian akan selalu gagal, dan menolaknya berarti Super Admin tidak
+dapat membuat apa pun.
+
+`reasonToRejectCreator()` karena itu menerima pembuat ber-`school_id` NULL, dan hanya
+menolak akun School Level dari cabang yang berbeda. Diuji dari kedua sisi.
+
+### 277. CBT memakai izin "Input Nilai", bukan izin baru
+
+Matriks PRD 1.1.2 ditulis untuk Phase 1 dan tidak punya baris CBT. Ada dua jalan:
+menciptakan `exam.view` / `exam.manage`, atau memakai izin modul terdekat yang sudah ada
+dan sudah teruji.
+
+Yang dipilih yang kedua — `grade.view` / `grade.manage` — dengan dua alasan yang dapat
+diperiksa. CBT adalah alat menilai, sehingga modul terdekatnya memang "Input Nilai". Dan
+pemetaannya jatuh **persis** pada peran yang sama: SUPER_ADMIN ✅, SCHOOL_ADMIN ✅,
+KEPALA ⭕, GURU/WALI ✅, BENDAHARA ❌, SISWA ❌, ORTU ❌.
+
+Izin baru akan menuntut perubahan seeder, sinkronisasi ulang peran pada pemasangan yang
+sudah berjalan, dan satu permukaan kewenangan lagi untuk diuji — untuk memetakan matriks
+yang sama persis.
+
+Yang dibagi hanya **izinnya**. `ExamPolicy` tidak memanggil dan tidak mewarisi
+`GradePolicy`; pelajaran Batch 8.4 masih berlaku — policy yang meminjam kewenangan modul
+lain ikut hanyut setiap kali modul itu bergeser, dan pergeserannya tidak terlihat dari
+sisi peminjam (butir 223). Ada test yang memeriksa ketiadaan ketergantungan itu di dalam
+kodenya, bukan sekadar mempercayainya.
+
+Konsekuensi yang harus dinyatakan lurus: Admin Sekolah dengan demikian dapat membuat soal
+ujian untuk kelas mana pun di cabangnya, karena `GradePolicy` memang sudah memberinya
+akses kelas-mapel tanpa batas dan matriks memberinya ✅ penuh. Itu **mengikuti arsitektur
+yang berlaku**, bukan keputusan pemilik. Bila kewenangan itu seharusnya lebih sempit, itu
+penyempitan yang harus diputuskan pemilik (R-2, terbuka).
+
+### 278. Wali kelas berwenang karena mengajar, bukan karena menjadi wali
+
+`classes.homeroom_teacher_id` dan `class_subjects.teacher_id` adalah dua hal berbeda, dan
+`GradePolicy` sudah sengaja hanya melihat yang kedua. `ExamPolicy` mengikuti.
+
+Wali kelas yang tidak mengampu satu mata pelajaran pun di kelasnya karena itu tidak dapat
+membuat ujian untuk kelas itu. Terdengar berlawanan dengan naluri, dan memang disengaja:
+menjadi wali adalah tanggung jawab administratif, bukan lisensi menilai mata pelajaran
+orang lain. Diuji dari kedua sisi — wali tanpa penugasan mengajar ditolak, wali yang juga
+mengampu diterima untuk mata pelajaran yang ia ampu saja.
+
+### 279. Factory CBT konsisten sejak bawaannya
+
+Factory lama di project ini memberi setiap FK `School::factory()`-nya sendiri, sehingga
+baris bawaannya lintas cabang. Untuk modul-modul itu tidak menjadi soal.
+
+Untuk CBT ia justru menjadi soal, karena yang diuji **adalah** kesesuaian cabang. Bawaan
+yang tidak konsisten membuat setiap test dimulai dari keadaan tidak sah, dan tidak ada
+satu pun keadaan sah untuk dibandingkan.
+
+Factory CBT karena itu menurunkan `school_id` dan `academic_year_id` dari induknya lewat
+closure atas `$attributes`. Yang diturunkan tetap dapat ditimpa: menuliskan `school_id`
+lain secara eksplisit menghasilkan baris lintas cabang sungguhan — dan itu memang yang
+dibutuhkan test negatif. `BelongsToSchool` hanya mengisi yang masih NULL, jadi tidak ada
+yang diperbaiki diam-diam. Sifat itu sendiri diuji
+(`ExamTenantIsolationTest::test_an_explicit_school_id_is_never_overwritten_by_the_session`),
+karena seluruh test negatif bergantung padanya.
+
+### 280. Fiksur: dua cabang yang masing-masing utuh
+
+`BuildsExamFixture` membangun dua cabang lengkap — tahun ajaran, kelas, mata pelajaran,
+guru pengampu, kelas-mapel, siswa — dan tidak ada satu baris pun yang menyeberang kecuali
+bila sebuah test membuatnya menyeberang dengan sengaja.
+
+Tanpa itu, test positif dan test negatif sama-sama kehilangan artinya.
+
+### 281. Jaminan database diuji pada kedua mesin
+
+`ExamSchemaTest` menguji UNIQUE, rentang `decimal(5,2)`, dan perilaku ON DELETE. Seluruh
+test-nya berjalan pada SQLite maupun MySQL, dan itu bukan pengulangan: kedua mesin
+menegakkan hal-hal ini lewat jalan yang berbeda, dan yang lolos di satu mesin belum tentu
+lolos di mesin yang lain — sedangkan yang berjalan di produksi hanya salah satunya.
+
+### 282. Kelima model diuji sebagai daftar, bukan satu per satu
+
+`ExamTenantIsolationTest` menyimpan daftar model CBT sebagai data lalu memutarnya. Satu
+model yang lupa memakai `BelongsToSchool` sudah cukup untuk membuat soal, kunci jawaban,
+dan hasil ujian satu cabang terbaca cabang lain — tanpa error, tanpa jejak.
+
+Ditulis sebagai daftar supaya model CBT keenam yang lupa didaftarkan terlihat dari
+jumlahnya, bukan lolos karena tidak ada yang menuliskan test-nya.
+
+### 283. Yang **tidak** dikerjakan Batch C1
+
+Sengaja tidak ada, dan bukan karena kehabisan waktu:
+
+- UI guru (CRUD ujian, soal, pilihan) — Batch C2;
+- alur siswa (daftar, mengerjakan, simpan otomatis, pengatur waktu, mengumpulkan) — C3;
+- service penilaian — C3;
+- halaman hasil — C3 dan C4;
+- jembatan "Masukkan ke Nilai" — C4;
+- landing page — L1, dan `/` **tidak** disentuh batch ini.
+
+Fondasi ini tidak punya pemanggil. Itu disengaja: skema, kewenangan, dan aturan
+integritas diuji sendirian dulu, sehingga ketika UI datang, yang perlu diuji tinggal
+UI-nya.
+
+### 284. Kedua mesin tidak boleh diuji bersamaan
+
+Ditemukan pada batch ini, dan bukan oleh CBT: menjalankan suite SQLite dan suite MySQL
+secara paralel membuat empat kasus `ReportCardPdfTest` gagal, padahal keempatnya lulus
+ketika suite-nya dijalankan sendirian.
+
+Sebabnya bukan database. `Storage::fake('local')` menulis ke direktori **sungguhan** di
+`storage/framework/testing/disks/local`, dan kedua proses test berbagi filesystem yang
+sama walaupun databasenya berbeda. Yang satu menghapus dan menulis berkas PDF milik yang
+lain di tengah jalan, sehingga `allFiles()` dan `assertDirectoryEmpty()` melihat keadaan
+yang bukan miliknya.
+
+Yang membuatnya berbahaya adalah bentuk kegagalannya: ia terlihat persis seperti regresi
+pada modul rapor, di batch yang tidak menyentuh rapor sama sekali. Angka totalnya yang
+menyelamatkan — 4 gagal + 2042 lulus = 2046, tepat sama dengan 1989 dasar + 57 test CBT,
+sehingga tidak ada test yang hilang dan yang terjadi hanya perebutan berkas.
+
+Catatannya diletakkan juga di bagian "Menjalankan test terhadap MySQL", tempat orang
+berikutnya akan mencarinya.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
@@ -5123,6 +5462,15 @@ pada MySQL (panjang kolom, unique index, tipe ENUM):
 export DB_CONNECTION=mysql DB_DATABASE=smartsukses_test
 php artisan test
 ```
+
+**Jalankan berurutan, jangan bersamaan.** Kedua mesin memang memakai database yang
+berbeda, tetapi keduanya berbagi **filesystem yang sama**. `Storage::fake('local')`
+menulis ke direktori sungguhan di `storage/framework/testing/disks/local`, sehingga dua
+proses test yang berjalan bersamaan saling menimpa berkas PDF rapor milik satu sama lain.
+Gejalanya menyesatkan: `ReportCardPdfTest` gagal pada beberapa kasus yang lulus ketika
+suite-nya dijalankan sendirian, dan kegagalannya berpindah-pindah. Ditemukan pada
+Batch C1, ketika kedua suite sengaja dijalankan paralel untuk menghemat waktu — yang
+dihemat justru harus dibayar dengan menjalankan keduanya ulang (butir 284).
 
 Ini bukan formalitas. Cara ini menemukan dua kegagalan yang tidak muncul di SQLite
 karena SQLite mengabaikan panjang `VARCHAR`:
