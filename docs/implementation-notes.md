@@ -6404,6 +6404,201 @@ Yang perlu dicatat sebagai konsekuensi nyata: `/` kini satu query lebih mahal da
 sebelumnya, dan ia bergantung pada database. Bila database tidak dapat dihubungi,
 halaman muka ikut gagal — sama seperti seluruh halaman lain di aplikasi ini.
 
+## Sprint 9 — Batch S9.1 (konfigurasi produksi & pengerasan)
+
+Sprint 9 versi roadmap: **Polish & QA — Bilingual (EN), Responsive mobile, Load testing,
+Security audit, Bug fixing**. Batch ini mengerjakan potongan *security audit* yang dapat
+diselesaikan di repository, sebelum ada server.
+
+CBT (C1–C4) dan halaman muka (L1) **bukan** Sprint 9; keduanya tercatat sebagai tambahan
+scope pemilik di [`owner-scope-changes.md`](owner-scope-changes.md).
+
+### 355. Yang diuji di sini tidak pernah gagal dengan bersuara
+
+Tiga hal yang diperbaiki batch ini punya sifat yang sama: **salahnya tidak membuat satu
+test pun merah**.
+
+CORS yang terlalu longgar tidak mengganggu apa pun sampai ada halaman asing yang
+memanfaatkannya. Proxy yang tidak dipercaya hanya membuat setiap baris audit berisi
+alamat yang keliru. Cookie tanpa `Secure` hanya berarti sesi dapat terkirim polos pada
+satu permintaan yang kebetulan lewat http.
+
+Ketiganya baru terasa ketika sudah terlambat, dan tidak satu pun akan ditemukan oleh test
+fungsional. Karena itu masing-masing mendapat test sendiri.
+
+### 356. Koreksi aritmetika audit Sprint 9
+
+Laporan audit menyebut "1 dari 10 lolos" padahal tabelnya sendiri memuat **dua** baris
+PASS: nomor 1 (test isolasi tenant) dan nomor 4 (encoding tautan wa.me). Yang benar
+**2 dari 10**.
+
+Dicatat karena angka ringkasan lebih sering dikutip daripada tabelnya.
+
+Yang juga perlu dibedakan, dan sengaja dipisahkan di seluruh dokumen sejak batch ini:
+
+- **selesai secara fungsional** — fiturnya ada, teruji, dan berjalan;
+- **siap go-live** — deployment produksinya terverifikasi.
+
+Aplikasi ini sudah yang pertama. Ia **belum** yang kedua, dan keduanya tidak boleh
+disatukan dalam satu kalimat.
+
+### 357. Proxy tepercaya, dan mengapa nilainya dibaca dari config
+
+Arsitektur 3.3.1: Internet -> Cloudflare -> Nginx -> PHP-FPM. Tanpa proxy tepercaya,
+Laravel membaca alamat **Nginx** sebagai alamat klien — sehingga `audit_logs.ip_address`,
+yang diwajibkan Arsitektur 3.4, berisi alamat yang sama pada setiap baris.
+
+Tempat menyetelnya tidak sembarang, dan dua tempat yang tampak wajar keduanya salah:
+
+- **`bootstrap/app.php`** — callback `withMiddleware()` dijalankan lewat
+  `afterResolving(HttpKernel::class)`, yaitu ketika kernel diresolusi di
+  `public/index.php`. Berkas `.env` baru dimuat di dalam `$kernel->handle()`. `env()` di
+  sana mengembalikan NULL.
+- **`env()` di service provider** — berhenti bekerja begitu `config:cache` dijalankan,
+  yaitu tepat di produksi.
+
+Yang benar: nilainya dibaca `env()` **di dalam berkas config**
+(`config/trustedproxy.php`), lalu dipasang di `AppServiceProvider::boot()` lewat
+`TrustProxies::at()` — provider di-boot sesudah config dimuat dan sebelum middleware
+global berjalan.
+
+Bawaannya tidak memercayai siapa pun, sehingga pemasangan lokal tidak berubah
+perilakunya.
+
+### 358. Header yang dipercaya dipersempit
+
+Bawaan Laravel memercayai `X-Forwarded-For`, `-Host`, `-Port`, `-Proto`, `-Prefix`, dan
+preset AWS ELB. Yang dipakai di sini hanya **FOR, PROTO, PORT**.
+
+`X-Forwarded-Host` sengaja **tidak** dipercaya. Aplikasi ini mengirim tautan atur ulang
+kata sandi lewat surel, dan tautan itu dibangun dari host permintaan; memercayai header
+itu berarti mengizinkan host tautan ditentukan dari luar. Nginx sudah meneruskan `Host`
+yang benar, jadi tidak ada yang hilang.
+
+Catatan yang ditemukan saat menulis test-nya: `Request::HEADER_X_FORWARDED_AWS_ELB`
+bernilai **26**, yaitu gabungan FOR|PROTO|PORT — sebuah **preset**, bukan bit tersendiri.
+Himpunan sempit yang dipilih di sini kebetulan sama persis dengannya, sehingga tidak ada
+yang dapat diuji tentang "ketiadaan AWS ELB". Assertion pertama yang ditulis untuk itu
+keliru dan diganti (butir 365).
+
+### 359. `config/cors.php` dimiliki repository
+
+Sebelum batch ini berkasnya tidak ada, sehingga yang berlaku adalah bawaan framework:
+`allowed_origins` bernilai `*` untuk `api/*`. Checklist A.3 menuntut sebaliknya.
+
+Yang lebih penting daripada nilainya: tanpa berkas ini, kebijakan lintas-origin aplikasi
+dapat bergeser karena pembaruan Laravel, tanpa satu baris pun berubah di repository.
+
+Bawaannya `APP_URL` — sehingga produksi otomatis benar begitu `APP_URL` disetel, dan
+lokal otomatis benar tanpa dikonfigurasi. Daftar kosong berarti tidak ada origin lintas
+domain yang diizinkan: gagal tertutup.
+
+`supports_credentials` tetap `false`. API memakai token Bearer; menyalakan kredensial
+lintas origin akan menjadikan daftar origin satu-satunya yang berdiri antara sesi
+pengguna dan halaman asing.
+
+### 360. `sanctum/csrf-cookie` tidak dibuka lintas origin
+
+Rutenya terdaftar karena Sanctum mendaftarkannya sendiri, dan bawaan CORS framework
+memasukkannya ke `paths`. Aplikasi ini **tidak** memakainya: API-nya token Bearer
+(`auth:sanctum` tanpa `statefulApi()`), dan panel serta portal memakai sesi pada origin
+yang sama.
+
+Membiarkannya di daftar CORS berarti membuka jalur cookie CSRF lintas origin untuk
+sesuatu yang tidak dipakai siapa pun. `paths` karena itu hanya `api/*`.
+
+### 361. `app:production-check`
+
+Perintah kecil yang membaca **konfigurasi yang benar-benar berlaku**, bukan berkas contoh
+— sehingga ia menangkap kekeliruan yang paling sering terjadi: `.env` yang tersalin dari
+lingkungan lain.
+
+Sebelas pemeriksaan, seluruhnya fakta ya/tidak: APP_ENV, APP_DEBUG, APP_KEY ada, APP_URL
+https, cookie Secure, cookie HttpOnly, CORS bukan wildcard, proxy tepercaya terisi,
+antrean bukan `sync`, pengirim surel bukan `log`, kata sandi seeder disetel.
+
+Kode keluarnya bukan nol bila ada yang gagal, sehingga dapat dipasang di skrip
+deployment. Ada test yang mematikan setiap pemeriksaan satu per satu dan menuntut
+perintahnya jatuh — pemeriksaan yang tidak menjaga apa pun akan terlihat.
+
+Ia **bukan** pengganti checklist go-live: backup, cron, worker, TLS, dan uji beban di
+luar jangkauannya, dan keluarannya menyebutkan itu.
+
+### 362. Perintah itu tidak pernah mencetak rahasia
+
+Keluarannya sering ikut tersalin ke catatan deployment atau ke tiket. Yang dilaporkan
+karena itu hanya **keberadaan**, bukan nilai: apakah APP_KEY ada, bukan APP_KEY-nya.
+
+Diuji dengan menanam nilai bertanda pada APP_KEY dan SEED_ADMIN_PASSWORD lalu
+membuktikan tidak satu pun muncul di keluaran.
+
+### 363. Seeding produksi berhenti tanpa kata sandi
+
+`UserSeeder` memakai nilai cadangan yang ada di dalam repository, jadi ia diketahui siapa
+pun yang dapat membacanya. Di lokal itu kenyamanan yang disengaja; di produksi ia berarti
+akun Super Administrator lahir dengan kata sandi yang tercetak di repository.
+
+`must_change_password` memang menutupnya pada login pertama, tetapi jendela antara
+seeding dan login pertama itu nyata.
+
+Yang dilempar `RuntimeException`, bukan peringatan: seeding yang "berhasil dengan
+catatan" akan terlewat di tengah keluaran deployment. Pesannya tidak menyebut kata sandi
+bawaannya, dan ada test yang menjaga itu.
+
+Alur lokal tidak berubah — pagarnya hanya menyala pada `APP_ENV=production`, dan ada test
+yang membuktikan seeding lokal tanpa variabel itu tetap berjalan.
+
+### 364. CORS origin tunggal ditulis statis, dan itu benar
+
+Ditemukan saat menulis test. Ketika hanya satu origin yang diizinkan, php-cors menuliskan
+`Access-Control-Allow-Origin` **secara statis** tanpa membandingkan `Origin` permintaan
+(`CorsService::isSingleOriginAllowed()`).
+
+Itu perilaku CORS yang benar: header itu adalah **izin bagi peramban**, dan peramban yang
+membandingkannya dengan origin halamannya sendiri lalu memblokir bila berbeda.
+
+Assertion pertama yang ditulis — "origin penyerang tidak mendapat header" — karena itu
+menguji properti yang salah dan gagal. Yang berarti: header itu tidak pernah menyebut
+origin penyerang, dan tidak pernah `*`. Ditambah satu test dengan dua origin, yang
+menempuh jalur pembanding php-cors dan membuktikan origin tak terdaftar memang tidak
+mendapat izin sama sekali.
+
+### 365. Yang **tidak** dikerjakan Batch S9.1
+
+- deployment apa pun ke server;
+- backup, cron penjadwal, artefak Supervisor — S9.2;
+- bilingual, uji beban, perubahan responsif — S9.3/S9.4;
+- kredensial SMTP: masukan deployment, bukan kode. `MAIL_MAILER=log` di produksi
+  dilaporkan `app:production-check` sebagai gagal, dan UX lupa kata sandi **tidak**
+  diubah;
+- header keamanan HTTP (HSTS, nosniff, Referrer-Policy): batasnya Nginx, dan
+  didokumentasikan di runbook. Menambahkan CSP dari aplikasi berisiko mematahkan
+  Filament/Livewire tanpa peringatan;
+- seluruh implementasi penilaian — `Grade`, `GradePolicy`, `GradeConfig`,
+  `FinalScoreCalculator`, `ComponentScoreAggregator`, `ReportCardGenerator`, dan
+  F-1/F-3/F-4/F-5 — tidak tersentuh.
+
+### 366. Membandingkan seluruh HTML adalah test yang rapuh
+
+Ditemukan saat menjalankan regresi S9.1, dan penyebabnya test dari Batch L1.
+
+Test "halaman muka terlihat sama bagi tamu dan bagi pengguna yang login"
+membandingkan **seluruh dokumen HTML** byte demi byte. Ia lulus di L1 dan gagal di S9.1 —
+bukan karena ada yang rusak, melainkan karena urutan test berubah: Livewire menyuntikkan
+aset dan token CSRF-nya sendiri ke dalam balasan HTML utuh, dan sudah-belumnya
+penyuntikan itu terjadi berbeda antar proses.
+
+Tidak satu pun dari itu ada hubungannya dengan yang sedang dibuktikan. Yang dibuktikan
+butir 344 adalah **identitas visualnya tidak berubah** ketika ada pengguna cabang yang
+login — dan itu seluruhnya ada di blok `:root { ... }`.
+
+Test-nya kini membandingkan blok itu saja. Lebih sempit, dan justru lebih tepat: ia tetap
+jatuh bila warna cabang bocor, dan berhenti jatuh karena hal yang tidak diuji.
+
+Ini bentuk yang sama dengan butir 323 (`assertDontSee('Rp')` yang mencocoki token CSRF
+acak): assertion yang menjaring lebih luas daripada maksudnya akan gagal karena sesuatu
+yang lain, pada waktu yang tidak dapat ditebak.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
