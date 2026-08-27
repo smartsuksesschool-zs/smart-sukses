@@ -134,9 +134,69 @@ karena matriks itu ditulis untuk Phase 1.
 | Batch | Isi | Keadaan |
 | --- | --- | --- |
 | **C1** | dokumen provenance, skema, model, enum, policy, factory, test integritas & isolasi | **selesai** |
-| C2 | UI guru: CRUD ujian, soal, pilihan, aturan terbit | belum |
+| **C2** | UI penulis: daftar & CRUD ujian, soal, pilihan jawaban, siklus terbit/tarik/tutup | **selesai** |
 | C3 | alur siswa: daftar, mengerjakan, simpan otomatis, mengumpulkan, penilaian server, halaman hasil | belum |
 | C4 | daftar hasil untuk guru, jembatan "Masukkan ke Nilai", penutupan | belum |
 | L1 | landing page publik (terpisah dari CBT) | belum |
 
-C1 **tidak** membangun satu pun UI, tidak menilai, dan tidak menyentuh `/`.
+C1 dan C2 **tidak** menyentuh satu pun permukaan siswa, tidak menilai, dan tidak
+menyentuh `/`.
+
+---
+
+## 8. Aturan penulisan soal (C2)
+
+### Siklus hidup
+
+```
+DRAFT ──terbitkan──► PUBLISHED ──tutup──► CLOSED
+  ▲                       │
+  └──tarik kembali────────┘   (hanya selama nol pengerjaan)
+```
+
+Satu-satunya pemegang aturannya `App\Services\Cbt\ExamPublisher`. Ujian selalu lahir
+sebagai DRAFT; status tidak pernah menjadi field yang dapat diisi.
+
+### Syarat terbit
+
+Dua belas, seluruhnya wajib: status draf · aktor berwenang · kelas-mapel satu cabang ·
+tahun ajaran sesuai kelas-mapelnya · durasi > 0 · waktu tutup setelah waktu buka ·
+sedikitnya satu soal · seluruh soal bertipe yang didukung · bobot tiap soal > 0 ·
+sedikitnya 2 pilihan per soal · tepat satu kunci per soal · total bobot > 0.
+
+Gagal satu saja: ujian tetap draf, tidak ada perubahan sebagian, dan alasannya disebut
+dalam bahasa Indonesia beserta nomor soalnya.
+
+### Keabadian setelah dikerjakan
+
+| Keadaan | Metadata | Soal & pilihan | Tarik kembali | Tutup | Hapus |
+| --- | --- | --- | --- | --- | --- |
+| DRAFT, nol pengerjaan | boleh | boleh | — | — | boleh |
+| PUBLISHED, nol pengerjaan | tarik kembali dulu | tarik kembali dulu | boleh | boleh | tidak |
+| PUBLISHED, ada pengerjaan | tidak | tidak | **tidak** | boleh | **tidak** |
+| CLOSED | tidak | tidak | tidak | tidak | tidak |
+
+Penghapusan ujian yang sudah dikerjakan ditutup **aplikasi**, bukan skema: database
+memang meneruskan penghapusan ke pengerjaan dan jawaban, dan justru karena itu tombolnya
+tidak pernah disediakan.
+
+Tidak ada penjadwal yang menutup ujian otomatis setelah `available_until`. C3
+memperlakukan ujian terbit yang jadwalnya lewat sebagai tidak tersedia, tanpa mengubah
+statusnya.
+
+### Kunci jawaban
+
+`ExamPolicy::viewAnswerKey()` terpisah dari `view()`. Aturannya: **yang boleh melihat
+kunci adalah yang boleh menulisnya.**
+
+| | Melihat ujian & soal | Melihat kunci |
+| --- | --- | --- |
+| SUPER_ADMIN | ya | ya |
+| SCHOOL_ADMIN (cabangnya) | ya | ya |
+| GURU / WALI (kelas yang diampu) | ya | ya |
+| KEPALA_SEKOLAH | ya | **tidak** |
+| BENDAHARA / SISWA / ORANG_TUA | tidak | tidak |
+
+Kunci tidak pernah muncul sebagai kolom daftar mana pun — daftar soal hanya menampilkan
+**jumlah** pilihan. Ia hanya ada di form penyuntingan soal, yang tertutup bagi siapa pun
+yang tidak dapat mengubah ujiannya.

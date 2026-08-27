@@ -5453,6 +5453,317 @@ sehingga tidak ada test yang hilang dan yang terjadi hanya perebutan berkas.
 Catatannya diletakkan juga di bagian "Menjalankan test terhadap MySQL", tempat orang
 berikutnya akan mencarinya.
 
+## MVP CBT yang dipercepat — Batch C2 (penulisan soal)
+
+Provenance: [`owner-scope-changes.md`](owner-scope-changes.md).
+Batas scope: [`cbt-mvp-scope.md`](cbt-mvp-scope.md).
+
+Batch ini membangun sisi **penulis** saja: guru dan admin cabang menyusun ujian,
+soal, dan kunci jawabannya, lalu menerbitkannya. Belum ada satu pun halaman siswa,
+penilaian, maupun jembatan ke nilai akademik.
+
+### 285. Siklus hidup ujian punya satu pemegang aturan
+
+`App\Services\Cbt\ExamPublisher` adalah satu-satunya tempat status ujian berpindah.
+Resource, halaman, dan test memanggilnya; tidak ada yang menyalin syaratnya.
+
+Pembagiannya dengan dua kelas yang sudah ada dibuat tegas supaya tidak ada aturan
+yang hidup di dua tempat:
+
+| Pertanyaan | Dijawab |
+| --- | --- |
+| Bolehkah orang ini? | `ExamPolicy` — izin, cabang, kelas yang diampu, status |
+| Sahkah keterkaitannya? | `ExamIntegrity` — cabang, tahun ajaran, pembuatnya (butir 274) |
+| Siapkah isinya terbit? | `ExamPublisher` — soal, pilihan, kunci, bobot, jadwal |
+
+Ketiganya **dipanggil**, tidak ditiru. `reasonToRefusePublishing()` memanggil
+`ExamIntegrity::reasonToRejectExam()` alih-alih menulis ulang pemeriksaan cabang dan
+tahun ajaran.
+
+### 286. Dua belas syarat terbit, dan mengapa masing-masing ada
+
+Terbit adalah satu-satunya pintu menuju siswa. Setiap syarat yang lolos menjadi ujian
+yang tidak dapat dinilai, dan yang menemukannya adalah siswa — di tengah mengerjakan.
+
+1. statusnya masih draf;
+2. aktornya berwenang (lewat `Gate`, bukan pemeriksaan kedua);
+3. kelas-mapelnya satu cabang — `ExamIntegrity`;
+4. tahun ajarannya sesuai kelas-mapelnya — `ExamIntegrity`;
+5. durasinya lebih dari 0 menit;
+6. waktu tutup setelah waktu buka;
+7. ada sedikitnya satu soal;
+8. seluruh soal bertipe yang didukung rilis ini;
+9. bobot tiap soal lebih dari 0;
+10. tiap soal punya sedikitnya 2 pilihan jawaban;
+11. tepat satu kunci per soal;
+12. total bobot lebih dari 0.
+
+Syarat 12 sudah tersirat pada syarat 9, dan tetap ditulis: total nol adalah **penyebut
+nol** pada rumus nilai, dan satu-satunya tempat yang dapat mencegahnya adalah di sini —
+sebelum ada yang mengerjakan. Menemukannya saat penilaian berarti menemukannya ketika
+jawaban siswa sudah ada dan tidak dapat dinilai.
+
+Pemeriksaannya berhenti pada alasan pertama, dan alasannya menyebut nomor soalnya.
+Menumpuk seluruh keluhan sekaligus terdengar lebih membantu, tetapi yang sampai ke guru
+adalah daftar panjang yang sebagian besarnya akibat dari yang pertama.
+
+### 287. Tarik kembali tertutup begitu ada satu pengerjaan
+
+Menarik ujian kembali menjadi draf berarti membuka soal dan **kuncinya** untuk diubah.
+Bila sudah ada siswa yang menjawab, jawaban mereka akan dinilai dengan kunci yang bukan
+kunci saat mereka mengerjakan — tanpa satu pun tanda bahwa itu terjadi.
+
+Karena itu `unpublish` menuntut nol pengerjaan, dan tuntutan itu ada di dua lapis:
+`ExamPolicy::unpublish()` menyembunyikan tombolnya, dan `ExamPublisher::unpublish()`
+menolak walaupun dipanggil langsung.
+
+Menutup ujian tetap boleh setelah ada pengerjaan — itu justru yang dilakukan ketika
+ujiannya usai.
+
+### 288. Bentuk soal yang sah ditulis sekali, dipanggil dua kali
+
+`reasonToRejectOptions()` dan `reasonToRejectQuestionShape()` menerima array biasa,
+bukan model. Bentuk itu dipilih supaya aturan yang sama dapat dipanggil dari dua tempat
+yang datanya berbeda rupa:
+
+- validasi form penulisan soal — state repeater, belum tersimpan;
+- pemeriksaan saat terbit — baris yang sudah tersimpan.
+
+Satu aturan dengan dua pemanggil, bukan dua aturan yang kebetulan mirip. Konsekuensi
+yang dikehendaki: guru tahu soalnya belum sah **sekarang**, bukan nanti saat menekan
+Terbitkan, dan keduanya mustahil berbeda pendapat.
+
+Keduanya dipisah — bobot soal diperiksa terpisah dari pilihan jawabannya — karena form
+memvalidasi pilihan jawaban sebagai satu kesatuan sementara bobot punya aturannya
+sendiri di field itu. Memaksa keduanya lewat satu pintu menuntut form membaca nilai
+field tetangga di tengah validasi: sambungan yang mudah putus tanpa menambah jaminan.
+
+### 289. `hasAttempts()` memakai hitungan yang sudah dimuat
+
+Ada-tidaknya pengerjaan menjadi syarat empat aturan sekaligus — sunting, hapus, tarik
+kembali, dan soal beku — sehingga satu baris tabel menanyakannya sekali per aksi yang
+menimbangnya.
+
+`Exam::hasAttempts()` karena itu memakai `attempts_count` bila sudah dimuat, relasi
+`attempts` bila sudah dimuat, dan baru bertanya ke database bila keduanya tidak ada —
+pola yang sama dengan `totalPoints()`. `ExamResource::getEloquentQuery()` memuatnya
+lewat `withCount(['questions', 'attempts'])`, bersama mata pelajaran, kelas, tahun
+ajaran, dan pembuatnya.
+
+Diuji dengan menghitung query: daftar berisi enam ujian harus sama mahalnya dengan
+daftar berisi satu.
+
+### 290. Syarat keadaan berada di policy, bukan di tombol
+
+`ExamPolicy::update()` menuntut ujian yang masih draf **dan** belum dikerjakan siapa
+pun. Diletakkan di policy, bukan hanya pada `->visible()` tombol, karena tombol yang
+tersembunyi bukan pagar: alamat halaman edit tetap dapat diketik.
+
+Aturannya sederhana dan menutup seluruh jalan sekaligus: ujian yang sudah terbit tidak
+dapat diedit sampai ditarik kembali, dan menariknya kembali mustahil setelah ada yang
+mengerjakan (butir 287). Tidak ada satu pun rute menuju perubahan soal di tengah ujian.
+
+Syarat "belum dikerjakan" tetap ditulis walaupun sudah tersirat pada "masih draf".
+Ia yang tetap benar seandainya aturan pertama suatu saat dilonggarkan — dan ada test
+yang menyetel status kembali ke draf langsung di database untuk membuktikannya.
+
+### 291. Penghapusan berhenti di aplikasi, bukan di skema
+
+Skema memang meneruskan penghapusan ujian ke soal, pengerjaan, dan jawaban (cascade,
+butir 269). Itu perilaku database yang sengaja dipilih dan diuji apa adanya di C1.
+
+Yang **tidak** boleh ada adalah tombolnya. `ExamPolicy::delete()` menuntut status draf
+dan nol pengerjaan, sehingga aplikasi tidak pernah menyediakan jalan menghapus pekerjaan
+siswa yang sudah tersimpan — walaupun database mampu melakukannya bila diminta.
+
+Perbedaan ini disengaja: skema mencatat apa yang mungkin, aplikasi memutuskan apa yang
+boleh.
+
+### 292. Kunci jawaban punya kewenangannya sendiri
+
+`ExamPolicy::viewAnswerKey()` terpisah dari `view()`. Kepala Sekolah berwenang
+mengawasi — ia melihat ujian, jadwal, daftar soal, dan teks pilihan jawabannya — tetapi
+pengawasan tidak menuntut mengetahui kuncinya, dan setiap mata tambahan yang melihat
+kunci adalah satu jalan kebocoran tambahan.
+
+Aturannya: **yang boleh melihat kunci adalah yang boleh menulisnya.**
+
+Penegakannya berlapis dan seluruhnya struktural, bukan sekadar penyembunyian:
+
+- `exam_options.is_correct` tidak punya kolom di daftar mana pun — daftar soal hanya
+  menampilkan **jumlah** pilihan, tidak isinya;
+- kuncinya hanya muncul di form penyuntingan soal, yang tertutup bagi siapa pun yang
+  tidak dapat `update` ujiannya;
+- `ExamQuestion::correctOption()` adalah relasi terpisah dari `options()`, sehingga
+  halaman yang memuat pilihan jawaban tidak ikut membawa kuncinya (butir 270).
+
+### 293. Menu yang tidak berwenang tidak dirender, bukan ditolak setelah diklik
+
+Filament membangun navigasinya dari resource yang `canAccess()`, dan `canAccess()`
+bersandar pada `ExamPolicy::viewAny()` yang menuntut `grade.view`. Bendahara karena itu
+tidak melihat menu "Ujian Online" sama sekali.
+
+Bedanya bukan kenyamanan. Menu yang terlihat lalu menolak dengan 403 sudah memberi tahu
+bahwa fiturnya ada, siapa yang memakainya, dan di mana letaknya — kebocoran informasi
+yang tidak meninggalkan jejak. Diuji dari kedua sisi: menunya tertutup, dan alamatnya
+pun tertutup.
+
+### 294. Daftar pilihan bukan kewenangan
+
+`class_subject_id` disaring per peran — guru hanya melihat kelas yang ia ampu, admin
+cabang melihat seluruh kelas cabangnya. Penyaring itu **kenyamanan**, bukan pagar:
+payload Livewire dapat dikirim apa adanya, dengan id apa pun.
+
+Pagar terakhirnya aturan validasi yang memanggil `ExamPolicy::author()` — kewenangan
+yang sama yang dipakai di tempat lain, bukan pemeriksaan kedua yang kebetulan mirip.
+Satu aturan menutup dua hal sekaligus: kelas-mapel cabang lain, dan kelas-mapel yang
+tidak diampu pengguna ini.
+
+Pola ini sudah ada di project: `GradeConfigResource` memakai `exists()` dengan
+`modifyRuleUsing` untuk alasan yang persis sama (butir 41).
+
+### 295. Tahun ajaran diturunkan, tidak dipilih
+
+Tahun ajaran sudah melekat pada kelas-mapelnya, dan `ExamIntegrity` menuntut keduanya
+sesuai. Menyediakan pemilih tahun ajaran hanya menciptakan satu kombinasi tidak sah yang
+kemudian harus ditolak di tempat lain.
+
+Karena itu form hanya **menampilkan** tahun ajaran kelas-mapel yang dipilih, dan nilainya
+ditulis server dari `class_subjects.academic_year_id` — pada pembuatan maupun
+penyuntingan. Kesesuaiannya menjadi struktural, bukan hasil validasi.
+
+Cabangnya diperlakukan sama: diturunkan, tidak diambil dari form. Bagi Super Admin
+pemilih cabang tetap ada karena akun mereka memang tidak punya cabang, dan nilainya hanya
+dipercaya dari mereka (pola butir 41).
+
+### 296. Ujian selalu lahir sebagai draf
+
+Status bukan field. Terbit menuntut isi yang lengkap — sedikitnya satu soal dengan
+pilihan dan kuncinya — dan pada detik pembuatan belum ada satu soal pun. Ujian yang lahir
+"terbit" karena itu selalu ujian yang tidak sah.
+
+`CreateExam` menetapkannya DRAFT, dan satu-satunya jalan menuju PUBLISHED adalah
+`ExamPublisher`. Halaman pembuatan mengarahkan langsung ke halaman sunting, bukan ke
+daftar: ujian baru belum punya soal, dan soalnya ditulis di sana.
+
+### 297. Relation manager, bukan repeater bersarang dua tingkat
+
+Soal berisi pilihan jawaban. Menuliskannya sebagai repeater di dalam repeater menaruh
+seluruh isi ujian di dalam satu state Livewire yang dikirim ulang setiap kali satu huruf
+berubah, dan satu kegagalan validasi di ujung mana pun membatalkan seluruhnya.
+
+`QuestionsRelationManager` membuat setiap soal berdiri sendiri, sehingga yang bersarang
+tinggal satu tingkat: pilihan jawaban di dalam satu soal. Polanya sudah ada di project —
+`PaymentsRelationManager` pada StudentFeeResource.
+
+### 298. Kewenangan menulis soal menempel pada ujiannya
+
+Yang boleh menulis soal adalah yang boleh mengubah ujian itu. `canCreate()`,
+`canEdit()`, `canDelete()`, dan `isReadOnly()` seluruhnya bertanya `can('update', $exam)`
+— tidak ada satu pun syarat yang ditulis ulang di relation manager.
+
+Konsekuensinya gratis dan justru yang diinginkan: syarat keadaan pada
+`ExamPolicy::update()` (butir 290) otomatis berlaku juga untuk soal dan pilihan jawaban.
+Ujian yang sudah terbit atau sudah dikerjakan membuat daftar soalnya hanya dapat dibaca,
+tanpa satu baris pun aturan tambahan.
+
+### 299. Jejak audit ikut tanpa kode tambahan — asalkan lewat model
+
+Listener CUD yang sudah ada (`AppServiceProvider::recordAuditTrail`) merekam ujian, soal,
+dan setiap pilihan jawaban tanpa satu baris pun kode baru. Syaratnya satu: penyimpanan
+berjalan lewat model — `create`, `update`, `delete` — bukan query massal.
+
+`syncOptions()` karena itu menghapus pilihan yang dibuang guru **satu per satu lewat
+model**, bukan dengan satu `delete()` massal. Query massal akan lebih singkat dan tidak
+menghasilkan satu pun baris audit; alasan yang sama sudah pernah ditulis untuk pemangkasan
+notifikasi (butir 258).
+
+### 300. `school_id` diturunkan dari ujian, bukan dari sesi
+
+`BelongsToSchool` mengisi `school_id` dari sesi pengguna. Itu benar untuk akun School
+Level, dan **salah** untuk Super Admin — yang `school_id`-nya NULL, sehingga soalnya akan
+gagal disimpan pada kolom NOT NULL.
+
+Soal dan pilihan jawaban karena itu mendapat cabangnya dari ujian yang sedang dibuka, dan
+diuji: soal yang dibuat lewat UI harus berada di cabang ujiannya, bukan di cabang
+pembuatnya.
+
+### 301. UI diuji sebagai UI
+
+Policy yang benar tetapi tombol yang salah adalah cacat yang lolos dari seluruh test
+kewenangan. Dua bentuknya nyata di batch ini: menu yang terlihat lalu menolak (butir 293),
+dan tombol hapus yang muncul pada ujian yang sudah dikerjakan (butir 291).
+
+`ExamAuthoringUiTest` karena itu menguji apa yang benar-benar dirender —
+`assertTableActionVisible`, `assertTableActionHidden`, `callTableAction`,
+`assertHasFormErrors` — bukan hanya `can()`.
+
+### 302. Repeater pilihan jawaban tidak terikat relasi
+
+`Repeater::relationship()` memuat ulang keadaannya dari relasinya setiap kali form
+terisi. Pada **soal baru** relasinya masih kosong, sehingga apa pun yang sudah diisi
+tertimpa baris kosong bawaan `defaultItems()`.
+
+Penyimpanannya karena itu ditulis sendiri di `persistQuestion()` dan `syncOptions()`.
+Dua hal menjadi mungkin sekaligus: `school_id` diturunkan dari ujiannya (butir 300), dan
+alurnya benar-benar dapat diuji sebagai UI.
+
+`syncOptions()` mencocokkan baris lewat `id` tersembunyi di dalam repeater, sehingga
+menyunting soal **memperbarui** pilihan yang sudah ada alih-alih menghapus lalu membuatnya
+ulang. Itu bukan penghematan: jawaban siswa menunjuk `exam_options.id`, dan pilihan yang
+dibuat ulang akan memutus tautan itu.
+
+### 303. `setTableActionData()` menyetel jalur bertitik, bukan mengganti array
+
+Ditemukan saat menulis test, dan sempat membuat tiga test lulus karena alasan yang keliru.
+
+`setTableActionData()` memakai `Arr::dot()` lalu `set()` per jalur. Untuk repeater yang
+sudah berisi baris kosong bawaan berkunci UUID, mengirim baris berkunci angka hanya
+**menambahkannya di samping** baris kosong itu — bukan menggantinya. Yang gagal kemudian
+adalah baris kosong bawaan, bukan aturan yang sedang diuji, sehingga test "soal dengan
+satu pilihan ditolak" lulus tanpa pernah menguji aturan jumlah pilihan.
+
+Yang benar: mount aksinya dulu, baca kunci baris yang **benar-benar dirender**, lalu isi
+baris itu — persis seperti guru yang mengetik ke dalam kolom yang terlihat di layarnya.
+Ditulis sebagai helper `createQuestion()` supaya tidak ada test berikutnya yang mengulangi
+kekeliruan yang sama.
+
+Satu aturan sengaja **tidak** diuji lewat UI: "pilihan jawaban kurang dari 2". Menguji­nya
+menuntut menghapus baris repeater lewat aksi Livewire, dan test yang mengisi sebagian
+baris saja akan gagal karena baris kosong — lulus karena alasan yang keliru, persis
+seperti sebelumnya. Aturannya diuji pada pemegangnya, `ExamPublisher`, yang memang
+otoritasnya.
+
+### 304. Kewenangan per baris dijawab sekali per render
+
+Terukur, bukan diduga: daftar berisi enam soal membayar **159** query, sedangkan satu soal
+**43**. Penyebabnya setiap baris menanyakan ulang hal yang sama — kelas yang diampu, dan
+ada-tidaknya pengerjaan — sekali untuk tombol Sunting dan sekali untuk tombol Hapus,
+padahal jawabannya menyangkut **ujiannya** dan sama untuk seluruh baris.
+
+Setelah dijawab sekali per render: **5** query untuk satu soal, **5** untuk enam.
+
+Pengukurannya sendiri sempat menyesatkan. Render pertama memuat izin Spatie sekali untuk
+seluruh proses, sehingga membandingkan render pertama dengan render kedua mengukur cache
+dingin, bukan biaya per baris. Test-nya karena itu melakukan satu render pemanasan lebih
+dulu, dan barulah menuntut angka yang **sama persis** — bukan sekadar "tidak jauh
+berbeda".
+
+### 305. Yang **tidak** dikerjakan Batch C2
+
+- seluruh sisi siswa — daftar ujian, pengerjaan, simpan otomatis, pengatur waktu,
+  pengumpulan (C3);
+- penilaian di sisi server (C3);
+- halaman hasil, untuk siswa maupun guru (C3 dan C4);
+- jembatan "Masukkan ke Nilai" (C4);
+- penilaian soal uraian — tetap scope Phase 2 yang belum dikerjakan;
+- landing page (L1), dan `/` **tidak** disentuh batch ini;
+- endpoint REST CBT — permukaan API tetap 41 (butir 264);
+- penjadwal untuk menutup ujian otomatis setelah `available_until`. Tidak dibuat, dan
+  tidak dibutuhkan: C3 memperlakukan ujian terbit yang jadwalnya sudah lewat sebagai
+  tidak tersedia tanpa mengubah statusnya. Menambahkan penjadwal hanya untuk mengubah
+  satu kolom berarti menambah titik gagal yang tidak menghasilkan apa pun.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
