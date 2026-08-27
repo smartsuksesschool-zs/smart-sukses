@@ -536,6 +536,10 @@
                            @if (request()->routeIs('student.schedule')) aria-current="page" @endif>Jadwal</a>
                         <a href="{{ route('student.grades') }}"
                            @if (request()->routeIs('student.grades')) aria-current="page" @endif>Nilai</a>
+                        {{-- Ujian online: tambahan scope atas permintaan pemilik,
+                             di luar keempat menu PORTAL-03. --}}
+                        <a href="{{ route('student.exams') }}"
+                           @if (request()->routeIs('student.exam*')) aria-current="page" @endif>Ujian</a>
                         <x-portal.notification-nav
                             :route="route('student.notifications')"
                             :active="request()->routeIs('student.notifications')"

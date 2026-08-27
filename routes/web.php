@@ -15,6 +15,9 @@ use App\Livewire\Ppdb\RegistrationForm;
 use App\Livewire\Ppdb\SchoolList;
 use App\Livewire\Ppdb\StatusCheck;
 use App\Livewire\Student\StudentDashboard;
+use App\Livewire\Student\StudentExam;
+use App\Livewire\Student\StudentExamResult;
+use App\Livewire\Student\StudentExams;
 use App\Livewire\Student\StudentGrades;
 use App\Livewire\Student\StudentLogin;
 use App\Livewire\Student\StudentProfile;
@@ -134,6 +137,23 @@ Route::prefix('siswa')->name('student.')->group(function () {
         Route::get('/jadwal', StudentSchedule::class)->name('schedule');
         Route::get('/nilai', StudentGrades::class)->name('grades');
         Route::get('/profil', StudentProfile::class)->name('profile');
+
+        /*
+         * Ujian online (CBT) — tambahan scope atas permintaan pemilik, di luar
+         * blueprint Phase 1 (docs/owner-scope-changes.md).
+         *
+         * Alamatnya hanya menyebut **ujiannya**. Tidak ada id siswa di mana pun,
+         * karena identitas siswa selalu berasal dari akun yang login lewat
+         * StudentPortalService — pola yang sama dengan seluruh halaman portal
+         * lain (butir 186, 307).
+         */
+        Route::get('/ujian', StudentExams::class)->name('exams');
+        Route::get('/ujian/{examId}', StudentExam::class)
+            ->whereNumber('examId')
+            ->name('exam');
+        Route::get('/ujian/{examId}/hasil', StudentExamResult::class)
+            ->whereNumber('examId')
+            ->name('exam-result');
 
         // PORTAL-03 poin 1 menyebut menu Notifikasi; sejak Batch 8.2 menu itu
         // punya halamannya, jadi ia tautan sungguhan (butir 208).
