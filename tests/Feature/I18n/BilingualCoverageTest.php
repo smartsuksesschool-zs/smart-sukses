@@ -590,7 +590,7 @@ class BilingualCoverageTest extends TestCase
 
     protected function inEnglish(): static
     {
-        $this->get(route('locale.switch', ['locale' => 'en']));
+        $this->post(route('locale.switch', ['locale' => 'en']));
 
         return $this;
     }

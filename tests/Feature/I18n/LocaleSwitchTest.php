@@ -7,6 +7,7 @@ use App\Models\School;
 use App\Models\User;
 use App\Support\Locale;
 use Database\Seeders\RolePermissionSeeder;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -74,7 +75,7 @@ class LocaleSwitchTest extends TestCase
     {
         $this->get('/')->assertOk();
 
-        $this->get(route('locale.switch', ['locale' => 'en']))
+        $this->post(route('locale.switch', ['locale' => 'en']))
             ->assertRedirect()
             ->assertSessionHas(Locale::sessionKey(), 'en');
 
@@ -85,14 +86,14 @@ class LocaleSwitchTest extends TestCase
     {
         $before = User::query()->count();
 
-        $this->get(route('locale.switch', ['locale' => 'en']));
+        $this->post(route('locale.switch', ['locale' => 'en']));
 
         $this->assertSame($before, User::query()->count());
     }
 
     public function test_a_guest_choice_survives_to_the_next_request(): void
     {
-        $this->get(route('locale.switch', ['locale' => 'en']));
+        $this->post(route('locale.switch', ['locale' => 'en']));
 
         $this->get('/')
             ->assertOk()
@@ -106,7 +107,7 @@ class LocaleSwitchTest extends TestCase
      */
     public function test_an_unknown_locale_in_the_url_falls_back_instead_of_erroring(): void
     {
-        $this->get('/bahasa/fr')
+        $this->post('/bahasa/fr')
             ->assertRedirect()
             ->assertSessionHas(Locale::sessionKey(), 'id');
     }
@@ -118,15 +119,15 @@ class LocaleSwitchTest extends TestCase
     public function test_no_path_like_locale_value_can_reach_the_route(): void
     {
         foreach (['..%2F..%2Fconfig', 'en/../id', 'en.json', 'en%00', 'en-US', 'id_ID'] as $attempt) {
-            $this->get('/bahasa/'.$attempt)->assertNotFound();
+            $this->post('/bahasa/'.$attempt)->assertNotFound();
         }
     }
 
     public function test_switching_back_to_indonesian_works(): void
     {
-        $this->get(route('locale.switch', ['locale' => 'en']));
+        $this->post(route('locale.switch', ['locale' => 'en']));
 
-        $this->get(route('locale.switch', ['locale' => 'id']))
+        $this->post(route('locale.switch', ['locale' => 'id']))
             ->assertSessionHas(Locale::sessionKey(), 'id');
 
         $this->get('/')->assertOk()->assertSee('Siap menggunakan Smart Sukses School?', escape: false);
@@ -141,7 +142,7 @@ class LocaleSwitchTest extends TestCase
         $school = School::factory()->create();
         $user = User::factory()->forSchool($school)->withRole(RoleName::Guru)->create(['locale' => 'id']);
 
-        $this->actingAs($user)->get(route('locale.switch', ['locale' => 'en']))->assertRedirect();
+        $this->actingAs($user)->post(route('locale.switch', ['locale' => 'en']))->assertRedirect();
 
         $this->assertSame('en', $user->fresh()->locale);
     }
@@ -160,17 +161,22 @@ class LocaleSwitchTest extends TestCase
         $attacker = User::factory()->forSchool($school)->withRole(RoleName::Guru)->create(['locale' => 'id']);
         $victim = User::factory()->forSchool($school)->withRole(RoleName::Guru)->create(['locale' => 'id']);
 
-        // Setiap bentuk yang mungkin dicoba: query string, badan POST, dan
-        // segmen tambahan pada URL.
+        // Setiap bentuk yang mungkin dicoba: query string, badan permintaan,
+        // dan segmen tambahan pada URL.
         $this->actingAs($attacker)
-            ->get(route('locale.switch', ['locale' => 'en']).'?user_id='.$victim->id.'&user='.$victim->id);
+            ->post(route('locale.switch', ['locale' => 'en']).'?user_id='.$victim->id.'&user='.$victim->id);
 
         $this->actingAs($attacker)
-            ->post(route('locale.switch', ['locale' => 'en']), ['user_id' => $victim->id])
-            ->assertStatus(405);
+            ->post(route('locale.switch', ['locale' => 'en']), [
+                'user_id' => $victim->id,
+                'user' => $victim->id,
+                'id' => $victim->id,
+                'locale' => 'en',
+            ])
+            ->assertRedirect();
 
         $this->actingAs($attacker)
-            ->get('/bahasa/en/'.$victim->id)
+            ->post('/bahasa/en/'.$victim->id)
             ->assertNotFound();
 
         $this->assertSame('id', $victim->fresh()->locale, 'the victim locale must not change');
@@ -188,7 +194,7 @@ class LocaleSwitchTest extends TestCase
         $school = School::factory()->create();
         $user = User::factory()->forSchool($school)->withRole(RoleName::Guru)->create(['locale' => 'en']);
 
-        $this->actingAs($user)->get('/bahasa/fr');
+        $this->actingAs($user)->post('/bahasa/fr');
 
         $this->assertSame('id', $user->fresh()->locale);
         $this->assertContains($user->fresh()->locale, Locale::supported());
@@ -241,6 +247,87 @@ class LocaleSwitchTest extends TestCase
         $this->assertStringContainsString('locale-switch', $html);
     }
 
+    /**
+     * Bentuknya form POST beserta token CSRF-nya, bukan tautan. Diperiksa pada
+     * kelima permukaan sekaligus supaya tidak ada satu pun yang tertinggal
+     * memakai GET (butir 388).
+     */
+    public function test_the_switch_posts_with_a_csrf_token_on_every_surface(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+
+        $school = School::factory()->create(['code' => 'MADANI', 'is_active' => true]);
+        $teacher = User::factory()->forSchool($school)->withRole(RoleName::Guru)->create();
+
+        $pages = [
+            'landing' => fn () => $this->get('/'),
+            'ppdb' => fn () => $this->get(route('ppdb.schools')),
+            'student login' => fn () => $this->get(route('student.login')),
+            'parent login' => fn () => $this->get(route('portal.login')),
+            'portal shell' => fn () => $this->actingAs($teacher)->get(route('teacher.dashboard')),
+            'filament panel' => fn () => $this->actingAs($teacher)->get(route('filament.admin.pages.dashboard')),
+        ];
+
+        foreach ($pages as $label => $visit) {
+            $html = $visit()->assertOk()->getContent();
+
+            $action = route('locale.switch', ['locale' => 'en'], absolute: false);
+
+            $this->assertMatchesRegularExpression(
+                '/<form[^>]+method="POST"[^>]*>/i',
+                $html,
+                $label.' must render the switch as a POST form',
+            );
+
+            $this->assertStringContainsString('name="_token"', $html, $label.' must carry a CSRF token');
+
+            $this->assertMatchesRegularExpression(
+                '/formaction="[^"]*'.preg_quote($action, '/').'"/',
+                $html,
+                $label.' must post to the switch endpoint',
+            );
+
+            // Dan tidak ada satu pun tautan GET ke endpoint itu.
+            $this->assertStringNotContainsString(
+                'href="'.$action.'"',
+                $html,
+                $label.' must not link to the switch endpoint',
+            );
+        }
+    }
+
+    /**
+     * Rutenya berada di grup `web`, sehingga `ValidateCsrfToken` benar-benar
+     * berlaku padanya. Yang diperiksa daftar middleware rutenya, bukan
+     * keberadaan token pada halaman — token dapat dirender tanpa ada yang
+     * memeriksanya.
+     *
+     * Penolakan token yang salah tidak diuji di sini: `ValidateCsrfToken`
+     * sengaja melewati dirinya sendiri selama `runningUnitTests()`, sehingga
+     * uji semacam itu hanya akan menguji tiruan, bukan middleware yang
+     * sebenarnya berjalan di produksi. Yang dapat dibuktikan — dan dibuktikan —
+     * adalah bahwa middleware-nya terpasang dan metodenya POST, sehingga
+     * jalan pintas `isReading()` tidak berlaku (butir 388).
+     */
+    public function test_the_switch_route_is_csrf_protected(): void
+    {
+        $route = collect(app('router')->getRoutes()->getRoutes())
+            ->first(fn ($route) => $route->getName() === 'locale.switch');
+
+        $this->assertNotNull($route);
+        $this->assertSame(['POST'], array_values(array_diff($route->methods(), ['HEAD'])));
+        $this->assertContains('web', $route->middleware());
+
+        $this->assertContains(
+            ValidateCsrfToken::class,
+            app('router')->getMiddlewareGroups()['web'],
+        );
+
+        // POST, sehingga jalan pintas `isReading()` pada middleware itu tidak
+        // pernah berlaku bagi rute ini.
+        $this->assertNotContains('GET', $route->methods());
+    }
+
     public function test_the_switch_is_present_on_the_public_ppdb_page(): void
     {
         School::factory()->create(['code' => 'MADANI', 'is_active' => true]);
@@ -277,28 +364,107 @@ class LocaleSwitchTest extends TestCase
     }
 
     /**
-     * Tautan biasa, bukan tombol JavaScript: dapat difokuskan papan ketik dan
-     * dibaca pembaca layar tanpa penanganan tambahan. Bahasa yang sedang aktif
-     * bukan tautan ke dirinya sendiri.
+     * Tombol submit HTML biasa, bukan tombol JavaScript: dapat difokuskan papan
+     * ketik dan dibaca pembaca layar tanpa penanganan tambahan. Bahasa yang
+     * sedang aktif bukan tombol ke dirinya sendiri.
      */
-    public function test_the_switch_is_a_plain_keyboard_reachable_link(): void
+    public function test_the_switch_is_a_plain_keyboard_reachable_button(): void
     {
         $html = $this->get('/')->assertOk()->getContent();
 
-        // Bahasa lain: tautan sungguhan.
+        // Bahasa lain: tombol submit sungguhan.
         $this->assertMatchesRegularExpression(
-            '/<a[^>]+href="[^"]*'.preg_quote(route('locale.switch', ['locale' => 'en'], absolute: false), '/').'"/',
+            '/<button[^>]+type="submit"[^>]*formaction="[^"]*'
+                .preg_quote(route('locale.switch', ['locale' => 'en'], absolute: false), '/').'"/s',
             $html,
         );
 
-        // Bahasa aktif: bukan tautan.
+        // Bahasa aktif: bukan tombol.
         $this->assertStringNotContainsString(
-            'href="'.route('locale.switch', ['locale' => 'id'], absolute: false).'"',
+            'formaction="'.route('locale.switch', ['locale' => 'id'], absolute: false).'"',
             $html,
         );
 
         $this->assertStringContainsString('aria-current="true"', $html);
+
+        // Tidak ada JavaScript yang dipakai hanya untuk ini.
         $this->assertStringNotContainsString('onclick=', $html);
+        $this->assertStringNotContainsString('onchange=', $html);
+        $this->assertStringNotContainsString('x-on:click', $html);
+    }
+
+    /**
+     * Persyaratan yang paling mudah hilang tanpa disadari: setelah pemilihnya
+     * menjadi POST, tidak boleh ada satu pun rute GET yang masih menyimpan
+     * bahasa. `GET /bahasa/en` karena itu menjawab 405 — URI-nya ada, tetapi
+     * hanya menerima POST — dan tidak menyentuh apa pun.
+     */
+    public function test_no_get_route_performs_the_locale_persistence(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+
+        $school = School::factory()->create();
+        $user = User::factory()->forSchool($school)->withRole(RoleName::Guru)->create(['locale' => 'id']);
+
+        // Tamu.
+        $this->get('/bahasa/en')->assertStatus(405)->assertSessionMissing(Locale::sessionKey());
+
+        // Pengguna yang login.
+        $this->actingAs($user)->get('/bahasa/en')->assertStatus(405);
+        $this->assertSame('id', $user->fresh()->locale);
+
+        // Dan tidak ada rute GET lain yang menunjuk ke controller-nya.
+        $getRoutes = collect(app('router')->getRoutes()->getRoutes())
+            ->filter(fn ($route) => in_array('GET', $route->methods(), true))
+            ->filter(fn ($route) => str_contains((string) $route->getActionName(), 'LocaleController'));
+
+        $this->assertCount(0, $getRoutes);
+    }
+
+    /**
+     * `<form>` di dalam `<form>` adalah HTML tidak sah, dan peramban
+     * membuangnya diam-diam — tombolnya masih terlihat, tetapi tidak lagi
+     * mengirim apa pun. Karena pemilihnya kini form, penempatannya diperiksa
+     * pada kelima permukaan.
+     */
+    public function test_the_switch_form_is_never_nested_inside_another_form(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+
+        $school = School::factory()->create(['code' => 'MADANI', 'is_active' => true]);
+        $teacher = User::factory()->forSchool($school)->withRole(RoleName::Guru)->create();
+
+        $pages = [
+            'landing' => fn () => $this->get('/'),
+            'ppdb' => fn () => $this->get(route('ppdb.schools')),
+            'student login' => fn () => $this->get(route('student.login')),
+            'parent login' => fn () => $this->get(route('portal.login')),
+            'portal shell' => fn () => $this->actingAs($teacher)->get(route('teacher.dashboard')),
+            'filament panel' => fn () => $this->actingAs($teacher)->get(route('filament.admin.pages.dashboard')),
+        ];
+
+        foreach ($pages as $label => $visit) {
+            $html = $visit()->assertOk()->getContent();
+
+            $depth = 0;
+            $maxDepth = 0;
+
+            preg_match_all('/<\/?form\b/i', $html, $matches, PREG_OFFSET_CAPTURE);
+
+            foreach ($matches[0] as [$tag, $_]) {
+                if (str_starts_with(strtolower($tag), '</')) {
+                    $depth--;
+
+                    continue;
+                }
+
+                $depth++;
+                $maxDepth = max($maxDepth, $depth);
+            }
+
+            $this->assertSame(0, $depth, $label.' has unbalanced form tags');
+            $this->assertSame(1, $maxDepth, $label.' must never nest one form inside another');
+        }
     }
 
     /**
