@@ -22,10 +22,10 @@ enum AttitudePredicate: string
     public function label(): string
     {
         return match ($this) {
-            self::A => 'A — Sangat Baik',
-            self::B => 'B — Baik',
-            self::C => 'C — Cukup',
-            self::D => 'D — Perlu Bimbingan',
+            self::A => __('A — Sangat Baik'),
+            self::B => __('B — Baik'),
+            self::C => __('C — Cukup'),
+            self::D => __('D — Perlu Bimbingan'),
         };
     }
 

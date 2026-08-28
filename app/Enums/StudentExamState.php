@@ -32,11 +32,11 @@ enum StudentExamState: string
     public function label(): string
     {
         return match ($this) {
-            self::Upcoming => 'Belum dibuka',
-            self::Available => 'Dapat dikerjakan',
-            self::InProgress => 'Sedang dikerjakan',
-            self::Submitted => 'Sudah dikumpulkan',
-            self::Missed => 'Terlewat',
+            self::Upcoming => __('Belum dibuka'),
+            self::Available => __('Dapat dikerjakan'),
+            self::InProgress => __('Sedang dikerjakan'),
+            self::Submitted => __('Sudah dikumpulkan'),
+            self::Missed => __('Terlewat'),
         };
     }
 

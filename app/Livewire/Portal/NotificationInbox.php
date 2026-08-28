@@ -92,6 +92,6 @@ class NotificationInbox extends Component
         return view('livewire.portal.notification-inbox', [
             'items' => $items,
             'unreadCount' => $unreadCount,
-        ])->layout('layouts.portal', ['title' => 'Notifikasi']);
+        ])->layout('layouts.portal', ['title' => __('Notifikasi')]);
     }
 }

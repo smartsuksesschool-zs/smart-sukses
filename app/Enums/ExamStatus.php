@@ -26,9 +26,9 @@ enum ExamStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Draft => 'Draf',
-            self::Published => 'Terbit',
-            self::Closed => 'Ditutup',
+            self::Draft => __('Draf'),
+            self::Published => __('Terbit'),
+            self::Closed => __('Ditutup'),
         };
     }
 

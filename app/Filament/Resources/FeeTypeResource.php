@@ -51,7 +51,7 @@ class FeeTypeResource extends Resource
             // cabang hanya dirender untuk Super Admin, sedangkan peran School
             // Level terikat cabang akunnya sendiri.
             Forms\Components\Select::make('school_id')
-                ->label('Cabang Sekolah')
+                ->label(__('Cabang Sekolah'))
                 ->relationship(
                     name: 'school',
                     titleAttribute: 'name',
@@ -68,16 +68,16 @@ class FeeTypeResource extends Resource
                 // tagihan siswa yang sudah terbit memakainya.
                 ->disabledOn('edit')
                 ->columnSpanFull()
-                ->helperText('Jenis tagihan berlaku hanya untuk cabang ini.'),
+                ->helperText(__('Jenis tagihan berlaku hanya untuk cabang ini.')),
 
             Forms\Components\TextInput::make('name')
-                ->label('Nama Tagihan')
+                ->label(__('Nama Tagihan'))
                 ->required()
                 ->maxLength(100)
-                ->placeholder('SPP'),
+                ->placeholder(__('SPP')),
 
             Forms\Components\TextInput::make('amount')
-                ->label('Nominal')
+                ->label(__('Nominal'))
                 ->prefix('Rp')
                 ->numeric()
                 ->required()
@@ -90,7 +90,7 @@ class FeeTypeResource extends Resource
                 ]),
 
             Forms\Components\Select::make('frequency')
-                ->label('Frekuensi')
+                ->label(__('Frekuensi'))
                 ->options(FeeFrequency::options())
                 ->default(FeeFrequency::Monthly->value)
                 ->required()
@@ -99,14 +99,14 @@ class FeeTypeResource extends Resource
                 ->rule(Rule::enum(FeeFrequency::class)),
 
             Forms\Components\Select::make('academic_year_id')
-                ->label('Tahun Ajaran')
+                ->label(__('Tahun Ajaran'))
                 ->options(fn (Forms\Get $get) => static::academicYearOptions(
                     static::resolveSchoolId($get('school_id')),
                 ))
                 ->searchable()
-                ->placeholder('Tidak terikat tahun ajaran')
+                ->placeholder(__('Tidak terikat tahun ajaran'))
                 // ERD: "NULL untuk tagihan berulang".
-                ->helperText('Kosongkan untuk tagihan berulang yang tidak terikat satu tahun ajaran.')
+                ->helperText(__('Kosongkan untuk tagihan berulang yang tidak terikat satu tahun ajaran.'))
                 ->exists(
                     table: 'academic_years',
                     column: 'id',
@@ -115,12 +115,12 @@ class FeeTypeResource extends Resource
                 ),
 
             Forms\Components\Toggle::make('is_active')
-                ->label('Aktif')
+                ->label(__('Aktif'))
                 ->default(true)
-                ->helperText('Jenis tagihan tidak pernah dihapus; nonaktifkan bila tidak dipakai lagi.'),
+                ->helperText(__('Jenis tagihan tidak pernah dihapus; nonaktifkan bila tidak dipakai lagi.')),
 
             Forms\Components\Textarea::make('description')
-                ->label('Keterangan')
+                ->label(__('Keterangan'))
                 ->rows(3)
                 ->columnSpanFull(),
         ])->columns(2);
@@ -131,40 +131,40 @@ class FeeTypeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Nama Tagihan')
+                    ->label(__('Nama Tagihan'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('amount')
-                    ->label('Nominal')
+                    ->label(__('Nominal'))
                     ->money('IDR')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('frequency')
-                    ->label('Frekuensi')
+                    ->label(__('Frekuensi'))
                     ->badge()
                     ->formatStateUsing(fn (FeeFrequency $state) => $state->label())
                     ->color(fn (FeeFrequency $state) => $state->color()),
 
                 Tables\Columns\TextColumn::make('academicYear.name')
-                    ->label('Tahun Ajaran')
-                    ->placeholder('Berulang')
+                    ->label(__('Tahun Ajaran'))
+                    ->placeholder(__('Berulang'))
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('is_active')
-                    ->label('Aktif')
+                    ->label(__('Aktif'))
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('school.name')
-                    ->label('Cabang')
+                    ->label(__('Cabang'))
                     ->visible(fn () => Auth::user()?->isSuperAdmin())
                     ->toggleable(),
             ])
             ->filters([
-                Tables\Filters\TernaryFilter::make('is_active')->label('Status Aktif'),
+                Tables\Filters\TernaryFilter::make('is_active')->label(__('Status Aktif')),
 
                 Tables\Filters\SelectFilter::make('frequency')
-                    ->label('Frekuensi')
+                    ->label(__('Frekuensi'))
                     ->options(FeeFrequency::options()),
             ])
             ->actions([
@@ -251,5 +251,25 @@ class FeeTypeResource extends Resource
             'create' => Pages\CreateFeeType::route('/create'),
             'edit' => Pages\EditFeeType::route('/{record}/edit'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

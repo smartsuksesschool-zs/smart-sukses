@@ -28,11 +28,11 @@ class StudentsRelationManager extends RelationManager
     {
         return $form->schema([
             Forms\Components\Select::make('student_id')
-                ->label('Siswa')
+                ->label(__('Siswa'))
                 ->options(fn () => $this->eligibleStudents())
                 ->searchable()
                 ->required()
-                ->helperText('Hanya siswa aktif yang belum terdaftar di kelas manapun pada tahun ajaran ini.'),
+                ->helperText(__('Hanya siswa aktif yang belum terdaftar di kelas manapun pada tahun ajaran ini.')),
         ]);
     }
 
@@ -42,32 +42,32 @@ class StudentsRelationManager extends RelationManager
             ->recordTitleAttribute('id')
             ->columns([
                 Tables\Columns\TextColumn::make('student.nis')
-                    ->label('NIS')
+                    ->label(__('NIS'))
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('student.full_name')
-                    ->label('Nama Lengkap')
+                    ->label(__('Nama Lengkap'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('student.gender')
-                    ->label('L/P')
+                    ->label(__('L/P'))
                     ->formatStateUsing(fn ($state) => $state?->value),
 
                 Tables\Columns\TextColumn::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->badge()
                     ->formatStateUsing(fn (StudentClassStatus $state) => $state->label())
                     ->color(fn (StudentClassStatus $state) => $state === StudentClassStatus::Active ? 'success' : 'gray'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->options(StudentClassStatus::options()),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
-                    ->label('Tambahkan Siswa')
+                    ->label(__('Tambahkan Siswa'))
                     ->mutateFormDataUsing(function (array $data): array {
                         $class = $this->getClass();
 
@@ -82,7 +82,7 @@ class StudentsRelationManager extends RelationManager
                         // Kapasitas kelas (ERD 2.2 classes.capacity).
                         if (! $this->getClass()->hasRemainingCapacity()) {
                             Notification::make()
-                                ->title('Kapasitas kelas sudah penuh')
+                                ->title(__('Kapasitas kelas sudah penuh'))
                                 ->danger()
                                 ->send();
 
@@ -94,11 +94,11 @@ class StudentsRelationManager extends RelationManager
                 // API 4.6 — DELETE /classes/{id}/students/{studentId} (pindah kelas).
                 // Baris tidak dihapus agar histori perpindahan tetap tersimpan.
                 Tables\Actions\Action::make('markMoved')
-                    ->label('Keluarkan dari Kelas')
+                    ->label(__('Keluarkan dari Kelas'))
                     ->icon('heroicon-o-arrow-right-start-on-rectangle')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->modalDescription('Baris tetap disimpan sebagai histori dengan status Pindah Kelas.')
+                    ->modalDescription(__('Baris tetap disimpan sebagai histori dengan status Pindah Kelas.'))
                     ->visible(fn (StudentClass $record) => $record->status === StudentClassStatus::Active)
                     ->action(fn (StudentClass $record) => $record->update([
                         'status' => StudentClassStatus::Moved->value,
@@ -134,5 +134,10 @@ class StudentsRelationManager extends RelationManager
                 $student->id => "{$student->nis} — {$student->full_name}",
             ])
             ->all();
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
     }
 }

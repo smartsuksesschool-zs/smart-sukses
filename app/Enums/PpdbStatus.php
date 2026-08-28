@@ -17,11 +17,11 @@ enum PpdbStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Registered => 'Terdaftar',
-            self::DocumentReview => 'Verifikasi Berkas',
-            self::Passed => 'Lulus Seleksi',
-            self::Failed => 'Tidak Lulus',
-            self::Enrolled => 'Sudah Menjadi Siswa',
+            self::Registered => __('Terdaftar'),
+            self::DocumentReview => __('Verifikasi Berkas'),
+            self::Passed => __('Lulus Seleksi'),
+            self::Failed => __('Tidak Lulus'),
+            self::Enrolled => __('Sudah Menjadi Siswa'),
         };
     }
 

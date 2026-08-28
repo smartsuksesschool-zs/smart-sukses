@@ -68,30 +68,30 @@ class StudentFeeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('student.full_name')
-                    ->label('Siswa')
+                    ->label(__('Siswa'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('student.nis')
-                    ->label('NIS')
+                    ->label(__('NIS'))
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('feeType.name')
-                    ->label('Jenis Tagihan')
+                    ->label(__('Jenis Tagihan'))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('period')
-                    ->label('Periode')
+                    ->label(__('Periode'))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('amount')
-                    ->label('Nominal')
+                    ->label(__('Nominal'))
                     ->money('IDR')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('amount_paid')
-                    ->label('Terbayar')
+                    ->label(__('Terbayar'))
                     ->money('IDR')
                     ->sortable(),
 
@@ -99,24 +99,24 @@ class StudentFeeResource extends Resource
                 // ketiga yang bisa menyimpang dari dua angka lainnya. Karena
                 // itu pula ia tidak dapat diurutkan di database.
                 Tables\Columns\TextColumn::make('remaining')
-                    ->label('Sisa')
+                    ->label(__('Sisa'))
                     ->money('IDR')
                     ->state(fn (StudentFee $record): string => PaymentRecorder::remainingFor($record)),
 
                 Tables\Columns\TextColumn::make('due_date')
-                    ->label('Jatuh Tempo')
+                    ->label(__('Jatuh Tempo'))
                     ->date('d M Y')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->badge()
                     ->formatStateUsing(fn (StudentFeeStatus $state): string => $state->label())
                     ->color(fn (StudentFeeStatus $state): string => $state->color())
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('school.name')
-                    ->label('Cabang')
+                    ->label(__('Cabang'))
                     ->visible(fn (): bool => Auth::user()?->isSuperAdmin() ?? false)
                     ->toggleable(),
             ])
@@ -124,19 +124,19 @@ class StudentFeeResource extends Resource
                 // API 4.9 menyebut filter yang didukung persis: student_id,
                 // status, period, fee_type_id.
                 Tables\Filters\SelectFilter::make('period')
-                    ->label('Periode')
+                    ->label(__('Periode'))
                     ->options(fn (): array => static::periodOptions()),
 
                 Tables\Filters\SelectFilter::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->options(StudentFeeStatus::options()),
 
                 Tables\Filters\SelectFilter::make('fee_type_id')
-                    ->label('Jenis Tagihan')
+                    ->label(__('Jenis Tagihan'))
                     ->options(fn (): array => static::feeTypeOptions()),
 
                 Tables\Filters\SelectFilter::make('student_id')
-                    ->label('Siswa')
+                    ->label(__('Siswa'))
                     ->relationship('student', 'full_name')
                     ->searchable()
                     ->preload(),
@@ -159,34 +159,34 @@ class StudentFeeResource extends Resource
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist->schema([
-            Infolists\Components\Section::make('Tagihan')
+            Infolists\Components\Section::make(__('Tagihan'))
                 ->columns(3)
                 ->schema([
-                    Infolists\Components\TextEntry::make('student.full_name')->label('Siswa'),
-                    Infolists\Components\TextEntry::make('student.nis')->label('NIS')->placeholder('—'),
-                    Infolists\Components\TextEntry::make('feeType.name')->label('Jenis Tagihan'),
-                    Infolists\Components\TextEntry::make('period')->label('Periode'),
-                    Infolists\Components\TextEntry::make('due_date')->label('Jatuh Tempo')->date('d M Y'),
+                    Infolists\Components\TextEntry::make('student.full_name')->label(__('Siswa')),
+                    Infolists\Components\TextEntry::make('student.nis')->label(__('NIS'))->placeholder('—'),
+                    Infolists\Components\TextEntry::make('feeType.name')->label(__('Jenis Tagihan')),
+                    Infolists\Components\TextEntry::make('period')->label(__('Periode')),
+                    Infolists\Components\TextEntry::make('due_date')->label(__('Jatuh Tempo'))->date('d M Y'),
                     Infolists\Components\TextEntry::make('academicYear.name')
-                        ->label('Tahun Ajaran')
-                        ->placeholder('Berulang'),
+                        ->label(__('Tahun Ajaran'))
+                        ->placeholder(__('Berulang')),
                     Infolists\Components\TextEntry::make('status')
-                        ->label('Status')
+                        ->label(__('Status'))
                         ->badge()
                         ->formatStateUsing(fn (StudentFeeStatus $state): string => $state->label())
                         ->color(fn (StudentFeeStatus $state): string => $state->color()),
                     Infolists\Components\TextEntry::make('school.name')
-                        ->label('Cabang')
+                        ->label(__('Cabang'))
                         ->visible(fn (): bool => Auth::user()?->isSuperAdmin() ?? false),
                 ]),
 
-            Infolists\Components\Section::make('Nominal')
+            Infolists\Components\Section::make(__('Nominal'))
                 ->columns(3)
                 ->schema([
-                    Infolists\Components\TextEntry::make('amount')->label('Nominal Tagihan')->money('IDR'),
-                    Infolists\Components\TextEntry::make('amount_paid')->label('Sudah Dibayar')->money('IDR'),
+                    Infolists\Components\TextEntry::make('amount')->label(__('Nominal Tagihan'))->money('IDR'),
+                    Infolists\Components\TextEntry::make('amount_paid')->label(__('Sudah Dibayar'))->money('IDR'),
                     Infolists\Components\TextEntry::make('remaining')
-                        ->label('Sisa Tagihan')
+                        ->label(__('Sisa Tagihan'))
                         ->money('IDR')
                         ->state(fn (StudentFee $record): string => $record->remaining()),
                 ]),
@@ -195,11 +195,11 @@ class StudentFeeResource extends Resource
             // dibebaskan: alasan pembebasan adalah penjelasan mengapa tagihan
             // ini tidak akan pernah tertagih, bukan catatan tambahan pada
             // nominalnya.
-            Infolists\Components\Section::make('Pembebasan Tagihan')
+            Infolists\Components\Section::make(__('Pembebasan Tagihan'))
                 ->visible(fn (StudentFee $record): bool => $record->isWaived() || filled($record->waive_reason))
                 ->schema([
                     Infolists\Components\TextEntry::make('waive_reason')
-                        ->label('Alasan Pembebasan')
+                        ->label(__('Alasan Pembebasan'))
                         ->placeholder('—')
                         ->columnSpanFull(),
                 ]),
@@ -236,11 +236,11 @@ class StudentFeeResource extends Resource
     protected static function configureRecordPaymentAction(Tables\Actions\Action|Actions\Action $action): Tables\Actions\Action|Actions\Action
     {
         return $action
-            ->label('Catat Pembayaran')
+            ->label(__('Catat Pembayaran'))
             ->icon('heroicon-o-banknotes')
             ->color('success')
-            ->modalHeading('Catat Pembayaran')
-            ->modalSubmitActionLabel('Simpan Pembayaran')
+            ->modalHeading(__('Catat Pembayaran'))
+            ->modalSubmitActionLabel(__('Simpan Pembayaran'))
             // Aksinya disembunyikan bila tidak berwenang, tetapi itu bukan
             // proteksinya: PaymentRecorder::authorize() memeriksa ulang izin
             // yang sama pada jalur tulis.
@@ -262,7 +262,7 @@ class StudentFeeResource extends Resource
         $record->refresh();
 
         Notification::make()
-            ->title('Pembayaran tercatat')
+            ->title(__('Pembayaran tercatat'))
             ->body(sprintf(
                 'Rp %s dicatat untuk %s. Status tagihan sekarang: %s.',
                 number_format((float) $payment->amount_paid, 0, ',', '.'),
@@ -285,21 +285,21 @@ class StudentFeeResource extends Resource
             // punya nama field dan karena itu tidak dapat diselundupkan sebagai
             // payload.
             Forms\Components\Placeholder::make('student_context')
-                ->label('Siswa')
+                ->label(__('Siswa'))
                 ->content(fn (): string => $record->student?->full_name ?? '—'),
 
             Forms\Components\Placeholder::make('period_context')
-                ->label('Periode')
+                ->label(__('Periode'))
                 ->content(fn (): string => $record->feeType?->name
                     ? "{$record->feeType->name} — {$record->period}"
                     : $record->period),
 
             Forms\Components\Placeholder::make('remaining_context')
-                ->label('Sisa Tagihan')
+                ->label(__('Sisa Tagihan'))
                 ->content(fn (): string => 'Rp '.number_format((float) $remaining, 0, ',', '.')),
 
             Forms\Components\Select::make('payment_method')
-                ->label('Metode Pembayaran')
+                ->label(__('Metode Pembayaran'))
                 // SPP-03 Phase 1: "cash atau transfer". PAYMENT_GATEWAY ada di
                 // ERD tetapi integrasinya Phase 2, sehingga tidak selectable.
                 ->options(PaymentRecorder::methodOptions())
@@ -310,7 +310,7 @@ class StudentFeeResource extends Resource
                 ->rule(Rule::in(array_keys(PaymentRecorder::methodOptions()))),
 
             Forms\Components\TextInput::make('amount')
-                ->label('Jumlah Dibayar')
+                ->label(__('Jumlah Dibayar'))
                 ->prefix('Rp')
                 ->numeric()
                 ->required()
@@ -321,10 +321,10 @@ class StudentFeeResource extends Resource
                     'gt' => 'Jumlah pembayaran harus lebih besar dari 0.',
                     'lte' => 'Jumlah tidak boleh melebihi sisa tagihan.',
                 ])
-                ->helperText('Boleh dicicil: masukkan jumlah yang benar-benar diterima kali ini.'),
+                ->helperText(__('Boleh dicicil: masukkan jumlah yang benar-benar diterima kali ini.')),
 
             Forms\Components\DatePicker::make('payment_date')
-                ->label('Tanggal Pembayaran')
+                ->label(__('Tanggal Pembayaran'))
                 ->required()
                 ->default(now())
                 ->maxDate(now()),
@@ -333,23 +333,23 @@ class StudentFeeResource extends Resource
             // sebagai salah satu isian form, bukan sebagai isian wajib — dan
             // pembayaran tunai memang tidak punya nomor transfer.
             Forms\Components\TextInput::make('reference_number')
-                ->label('Nomor Referensi')
+                ->label(__('Nomor Referensi'))
                 ->maxLength(100)
-                ->helperText('Nomor transfer atau kwitansi, bila ada.'),
+                ->helperText(__('Nomor transfer atau kwitansi, bila ada.')),
 
             Forms\Components\FileUpload::make('proof_url')
-                ->label('Bukti Pembayaran')
+                ->label(__('Bukti Pembayaran'))
                 // Disk privat: berkas ini tidak boleh punya URL statis.
                 ->disk(PaymentRecorder::PROOF_DISK)
                 ->directory(PaymentRecorder::proofDirectory((int) $record->school_id))
                 ->visibility('private')
                 ->acceptedFileTypes(PaymentRecorder::PROOF_MIME_TYPES)
                 ->maxSize(PaymentRecorder::PROOF_MAX_KILOBYTES)
-                ->helperText('JPG/PNG/PDF, maksimal 5 MB.')
+                ->helperText(__('JPG/PNG/PDF, maksimal 5 MB.'))
                 ->columnSpanFull(),
 
             Forms\Components\Textarea::make('notes')
-                ->label('Catatan')
+                ->label(__('Catatan'))
                 ->rows(2)
                 ->columnSpanFull(),
         ];
@@ -393,13 +393,13 @@ class StudentFeeResource extends Resource
     protected static function configureWaiveAction(Tables\Actions\Action|Actions\Action $action): Tables\Actions\Action|Actions\Action
     {
         return $action
-            ->label('Bebaskan Tagihan')
+            ->label(__('Bebaskan Tagihan'))
             ->icon('heroicon-o-hand-raised')
             ->color('gray')
-            ->modalHeading('Bebaskan Tagihan')
+            ->modalHeading(__('Bebaskan Tagihan'))
             ->modalDescription('Tagihan akan berstatus DIBEBASKAN dan tidak akan tertagih lagi. '
                 .'Nominal, riwayat pembayaran, dan jejak auditnya tidak berubah.')
-            ->modalSubmitActionLabel('Bebaskan')
+            ->modalSubmitActionLabel(__('Bebaskan'))
             ->requiresConfirmation()
             // Disembunyikan bila tidak berwenang atau keadaannya tidak
             // memungkinkan — tetapi pagarnya ada di StudentFeeWaiver, yang
@@ -420,7 +420,7 @@ class StudentFeeResource extends Resource
     {
         return [
             Forms\Components\Textarea::make('waive_reason')
-                ->label('Alasan Pembebasan')
+                ->label(__('Alasan Pembebasan'))
                 ->required()
                 // ERD: `waive_reason` VARCHAR(200).
                 ->maxLength(StudentFeeWaiver::REASON_MAX_LENGTH)
@@ -446,7 +446,7 @@ class StudentFeeResource extends Resource
         $record->refresh();
 
         Notification::make()
-            ->title('Tagihan dibebaskan')
+            ->title(__('Tagihan dibebaskan'))
             ->body(sprintf(
                 'Tagihan %s untuk %s berstatus %s.',
                 $record->period,
@@ -522,5 +522,25 @@ class StudentFeeResource extends Resource
             'index' => Pages\ListStudentFees::route('/'),
             'view' => Pages\ViewStudentFee::route('/{record}'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

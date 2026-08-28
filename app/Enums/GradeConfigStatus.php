@@ -22,9 +22,9 @@ enum GradeConfigStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Draft => 'Draft',
-            self::Active => 'Aktif',
-            self::Locked => 'Terkunci',
+            self::Draft => __('Draft'),
+            self::Active => __('Aktif'),
+            self::Locked => __('Terkunci'),
         };
     }
 

@@ -44,11 +44,11 @@ class StudentResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Identitas Siswa')
+            Forms\Components\Section::make(__('Identitas Siswa'))
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('nis')
-                        ->label('NIS')
+                        ->label(__('NIS'))
                         ->required()
                         ->maxLength(20)
                         // SIS-01 poin 3: NIS unik dalam satu sekolah.
@@ -56,49 +56,49 @@ class StudentResource extends Resource
                             ignoreRecord: true,
                             modifyRuleUsing: fn (Unique $rule) => $rule->where('school_id', static::currentSchoolId()),
                         )
-                        ->helperText('Nomor Induk Siswa, unik dalam satu cabang.'),
+                        ->helperText(__('Nomor Induk Siswa, unik dalam satu cabang.')),
 
                     Forms\Components\TextInput::make('nisn')
-                        ->label('NISN')
+                        ->label(__('NISN'))
                         ->maxLength(10)
                         // SIS-01 poin 2: validasi format NISN (10 digit angka).
                         ->rule('digits:10')
-                        ->helperText('10 digit angka (opsional).'),
+                        ->helperText(__('10 digit angka (opsional).')),
 
                     Forms\Components\TextInput::make('full_name')
-                        ->label('Nama Lengkap')
+                        ->label(__('Nama Lengkap'))
                         ->required()
                         ->maxLength(150)
                         ->columnSpanFull(),
 
                     Forms\Components\Select::make('gender')
-                        ->label('Jenis Kelamin')
+                        ->label(__('Jenis Kelamin'))
                         ->options(Gender::options())
                         ->required(),
 
                     Forms\Components\TextInput::make('religion')
-                        ->label('Agama')
+                        ->label(__('Agama'))
                         ->maxLength(30),
 
                     Forms\Components\TextInput::make('birth_place')
-                        ->label('Tempat Lahir')
+                        ->label(__('Tempat Lahir'))
                         ->maxLength(100),
 
                     Forms\Components\DatePicker::make('birth_date')
-                        ->label('Tanggal Lahir')
+                        ->label(__('Tanggal Lahir'))
                         ->maxDate(now()),
 
                     Forms\Components\Textarea::make('address')
-                        ->label('Alamat')
+                        ->label(__('Alamat'))
                         ->rows(3)
                         ->columnSpanFull(),
                 ]),
 
-            Forms\Components\Section::make('Foto')
+            Forms\Components\Section::make(__('Foto'))
                 ->schema([
                     // SIS-03: JPG/PNG/WEBP, maks 2 MB, auto-resize 400x400.
                     Forms\Components\FileUpload::make('photo_url')
-                        ->label('Foto Siswa')
+                        ->label(__('Foto Siswa'))
                         ->image()
                         ->avatar()
                         ->disk('public')
@@ -109,56 +109,56 @@ class StudentResource extends Resource
                         ->imageCropAspectRatio('1:1')
                         ->imageResizeTargetWidth('400')
                         ->imageResizeTargetHeight('400')
-                        ->helperText('JPG/PNG/WEBP, maksimal 2 MB. Otomatis dipotong 400×400 px.'),
+                        ->helperText(__('JPG/PNG/WEBP, maksimal 2 MB. Otomatis dipotong 400×400 px.')),
                 ]),
 
-            Forms\Components\Section::make('Data Orang Tua / Wali')
+            Forms\Components\Section::make(__('Data Orang Tua / Wali'))
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('parent_name')
-                        ->label('Nama Orang Tua / Wali')
+                        ->label(__('Nama Orang Tua / Wali'))
                         ->maxLength(150),
 
                     Forms\Components\TextInput::make('parent_phone')
-                        ->label('No. HP Orang Tua')
+                        ->label(__('No. HP Orang Tua'))
                         ->tel()
                         ->maxLength(20),
 
                     Forms\Components\TextInput::make('parent_email')
-                        ->label('Email Orang Tua')
+                        ->label(__('Email Orang Tua'))
                         ->email()
                         ->maxLength(150),
 
                     Forms\Components\Select::make('parent_user_id')
-                        ->label('Akun Portal Orang Tua')
+                        ->label(__('Akun Portal Orang Tua'))
                         ->options(fn () => static::userOptions(RoleName::OrangTua))
                         ->searchable()
-                        ->helperText('Opsional — hubungkan ke akun dengan peran Orang Tua.'),
+                        ->helperText(__('Opsional — hubungkan ke akun dengan peran Orang Tua.')),
                 ]),
 
-            Forms\Components\Section::make('Status Akademik')
+            Forms\Components\Section::make(__('Status Akademik'))
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('entry_year')
-                        ->label('Tahun Masuk')
+                        ->label(__('Tahun Masuk'))
                         ->numeric()
                         ->minValue(1900)
                         ->maxValue((int) now()->addYear()->format('Y')),
 
                     Forms\Components\Select::make('status')
-                        ->label('Status')
+                        ->label(__('Status'))
                         ->options(StudentStatus::options())
                         ->default(StudentStatus::Active->value)
                         ->required(),
 
                     Forms\Components\Select::make('user_id')
-                        ->label('Akun Portal Siswa')
+                        ->label(__('Akun Portal Siswa'))
                         ->options(fn () => static::userOptions(RoleName::Siswa))
                         ->searchable()
-                        ->helperText('Opsional — siswa tidak wajib punya akun portal.'),
+                        ->helperText(__('Opsional — siswa tidak wajib punya akun portal.')),
 
                     Forms\Components\Textarea::make('notes')
-                        ->label('Catatan')
+                        ->label(__('Catatan'))
                         ->rows(3)
                         ->columnSpanFull(),
                 ]),
@@ -170,50 +170,50 @@ class StudentResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\ImageColumn::make('photo_url')
-                    ->label('Foto')
+                    ->label(__('Foto'))
                     ->circular()
                     ->disk('public')
                     ->defaultImageUrl(fn () => null),
 
                 Tables\Columns\TextColumn::make('nis')
-                    ->label('NIS')
+                    ->label(__('NIS'))
                     ->searchable()
                     ->sortable()
                     ->copyable(),
 
                 Tables\Columns\TextColumn::make('full_name')
-                    ->label('Nama Lengkap')
+                    ->label(__('Nama Lengkap'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('gender')
-                    ->label('L/P')
+                    ->label(__('L/P'))
                     ->formatStateUsing(fn (Gender $state) => $state->value),
 
                 Tables\Columns\TextColumn::make('activeStudentClass.schoolClass.name')
-                    ->label('Kelas')
-                    ->placeholder('Belum ada kelas')
+                    ->label(__('Kelas'))
+                    ->placeholder(__('Belum ada kelas'))
                     ->badge(),
 
                 Tables\Columns\TextColumn::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->badge()
                     ->formatStateUsing(fn (StudentStatus $state) => $state->label())
                     ->color(fn (StudentStatus $state) => $state->color()),
 
                 Tables\Columns\TextColumn::make('parent_phone')
-                    ->label('HP Ortu')
+                    ->label(__('HP Ortu'))
                     ->placeholder('—')
                     ->toggleable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->options(StudentStatus::options()),
 
                 // API 4.5 — filter class_id.
                 Tables\Filters\SelectFilter::make('class')
-                    ->label('Kelas')
+                    ->label(__('Kelas'))
                     ->options(fn () => SchoolClass::query()->pluck('name', 'id'))
                     ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null)
                         ? $query->inClass((int) $data['value'])
@@ -224,13 +224,13 @@ class StudentResource extends Resource
 
                 // API 4.5 — PATCH /students/{id}/status.
                 Tables\Actions\Action::make('changeStatus')
-                    ->label('Ubah Status')
+                    ->label(__('Ubah Status'))
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')
                     ->visible(fn (Student $record) => Auth::user()?->can('changeStatus', $record))
                     ->form([
                         Forms\Components\Select::make('status')
-                            ->label('Status Baru')
+                            ->label(__('Status Baru'))
                             ->options(StudentStatus::options())
                             ->required(),
                     ])
@@ -239,7 +239,7 @@ class StudentResource extends Resource
                         $record->update(['status' => $data['status']]);
 
                         Notification::make()
-                            ->title('Status siswa diperbarui')
+                            ->title(__('Status siswa diperbarui'))
                             ->success()
                             ->send();
                     }),
@@ -298,5 +298,25 @@ class StudentResource extends Resource
             'create' => Pages\CreateStudent::route('/create'),
             'edit' => Pages\EditStudent::route('/{record}/edit'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

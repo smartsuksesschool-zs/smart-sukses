@@ -78,7 +78,10 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    // NFR 1.4 — bawaan proyek Bahasa Indonesia, bukan English. Nilainya tetap
+    // dapat ditimpa lewat APP_LOCALE, tetapi tanpa berkas .env pun aplikasi
+    // tidak boleh berbahasa Inggris (butir 384).
+    'locale' => env('APP_LOCALE', 'id'),
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 

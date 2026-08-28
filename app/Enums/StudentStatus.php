@@ -15,10 +15,10 @@ enum StudentStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Active => 'Aktif',
-            self::Graduated => 'Lulus',
-            self::DroppedOut => 'Keluar',
-            self::Transferred => 'Pindah',
+            self::Active => __('Aktif'),
+            self::Graduated => __('Lulus'),
+            self::DroppedOut => __('Keluar'),
+            self::Transferred => __('Pindah'),
         };
     }
 

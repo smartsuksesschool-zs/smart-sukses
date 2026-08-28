@@ -45,7 +45,7 @@ class GradeConfigResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Cakupan')
+            Forms\Components\Section::make(__('Cakupan'))
                 ->columns(2)
                 ->schema([
                     // Super Admin tidak memiliki school_id (SchoolScope::currentSchoolId()
@@ -53,7 +53,7 @@ class GradeConfigResource extends Resource
                     // Pola ini mengikuti UserResource: field cabang hanya muncul bagi
                     // Super Admin, sedangkan Admin Sekolah terikat cabangnya sendiri.
                     Forms\Components\Select::make('school_id')
-                        ->label('Cabang Sekolah')
+                        ->label(__('Cabang Sekolah'))
                         ->relationship(
                             name: 'school',
                             titleAttribute: 'name',
@@ -73,10 +73,10 @@ class GradeConfigResource extends Resource
                         // mapel dan nilai yang sudah menyalin bobotnya.
                         ->disabledOn('edit')
                         ->columnSpanFull()
-                        ->helperText('Konfigurasi berlaku hanya untuk cabang ini.'),
+                        ->helperText(__('Konfigurasi berlaku hanya untuk cabang ini.')),
 
                     Forms\Components\Select::make('subject_id')
-                        ->label('Mata Pelajaran')
+                        ->label(__('Mata Pelajaran'))
                         ->options(fn (Forms\Get $get) => static::subjectOptions(
                             static::resolveSchoolId($get('school_id')),
                         ))
@@ -93,7 +93,7 @@ class GradeConfigResource extends Resource
                         ->disabledOn('edit'),
 
                     Forms\Components\Select::make('academic_year_id')
-                        ->label('Tahun Ajaran')
+                        ->label(__('Tahun Ajaran'))
                         ->options(fn (Forms\Get $get) => static::academicYearOptions(
                             static::resolveSchoolId($get('school_id')),
                         ))
@@ -108,24 +108,24 @@ class GradeConfigResource extends Resource
                         ->disabledOn('edit'),
 
                     Forms\Components\TextInput::make('version')
-                        ->label('Versi')
+                        ->label(__('Versi'))
                         ->disabled()
                         ->dehydrated(false)
                         ->visibleOn('edit'),
 
                     Forms\Components\TextInput::make('status')
-                        ->label('Status')
+                        ->label(__('Status'))
                         ->formatStateUsing(fn ($state) => $state instanceof GradeConfigStatus ? $state->label() : $state)
                         ->disabled()
                         ->dehydrated(false)
                         ->visibleOn('edit'),
                 ]),
 
-            Forms\Components\Section::make('Komponen & Bobot')
-                ->description('Total bobot harus tepat 1.00 (100%). Sikap tidak masuk nilai akademik dan dilaporkan terpisah sebagai predikat.')
+            Forms\Components\Section::make(__('Komponen & Bobot'))
+                ->description(__('Total bobot harus tepat 1.00 (100%). Sikap tidak masuk nilai akademik dan dilaporkan terpisah sebagai predikat.'))
                 ->schema([
                     Forms\Components\Repeater::make('components')
-                        ->label('Komponen')
+                        ->label(__('Komponen'))
                         ->columns(2)
                         ->minItems(1)
                         ->defaultItems(3)
@@ -136,19 +136,19 @@ class GradeConfigResource extends Resource
                         ])
                         ->schema([
                             Forms\Components\Select::make('type')
-                                ->label('Komponen')
+                                ->label(__('Komponen'))
                                 // ATTITUDE sengaja tidak ditawarkan.
                                 ->options(GradeType::academicOptions())
                                 ->required(),
 
                             Forms\Components\TextInput::make('weight')
-                                ->label('Bobot')
+                                ->label(__('Bobot'))
                                 ->numeric()
                                 ->step(0.01)
                                 ->minValue(0)
                                 ->maxValue(1)
                                 ->required()
-                                ->helperText('0.40 berarti 40%.'),
+                                ->helperText(__('0.40 berarti 40%.')),
                         ])
                         ->rules([
                             fn (): Closure => function (string $attribute, $value, Closure $fail): void {
@@ -228,48 +228,48 @@ class GradeConfigResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('subject.name')
-                    ->label('Mata Pelajaran')
+                    ->label(__('Mata Pelajaran'))
                     ->description(fn (GradeConfig $record) => $record->subject?->code)
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('academicYear.name')
-                    ->label('Tahun Ajaran'),
+                    ->label(__('Tahun Ajaran')),
 
                 Tables\Columns\TextColumn::make('version')
-                    ->label('Versi')
+                    ->label(__('Versi'))
                     ->badge()
                     ->formatStateUsing(fn (int $state) => "v{$state}")
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->badge()
                     ->formatStateUsing(fn (GradeConfigStatus $state) => $state->label())
                     ->color(fn (GradeConfigStatus $state) => $state->color()),
 
                 Tables\Columns\TextColumn::make('components')
-                    ->label('Komponen')
+                    ->label(__('Komponen'))
                     ->formatStateUsing(fn (GradeConfig $record) => collect($record->components ?? [])
                         ->map(fn (array $c) => (GradeType::tryFrom($c['type'] ?? '')?->label() ?? '?')
                             .' '.round(((float) ($c['weight'] ?? 0)) * 100).'%')
                         ->join(' · ')),
 
                 Tables\Columns\TextColumn::make('creator.name')
-                    ->label('Dibuat Oleh')
+                    ->label(__('Dibuat Oleh'))
                     ->toggleable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->options(GradeConfigStatus::options()),
 
                 Tables\Filters\SelectFilter::make('academic_year_id')
-                    ->label('Tahun Ajaran')
+                    ->label(__('Tahun Ajaran'))
                     ->options(fn () => AcademicYear::query()->orderByDesc('start_date')->pluck('name', 'id')),
 
                 Tables\Filters\SelectFilter::make('subject_id')
-                    ->label('Mata Pelajaran')
+                    ->label(__('Mata Pelajaran'))
                     ->options(fn () => Subject::query()->orderBy('name')->pluck('name', 'id')),
             ])
             ->actions([
@@ -288,18 +288,18 @@ class GradeConfigResource extends Resource
     public static function activateAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('activate')
-            ->label('Aktifkan')
+            ->label(__('Aktifkan'))
             ->icon('heroicon-o-check-badge')
             ->color('success')
             ->authorize('activate')
             ->requiresConfirmation()
-            ->modalDescription('Konfigurasi aktif sebelumnya untuk mapel & tahun ajaran ini akan dikunci.')
+            ->modalDescription(__('Konfigurasi aktif sebelumnya untuk mapel & tahun ajaran ini akan dikunci.'))
             ->action(function (GradeConfig $record): void {
                 try {
                     app(GradeConfigVersionManager::class)->activate($record);
                 } catch (ValidationException $exception) {
                     Notification::make()
-                        ->title('Gagal mengaktifkan')
+                        ->title(__('Gagal mengaktifkan'))
                         ->body((string) collect($exception->errors())->flatten()->first())
                         ->danger()
                         ->send();
@@ -320,12 +320,12 @@ class GradeConfigResource extends Resource
     public static function lockAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('lock')
-            ->label('Kunci')
+            ->label(__('Kunci'))
             ->icon('heroicon-o-lock-closed')
             ->color('danger')
             ->authorize('lock')
             ->requiresConfirmation()
-            ->modalDescription('Konfigurasi terkunci tidak dapat diaktifkan atau diubah lagi.')
+            ->modalDescription(__('Konfigurasi terkunci tidak dapat diaktifkan atau diubah lagi.'))
             ->action(function (GradeConfig $record): void {
                 app(GradeConfigVersionManager::class)->lock($record);
 
@@ -340,12 +340,12 @@ class GradeConfigResource extends Resource
     public static function createVersionAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('createVersion')
-            ->label('Buat Versi Baru')
+            ->label(__('Buat Versi Baru'))
             ->icon('heroicon-o-document-duplicate')
             ->color('warning')
             ->authorize('createVersion')
             ->requiresConfirmation()
-            ->modalDescription('Versi baru dibuat sebagai DRAFT dengan komponen yang sama; konfigurasi lama tidak berubah.')
+            ->modalDescription(__('Versi baru dibuat sebagai DRAFT dengan komponen yang sama; konfigurasi lama tidak berubah.'))
             ->action(function (GradeConfig $record): void {
                 $new = app(GradeConfigVersionManager::class)->createNextVersion($record, Auth::user());
 
@@ -363,5 +363,25 @@ class GradeConfigResource extends Resource
             'create' => Pages\CreateGradeConfig::route('/create'),
             'edit' => Pages\EditGradeConfig::route('/{record}/edit'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

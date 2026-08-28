@@ -21,6 +21,6 @@ class StudentDashboard extends Component
             'data' => $this->hasStudent()
                 ? app(StudentPortalService::class)->dashboard(Auth::user())
                 : null,
-        ])->layout('layouts.portal', ['title' => 'Portal Siswa']);
+        ])->layout('layouts.portal', ['title' => __('Portal Siswa')]);
     }
 }

@@ -26,8 +26,8 @@ enum ExamQuestionType: string
     public function label(): string
     {
         return match ($this) {
-            self::MultipleChoice => 'Pilihan Ganda',
-            self::Essay => 'Uraian',
+            self::MultipleChoice => __('Pilihan Ganda'),
+            self::Essay => __('Uraian'),
         };
     }
 

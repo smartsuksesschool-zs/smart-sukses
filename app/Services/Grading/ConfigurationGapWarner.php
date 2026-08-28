@@ -51,7 +51,7 @@ class ConfigurationGapWarner
         }
 
         Notification::make()
-            ->title('Komponen ini tidak masuk nilai akhir')
+            ->title(__('Komponen ini tidak masuk nilai akhir'))
             ->body(sprintf(
                 'Nilai tersimpan, tetapi komponen %s tidak ada di Grade Config %s sehingga '
                     .'tidak ikut menghitung nilai rapor. Tambahkan komponen itu lewat versi '
@@ -82,7 +82,7 @@ class ConfigurationGapWarner
         }
 
         Notification::make()
-            ->title('Grade Config sudah terkunci')
+            ->title(__('Grade Config sudah terkunci'))
             ->body(sprintf(
                 'Nilai tersimpan tanpa bobot karena Grade Config %s berstatus LOCKED dan '
                     .'tidak ada versi aktif sebagai acuan. Nilai ini belum akan masuk rapor '

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\LandingController;
+use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\Portal\ReportCardDownloadController;
 use App\Http\Controllers\Portal\StudentReportCardController;
 use App\Http\Middleware\EnsureParentPortalAccess;
@@ -40,6 +41,22 @@ use Illuminate\Support\Facades\Route;
  * (butir 349).
  */
 Route::get('/', LandingController::class)->name('landing');
+
+/*
+ * NFR 1.4 — pemilih bahasa untuk tamu.
+ *
+ * Publik dan tanpa sesi login: halaman muka dan PPDB dapat dibaca siapa saja,
+ * dan calon siswa yang tidak berbahasa Indonesia tidak punya akun untuk
+ * menyimpan preferensinya. Pengguna yang login memakai halaman profilnya
+ * (butir 379).
+ *
+ * Kode bahasa yang tidak dikenal jatuh ke Indonesia tanpa galat — nilai locale
+ * ikut menentukan berkas terjemahan yang dimuat, jadi nilai sembarang dari URL
+ * tidak boleh sampai ke sana (butir 377).
+ */
+Route::get('/bahasa/{locale}', LocaleController::class)
+    ->whereAlpha('locale')
+    ->name('locale.switch');
 
 /*
  * API 4.7 PPDB Online — Auth Level: Public.

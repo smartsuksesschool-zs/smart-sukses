@@ -22,6 +22,6 @@ class TeacherSchedule extends Component
 
         return view('livewire.teacher.schedule', [
             'week' => $lessons->groupBy('day_of_week'),
-        ])->layout('layouts.portal', ['title' => 'Jadwal Mengajar']);
+        ])->layout('layouts.portal', ['title' => __('Jadwal Mengajar')]);
     }
 }

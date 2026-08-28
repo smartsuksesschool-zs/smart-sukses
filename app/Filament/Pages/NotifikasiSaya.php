@@ -157,4 +157,19 @@ class NotifikasiSaya extends Page
     {
         return app(NotificationCenter::class)->unreadCount(Auth::user());
     }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public function getTitle(): string
+    {
+        return __(static::$title);
+    }
 }

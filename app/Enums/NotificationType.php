@@ -51,11 +51,11 @@ enum NotificationType: string
     public function label(): string
     {
         return match ($this) {
-            self::Announcement => 'Pengumuman',
-            self::Billing => 'Tagihan',
-            self::Academic => 'Akademik',
-            self::Emergency => 'Darurat',
-            self::System => 'Sistem',
+            self::Announcement => __('Pengumuman'),
+            self::Billing => __('Tagihan'),
+            self::Academic => __('Akademik'),
+            self::Emergency => __('Darurat'),
+            self::System => __('Sistem'),
         };
     }
 

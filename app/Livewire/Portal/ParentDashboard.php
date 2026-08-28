@@ -55,7 +55,7 @@ class ParentDashboard extends Component
                 ParentPortalService::DASHBOARD_SUBJECTS,
             ),
         ])->layout('layouts.portal', [
-            'title' => 'Dashboard Orang Tua',
+            'title' => __('Dashboard Orang Tua'),
         ]);
     }
 }

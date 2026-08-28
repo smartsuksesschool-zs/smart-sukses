@@ -1,12 +1,12 @@
 <div>
     <div class="portal-card" style="margin-bottom:1rem;">
-        <div class="portal-label">Jadwal Mengajar</div>
-        <div class="portal-muted">Minggu berjalan, hanya jadwal Anda sendiri.</div>
+        <div class="portal-label">{{ __('Jadwal Mengajar') }}</div>
+        <div class="portal-muted">{{ __('Minggu berjalan, hanya jadwal Anda sendiri.') }}</div>
     </div>
 
     @if ($week->isEmpty())
         <div class="portal-card">
-            <p class="portal-muted" style="margin:0;">Belum ada jadwal mengajar untuk Anda.</p>
+            <p class="portal-muted" style="margin:0;">{{ __('Belum ada jadwal mengajar untuk Anda.') }}</p>
         </div>
     @else
         <div class="portal-card">
@@ -22,7 +22,7 @@
                                     {{ $lesson['start_time'] }}–{{ $lesson['end_time'] }}
                                     <strong>{{ $lesson['subject_name'] }}</strong>
                                     <div class="portal-muted">
-                                        Kelas {{ $lesson['class_name'] }}
+                                        {{ __('Kelas') }} {{ $lesson['class_name'] }}
                                         @if ($lesson['room'])
                                             — {{ $lesson['room'] }}
                                         @endif

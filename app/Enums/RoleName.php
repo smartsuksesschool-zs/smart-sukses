@@ -22,14 +22,14 @@ enum RoleName: string
     public function label(): string
     {
         return match ($this) {
-            self::SuperAdmin => 'Super Administrator',
-            self::SchoolAdmin => 'Admin Sekolah',
-            self::KepalaSekolah => 'Kepala Sekolah',
-            self::Guru => 'Guru Mata Pelajaran',
-            self::WaliKelas => 'Wali Kelas',
-            self::Siswa => 'Siswa',
-            self::OrangTua => 'Orang Tua / Wali Murid',
-            self::Bendahara => 'Bendahara',
+            self::SuperAdmin => __('Super Administrator'),
+            self::SchoolAdmin => __('Admin Sekolah'),
+            self::KepalaSekolah => __('Kepala Sekolah'),
+            self::Guru => __('Guru Mata Pelajaran'),
+            self::WaliKelas => __('Wali Kelas'),
+            self::Siswa => __('Siswa'),
+            self::OrangTua => __('Orang Tua / Wali Murid'),
+            self::Bendahara => __('Bendahara'),
         };
     }
 

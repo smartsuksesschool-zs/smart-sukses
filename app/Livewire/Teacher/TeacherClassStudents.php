@@ -33,6 +33,6 @@ class TeacherClassStudents extends Component
         return view('livewire.teacher.class-students', [
             'schoolClass' => $service->teachingClass(Auth::user(), $this->classId),
             'students' => $service->classStudents(Auth::user(), $this->classId),
-        ])->layout('layouts.portal', ['title' => 'Daftar Siswa']);
+        ])->layout('layouts.portal', ['title' => __('Daftar Siswa')]);
     }
 }

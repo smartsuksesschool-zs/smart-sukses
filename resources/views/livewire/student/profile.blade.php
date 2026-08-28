@@ -3,7 +3,7 @@
         @include('livewire.student.partials.unlinked')
     @else
         <div class="portal-card" style="margin-bottom:1rem;">
-            <div class="portal-label">Profil</div>
+            <div class="portal-label">{{ __('Profil') }}</div>
             <div style="font-size:1.25rem;font-weight:700;">{{ $student->full_name }}</div>
             <div class="portal-muted">{{ $student->school?->name }}</div>
         </div>
@@ -15,23 +15,23 @@
         --}}
         <div class="portal-card">
             <ul class="portal-list">
-                <li><span class="portal-muted">Nama Lengkap</span><strong>{{ $student->full_name }}</strong></li>
-                <li><span class="portal-muted">NIS</span><strong>{{ $student->nis }}</strong></li>
-                <li><span class="portal-muted">NISN</span><strong>{{ $student->nisn ?? '—' }}</strong></li>
+                <li><span class="portal-muted">{{ __('Nama Lengkap') }}</span><strong>{{ $student->full_name }}</strong></li>
+                <li><span class="portal-muted">{{ __('NIS') }}</span><strong>{{ $student->nis }}</strong></li>
+                <li><span class="portal-muted">{{ __('NISN') }}</span><strong>{{ $student->nisn ?? '—' }}</strong></li>
                 <li>
-                    <span class="portal-muted">Kelas Aktif</span>
-                    <strong>{{ $currentClass?->name ?? 'Belum terdaftar' }}</strong>
+                    <span class="portal-muted">{{ __('Kelas Aktif') }}</span>
+                    <strong>{{ $currentClass?->name ?? __('Belum terdaftar') }}</strong>
                 </li>
                 <li>
-                    <span class="portal-muted">Tahun Ajaran</span>
-                    <strong>{{ $academicYear?->name ?? 'Belum ada tahun ajaran aktif' }}</strong>
+                    <span class="portal-muted">{{ __('Tahun Ajaran') }}</span>
+                    <strong>{{ $academicYear?->name ?? __('Belum ada tahun ajaran aktif') }}</strong>
                 </li>
                 <li>
-                    <span class="portal-muted">Status</span>
+                    <span class="portal-muted">{{ __('Status') }}</span>
                     <strong>{{ $student->status?->label() ?? '—' }}</strong>
                 </li>
-                <li><span class="portal-muted">Foto</span>
-                    <strong>{{ filled($student->photo_url) ? 'Tersedia' : 'Belum ada' }}</strong>
+                <li><span class="portal-muted">{{ __('Foto') }}</span>
+                    <strong>{{ filled($student->photo_url) ? __('Tersedia') : __('Belum ada') }}</strong>
                 </li>
             </ul>
 
@@ -40,7 +40,7 @@
                 (butir 187).
             --}}
             <p class="portal-muted" style="margin:.75rem 0 0;">
-                Perubahan data profil dilakukan melalui administrasi sekolah.
+                {{ __('Perubahan data profil dilakukan melalui administrasi sekolah.') }}
             </p>
         </div>
     @endif

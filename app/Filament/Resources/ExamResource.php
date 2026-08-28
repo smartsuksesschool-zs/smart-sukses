@@ -58,14 +58,14 @@ class ExamResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Identitas Ujian')
+            Forms\Components\Section::make(__('Identitas Ujian'))
                 ->columns(2)
                 ->schema([
                     // Hanya Super Admin yang melihat pemilih cabang — pola dan
                     // alasan yang sama dengan GradeConfigResource (butir 41):
                     // justru merekalah yang `school_id`-nya NULL.
                     Forms\Components\Select::make('school_id')
-                        ->label('Cabang Sekolah')
+                        ->label(__('Cabang Sekolah'))
                         ->options(fn () => static::schoolOptions())
                         ->searchable()
                         ->required()
@@ -76,7 +76,7 @@ class ExamResource extends Resource
                         ->columnSpanFull(),
 
                     Forms\Components\Select::make('class_subject_id')
-                        ->label('Kelas — Mata Pelajaran')
+                        ->label(__('Kelas — Mata Pelajaran'))
                         ->options(fn (Forms\Get $get) => static::classSubjectOptions(
                             static::resolveSchoolId($get('school_id')),
                         ))
@@ -94,29 +94,29 @@ class ExamResource extends Resource
                     // hanya menciptakan satu kombinasi tidak sah yang harus
                     // ditolak di tempat lain (butir 295).
                     Forms\Components\Placeholder::make('academic_year_preview')
-                        ->label('Tahun Ajaran')
+                        ->label(__('Tahun Ajaran'))
                         ->content(fn (Forms\Get $get) => static::academicYearLabel($get('class_subject_id')))
                         ->columnSpanFull(),
 
                     Forms\Components\TextInput::make('title')
-                        ->label('Judul')
+                        ->label(__('Judul'))
                         ->required()
                         ->maxLength(200)
                         ->columnSpanFull(),
 
                     Forms\Components\Textarea::make('description')
-                        ->label('Deskripsi')
+                        ->label(__('Deskripsi'))
                         ->rows(3)
                         ->columnSpanFull()
-                        ->helperText('Opsional — petunjuk singkat untuk siswa.'),
+                        ->helperText(__('Opsional — petunjuk singkat untuk siswa.')),
                 ]),
 
-            Forms\Components\Section::make('Waktu Pengerjaan')
+            Forms\Components\Section::make(__('Waktu Pengerjaan'))
                 ->columns(3)
-                ->description('Seluruhnya ditentukan server. Jam pada perangkat siswa tidak dipakai.')
+                ->description(__('Seluruhnya ditentukan server. Jam pada perangkat siswa tidak dipakai.'))
                 ->schema([
                     Forms\Components\TextInput::make('duration_minutes')
-                        ->label('Durasi (menit)')
+                        ->label(__('Durasi (menit)'))
                         ->numeric()
                         ->required()
                         ->minValue(1)
@@ -124,16 +124,16 @@ class ExamResource extends Resource
                         ->default(60),
 
                     Forms\Components\DateTimePicker::make('available_from')
-                        ->label('Dibuka')
+                        ->label(__('Dibuka'))
                         ->seconds(false)
                         ->required(),
 
                     Forms\Components\DateTimePicker::make('available_until')
-                        ->label('Ditutup')
+                        ->label(__('Ditutup'))
                         ->seconds(false)
                         ->required()
                         ->after('available_from')
-                        ->helperText('Harus setelah waktu buka.'),
+                        ->helperText(__('Harus setelah waktu buka.')),
                 ]),
         ]);
     }
@@ -141,32 +141,32 @@ class ExamResource extends Resource
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist->schema([
-            Infolists\Components\Section::make('Identitas')
+            Infolists\Components\Section::make(__('Identitas'))
                 ->columns(3)
                 ->schema([
-                    Infolists\Components\TextEntry::make('title')->label('Judul')->columnSpanFull(),
-                    Infolists\Components\TextEntry::make('classSubject.schoolClass.name')->label('Kelas'),
-                    Infolists\Components\TextEntry::make('classSubject.subject.name')->label('Mata Pelajaran'),
-                    Infolists\Components\TextEntry::make('academicYear.name')->label('Tahun Ajaran'),
+                    Infolists\Components\TextEntry::make('title')->label(__('Judul'))->columnSpanFull(),
+                    Infolists\Components\TextEntry::make('classSubject.schoolClass.name')->label(__('Kelas')),
+                    Infolists\Components\TextEntry::make('classSubject.subject.name')->label(__('Mata Pelajaran')),
+                    Infolists\Components\TextEntry::make('academicYear.name')->label(__('Tahun Ajaran')),
                     Infolists\Components\TextEntry::make('status')
-                        ->label('Status')
+                        ->label(__('Status'))
                         ->badge()
                         ->formatStateUsing(fn (ExamStatus $state) => $state->label())
                         ->color(fn (ExamStatus $state) => $state->color()),
-                    Infolists\Components\TextEntry::make('creator.name')->label('Dibuat Oleh')->placeholder('—'),
-                    Infolists\Components\TextEntry::make('description')->label('Deskripsi')->placeholder('—')
+                    Infolists\Components\TextEntry::make('creator.name')->label(__('Dibuat Oleh'))->placeholder('—'),
+                    Infolists\Components\TextEntry::make('description')->label(__('Deskripsi'))->placeholder('—')
                         ->columnSpanFull(),
                 ]),
 
-            Infolists\Components\Section::make('Waktu & Bobot')
+            Infolists\Components\Section::make(__('Waktu & Bobot'))
                 ->columns(4)
                 ->schema([
-                    Infolists\Components\TextEntry::make('available_from')->label('Dibuka')->dateTime('d M Y H:i'),
-                    Infolists\Components\TextEntry::make('available_until')->label('Ditutup')->dateTime('d M Y H:i'),
-                    Infolists\Components\TextEntry::make('duration_minutes')->label('Durasi')
+                    Infolists\Components\TextEntry::make('available_from')->label(__('Dibuka'))->dateTime('d M Y H:i'),
+                    Infolists\Components\TextEntry::make('available_until')->label(__('Ditutup'))->dateTime('d M Y H:i'),
+                    Infolists\Components\TextEntry::make('duration_minutes')->label(__('Durasi'))
                         ->formatStateUsing(fn (int $state) => "{$state} menit"),
                     Infolists\Components\TextEntry::make('total_points')
-                        ->label('Total Bobot')
+                        ->label(__('Total Bobot'))
                         ->state(fn (Exam $record) => $record->totalPoints()),
                 ]),
         ]);
@@ -177,67 +177,67 @@ class ExamResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('title')
-                    ->label('Judul')
+                    ->label(__('Judul'))
                     ->searchable()
                     ->sortable()
                     ->wrap(),
 
                 Tables\Columns\TextColumn::make('classSubject.subject.name')
-                    ->label('Mata Pelajaran')
+                    ->label(__('Mata Pelajaran'))
                     ->description(fn (Exam $record) => $record->classSubject?->schoolClass?->name),
 
                 Tables\Columns\TextColumn::make('academicYear.name')
-                    ->label('Tahun Ajaran')
+                    ->label(__('Tahun Ajaran'))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('creator.name')
-                    ->label('Dibuat Oleh')
+                    ->label(__('Dibuat Oleh'))
                     ->placeholder('—')
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->badge()
                     ->formatStateUsing(fn (ExamStatus $state) => $state->label())
                     ->color(fn (ExamStatus $state) => $state->color()),
 
                 Tables\Columns\TextColumn::make('available_from')
-                    ->label('Dibuka')
+                    ->label(__('Dibuka'))
                     ->dateTime('d M Y H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('available_until')
-                    ->label('Ditutup')
+                    ->label(__('Ditutup'))
                     ->dateTime('d M Y H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('duration_minutes')
-                    ->label('Durasi')
+                    ->label(__('Durasi'))
                     ->formatStateUsing(fn (int $state) => "{$state}'")
                     ->toggleable(),
 
                 // Dihitung database lewat withCount, bukan satu query per baris.
                 Tables\Columns\TextColumn::make('questions_count')
-                    ->label('Soal')
+                    ->label(__('Soal'))
                     ->badge()
                     ->color('gray'),
 
                 Tables\Columns\TextColumn::make('attempts_count')
-                    ->label('Dikerjakan')
+                    ->label(__('Dikerjakan'))
                     ->badge()
                     ->color(fn (int $state) => $state > 0 ? 'warning' : 'gray'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->options(ExamStatus::options()),
 
                 Tables\Filters\SelectFilter::make('academic_year_id')
-                    ->label('Tahun Ajaran')
+                    ->label(__('Tahun Ajaran'))
                     ->options(fn () => AcademicYear::query()->orderByDesc('start_date')->pluck('name', 'id')),
 
                 Tables\Filters\SelectFilter::make('class_id')
-                    ->label('Kelas')
+                    ->label(__('Kelas'))
                     ->options(fn () => SchoolClass::query()->orderBy('name')->pluck('name', 'id'))
                     ->query(fn (Builder $query, array $data) => $query->when(
                         filled($data['value'] ?? null),
@@ -248,7 +248,7 @@ class ExamResource extends Resource
                     )),
 
                 Tables\Filters\SelectFilter::make('subject_id')
-                    ->label('Mata Pelajaran')
+                    ->label(__('Mata Pelajaran'))
                     ->options(fn () => Subject::query()->orderBy('name')->pluck('name', 'id'))
                     ->query(fn (Builder $query, array $data) => $query->when(
                         filled($data['value'] ?? null),
@@ -265,7 +265,7 @@ class ExamResource extends Resource
                 static::unpublishAction(),
                 static::closeAction(),
                 Tables\Actions\DeleteAction::make()
-                    ->modalDescription('Ujian beserta seluruh soal dan pilihan jawabannya akan dihapus.'),
+                    ->modalDescription(__('Ujian beserta seluruh soal dan pilihan jawabannya akan dihapus.')),
             ])
             ->bulkActions([])
             ->defaultSort('id', 'desc');
@@ -276,7 +276,7 @@ class ExamResource extends Resource
     public static function publishAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('publish')
-            ->label('Terbitkan')
+            ->label(__('Terbitkan'))
             ->icon('heroicon-o-paper-airplane')
             ->color('success')
             ->authorize('publish')
@@ -293,12 +293,12 @@ class ExamResource extends Resource
     public static function unpublishAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('unpublish')
-            ->label('Tarik Kembali')
+            ->label(__('Tarik Kembali'))
             ->icon('heroicon-o-arrow-uturn-left')
             ->color('warning')
             ->authorize('unpublish')
             ->requiresConfirmation()
-            ->modalDescription('Ujian kembali menjadi draf dan tidak lagi terlihat siswa.')
+            ->modalDescription(__('Ujian kembali menjadi draf dan tidak lagi terlihat siswa.'))
             ->action(fn (Exam $record) => static::runLifecycle(
                 fn () => app(ExamPublisher::class)->unpublish($record, Auth::user()),
                 'Ujian tidak dapat ditarik kembali',
@@ -309,12 +309,12 @@ class ExamResource extends Resource
     public static function closeAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('close')
-            ->label('Tutup')
+            ->label(__('Tutup'))
             ->icon('heroicon-o-lock-closed')
             ->color('danger')
             ->authorize('close')
             ->requiresConfirmation()
-            ->modalDescription('Ujian yang ditutup tidak dapat dibuka kembali. Tidak ada data yang dihapus.')
+            ->modalDescription(__('Ujian yang ditutup tidak dapat dibuka kembali. Tidak ada data yang dihapus.'))
             ->action(fn (Exam $record) => static::runLifecycle(
                 fn () => app(ExamPublisher::class)->close($record, Auth::user()),
                 'Ujian tidak dapat ditutup',
@@ -496,5 +496,25 @@ class ExamResource extends Resource
             'view' => Pages\ViewExam::route('/{record}'),
             'edit' => Pages\EditExam::route('/{record}/edit'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

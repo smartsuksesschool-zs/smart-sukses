@@ -17,6 +17,7 @@ use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\View\PanelsRenderHook;
 use Filament\Widgets;
+use Illuminate\Contracts\View\View;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -62,8 +63,17 @@ class AdminPanelProvider extends PanelProvider
                 PanelsRenderHook::HEAD_END,
                 fn (): string => app(SchoolBranding::class)->cssVariables(),
             )
+            // AUTH-05 / NFR 1.4 — pemilih bahasa ID/EN pada topbar panel, di
+            // sebelah menu pengguna. Panel dipakai Admin Sekolah, Kepala
+            // Sekolah, Guru, Wali Kelas, dan Bendahara; tanpa tombol di sini
+            // kelima peran itu tidak punya cara mengganti bahasa sama sekali
+            // (butir 383).
+            ->renderHook(
+                PanelsRenderHook::USER_MENU_BEFORE,
+                fn (): View => view('filament.locale-switch'),
+            )
             ->navigationGroups([
-                NavigationGroup::make()->label('Manajemen Akses'),
+                NavigationGroup::make()->label(fn (): string => __('Manajemen Akses')),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')

@@ -25,7 +25,7 @@ class ViewTransaction extends ViewRecord
     {
         return [
             Actions\Action::make('downloadProof')
-                ->label('Unduh Bukti')
+                ->label(__('Unduh Bukti'))
                 ->icon('heroicon-o-arrow-down-tray')
                 ->visible(fn (Transaction $record): bool => $record->hasDownloadableProof()
                     && (Auth::user()?->can('downloadProof', $record) ?? false))

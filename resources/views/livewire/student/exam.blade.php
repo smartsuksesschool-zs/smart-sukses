@@ -17,19 +17,19 @@
             <div style="min-width:0;">
                 <div style="font-weight:700;overflow-wrap:anywhere;">{{ $data['exam']['title'] }}</div>
                 <div class="portal-muted">
-                    {{ $data['exam']['subject_name'] ?? 'Mata pelajaran' }}
-                    · {{ $data['answered'] }}/{{ $data['total'] }} terjawab
+                    {{ $data['exam']['subject_name'] ?? __('Mata pelajaran') }}
+                    · {{ __(':answered/:total terjawab', ['answered' => $data['answered'], 'total' => $data['total']]) }}
                 </div>
             </div>
 
             <div style="text-align:right;">
-                <div class="portal-label">Sisa waktu</div>
+                <div class="portal-label">{{ __('Sisa waktu') }}</div>
                 <div
                     style="font-size:1.5rem;font-weight:700;font-variant-numeric:tabular-nums;"
                     x-text="String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0')"
                 >—</div>
                 <div class="portal-sr-only" aria-live="polite">
-                    Sisa waktu {{ intdiv($data['remaining_seconds'], 60) }} menit
+                    {{ __('Sisa waktu :count menit', ['count' => intdiv($data['remaining_seconds'], 60)]) }}
                 </div>
             </div>
         </div>
@@ -42,13 +42,13 @@
 
         @if ($data['question'] === null)
             <div class="portal-card">
-                <p class="portal-muted" style="margin:0;">Ujian ini belum memiliki soal.</p>
+                <p class="portal-muted" style="margin:0;">{{ __('Ujian ini belum memiliki soal.') }}</p>
             </div>
         @else
             {{-- Peta nomor soal: yang sudah dijawab ditandai, sehingga siswa
                  tahu apa yang tersisa tanpa membuka satu per satu. --}}
             <div class="portal-card" style="margin-bottom:1rem;">
-                <div class="portal-label" style="margin-bottom:.5rem;">Nomor Soal</div>
+                <div class="portal-label" style="margin-bottom:.5rem;">{{ __('Nomor Soal') }}</div>
                 <div style="display:flex;flex-wrap:wrap;gap:.375rem;">
                     @foreach ($data['questions'] as $i => $item)
                         <button
@@ -66,8 +66,8 @@
 
             <div class="portal-card">
                 <div class="portal-label">
-                    Soal {{ $data['question']['number'] }} dari {{ $data['total'] }}
-                    · bobot {{ rtrim(rtrim(number_format($data['question']['points'], 2, ',', '.'), '0'), ',') }}
+                    {{ __('Soal :number dari :total', ['number' => $data['question']['number'], 'total' => $data['total']]) }}
+                    · {{ __('bobot :points', ['points' => rtrim(rtrim(number_format($data['question']['points'], 2, ',', '.'), '0'), ',')]) }}
                 </div>
 
                 <p style="margin:.5rem 0 1rem;white-space:pre-line;overflow-wrap:anywhere;">
@@ -79,7 +79,7 @@
                     penanda mana yang benar — bukan disembunyikan CSS, melainkan
                     memang tidak pernah diambil dari database (butir 310).
                 --}}
-                <div role="group" aria-label="Pilihan jawaban" style="display:grid;gap:.5rem;">
+                <div role="group" aria-label="{{ __('Pilihan Jawaban') }}" style="display:grid;gap:.5rem;">
                     @foreach ($data['question']['options'] as $option)
                         @php
                             $chosen = ($answers[$data['question']['id']] ?? null) === $option['id'];
@@ -108,31 +108,30 @@
                         wire:click="previous"
                         class="portal-child-button"
                         @disabled($index <= 0)
-                    >Sebelumnya</button>
+                    >{{ __('Sebelumnya') }}</button>
 
                     <button
                         type="button"
                         wire:click="next"
                         class="portal-child-button"
                         @disabled($index >= $data['total'] - 1)
-                    >Berikutnya</button>
+                    >{{ __('Berikutnya') }}</button>
                 </div>
             </div>
 
             <div class="portal-card" style="margin-top:1rem;">
                 <p class="portal-muted" style="margin:0 0 .75rem;">
-                    Jawaban tersimpan otomatis setiap kali Anda memilih. Setelah dikumpulkan,
-                    jawaban tidak dapat diubah lagi.
+                    {{ __('Jawaban tersimpan otomatis setiap kali Anda memilih. Setelah dikumpulkan, jawaban tidak dapat diubah lagi.') }}
                 </p>
 
                 <button
                     type="button"
                     class="portal-button"
                     wire:click="submit"
-                    wire:confirm="Kumpulkan ujian ini? Jawaban tidak dapat diubah setelah dikumpulkan."
+                    wire:confirm="{{ __('Kumpulkan ujian ini? Jawaban tidak dapat diubah setelah dikumpulkan.') }}"
                     wire:loading.attr="disabled"
                     wire:target="submit"
-                >Kumpulkan Ujian</button>
+                >{{ __('Kumpulkan Ujian') }}</button>
             </div>
         @endif
     @endif

@@ -86,7 +86,7 @@ class LaporanKeuangan extends Page implements HasForms
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Periode')
+                Forms\Components\Section::make(__('Periode'))
                     ->columns(2)
                     ->schema([
                         // Super Admin tidak memiliki school_id (Arsitektur
@@ -94,7 +94,7 @@ class LaporanKeuangan extends Page implements HasForms
                         // cabangnya dipilih eksplisit — bukan dijumlahkan
                         // diam-diam (itu KAS-03).
                         Forms\Components\Select::make('school_id')
-                            ->label('Cabang Sekolah')
+                            ->label(__('Cabang Sekolah'))
                             ->options(fn (): array => School::query()
                                 ->where('is_active', true)
                                 ->orderBy('name')
@@ -106,10 +106,10 @@ class LaporanKeuangan extends Page implements HasForms
                             ->live()
                             ->afterStateUpdated(fn () => $this->refreshSummary())
                             ->visible(fn (): bool => Auth::user()?->isSuperAdmin() ?? false)
-                            ->helperText('Ringkasan menampilkan satu cabang. Perbandingan antarcabang belum tersedia.'),
+                            ->helperText(__('Ringkasan menampilkan satu cabang. Perbandingan antarcabang belum tersedia.')),
 
                         Forms\Components\TextInput::make('period')
-                            ->label('Periode')
+                            ->label(__('Periode'))
                             ->required()
                             ->maxLength(7)
                             ->placeholder('2026-08')
@@ -120,7 +120,7 @@ class LaporanKeuangan extends Page implements HasForms
                                 'regex' => 'Periode harus berformat YYYY-MM, misalnya 2026-08.',
                             ])
                             ->afterStateUpdated(fn () => $this->refreshSummary())
-                            ->helperText('Penerimaan SPP dan pengeluaran mengikuti bulan ini; saldo kas adalah posisi sampai akhir bulan tersebut.'),
+                            ->helperText(__('Penerimaan SPP dan pengeluaran mengikuti bulan ini; saldo kas adalah posisi sampai akhir bulan tersebut.')),
                     ]),
             ])
             ->statePath('data');
@@ -209,5 +209,20 @@ class LaporanKeuangan extends Page implements HasForms
         }
 
         return $user?->school_id;
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public function getTitle(): string
+    {
+        return __(static::$title);
     }
 }

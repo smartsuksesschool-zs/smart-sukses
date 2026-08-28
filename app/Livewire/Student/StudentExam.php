@@ -161,7 +161,7 @@ class StudentExam extends Component
     protected function page(?array $data): View
     {
         return view('livewire.student.exam', ['data' => $data])
-            ->layout('layouts.portal', ['title' => 'Ujian']);
+            ->layout('layouts.portal', ['title' => __('Ujian')]);
     }
 
     protected function refusalRedirect(ValidationException $exception): Response

@@ -50,66 +50,66 @@ class PpdbRegistrationResource extends Resource
     {
         return $infolist->schema([
             // API 4.7 — GET /admin/ppdb/{id}: detail pendaftar.
-            Infolists\Components\Section::make('Data Pendaftar')
+            Infolists\Components\Section::make(__('Data Pendaftar'))
                 ->columns(2)
                 ->schema([
                     Infolists\Components\TextEntry::make('reg_number')
-                        ->label('No. Pendaftaran')
+                        ->label(__('No. Pendaftaran'))
                         ->copyable(),
 
                     Infolists\Components\TextEntry::make('status')
-                        ->label('Status')
+                        ->label(__('Status'))
                         ->badge()
                         ->formatStateUsing(fn (PpdbStatus $state) => $state->label())
                         ->color(fn (PpdbStatus $state) => $state->color()),
 
-                    Infolists\Components\TextEntry::make('full_name')->label('Nama Lengkap'),
+                    Infolists\Components\TextEntry::make('full_name')->label(__('Nama Lengkap')),
 
                     Infolists\Components\TextEntry::make('gender')
-                        ->label('Jenis Kelamin')
+                        ->label(__('Jenis Kelamin'))
                         ->formatStateUsing(fn (Gender $state) => $state->label()),
 
                     Infolists\Components\TextEntry::make('birth_date')
-                        ->label('Tanggal Lahir')
+                        ->label(__('Tanggal Lahir'))
                         ->date('d M Y')
                         ->placeholder('—'),
 
                     Infolists\Components\TextEntry::make('origin_school')
-                        ->label('Asal Sekolah')
+                        ->label(__('Asal Sekolah'))
                         ->placeholder('—'),
 
                     Infolists\Components\TextEntry::make('academicYear.name')
-                        ->label('Tahun Ajaran Didaftar')
+                        ->label(__('Tahun Ajaran Didaftar'))
                         ->placeholder('—'),
 
                     Infolists\Components\TextEntry::make('registered_at')
-                        ->label('Waktu Daftar')
+                        ->label(__('Waktu Daftar'))
                         ->dateTime('d M Y H:i'),
                 ]),
 
-            Infolists\Components\Section::make('Orang Tua / Wali')
+            Infolists\Components\Section::make(__('Orang Tua / Wali'))
                 ->columns(2)
                 ->schema([
-                    Infolists\Components\TextEntry::make('parent_name')->label('Nama')->placeholder('—'),
-                    Infolists\Components\TextEntry::make('parent_phone')->label('No. HP')->placeholder('—'),
-                    Infolists\Components\TextEntry::make('parent_email')->label('Email')->placeholder('—'),
+                    Infolists\Components\TextEntry::make('parent_name')->label(__('Nama'))->placeholder('—'),
+                    Infolists\Components\TextEntry::make('parent_phone')->label(__('No. HP'))->placeholder('—'),
+                    Infolists\Components\TextEntry::make('parent_email')->label(__('Email'))->placeholder('—'),
                 ]),
 
-            Infolists\Components\Section::make('Berkas & Catatan')
+            Infolists\Components\Section::make(__('Berkas & Catatan'))
                 ->schema([
                     Infolists\Components\TextEntry::make('documents')
-                        ->label('Dokumen')
-                        ->placeholder('Tidak ada berkas diunggah')
+                        ->label(__('Dokumen'))
+                        ->placeholder(__('Tidak ada berkas diunggah'))
                         ->listWithLineBreaks()
                         ->formatStateUsing(fn ($state) => basename((string) $state)),
 
                     Infolists\Components\TextEntry::make('status_notes')
-                        ->label('Catatan Status')
+                        ->label(__('Catatan Status'))
                         ->placeholder('—'),
 
                     Infolists\Components\TextEntry::make('convertedStudent.nis')
-                        ->label('NIS Siswa Hasil Enroll')
-                        ->placeholder('Belum di-enroll'),
+                        ->label(__('NIS Siswa Hasil Enroll'))
+                        ->placeholder(__('Belum di-enroll')),
                 ]),
         ]);
     }
@@ -120,45 +120,45 @@ class PpdbRegistrationResource extends Resource
             // PPDB-03 poin 1 — kolom: no. daftar, nama, asal sekolah, status, tanggal daftar.
             ->columns([
                 Tables\Columns\TextColumn::make('reg_number')
-                    ->label('No. Daftar')
+                    ->label(__('No. Daftar'))
                     ->searchable()
                     ->sortable()
                     ->copyable(),
 
                 Tables\Columns\TextColumn::make('full_name')
-                    ->label('Nama')
+                    ->label(__('Nama'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('origin_school')
-                    ->label('Asal Sekolah')
+                    ->label(__('Asal Sekolah'))
                     ->searchable()
                     ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->badge()
                     ->formatStateUsing(fn (PpdbStatus $state) => $state->label())
                     ->color(fn (PpdbStatus $state) => $state->color()),
 
                 Tables\Columns\TextColumn::make('registered_at')
-                    ->label('Tanggal Daftar')
+                    ->label(__('Tanggal Daftar'))
                     ->dateTime('d M Y H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('parent_phone')
-                    ->label('HP Ortu')
+                    ->label(__('HP Ortu'))
                     ->placeholder('—')
                     ->toggleable(),
             ])
             // API 4.7 — GET /admin/ppdb. Filter: status, academic_year_id.
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->options(PpdbStatus::options()),
 
                 Tables\Filters\SelectFilter::make('academic_year_id')
-                    ->label('Tahun Ajaran')
+                    ->label(__('Tahun Ajaran'))
                     ->options(fn () => AcademicYear::query()->orderByDesc('start_date')->pluck('name', 'id')),
             ])
             ->actions([
@@ -178,21 +178,21 @@ class PpdbRegistrationResource extends Resource
     public static function changeStatusAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('changeStatus')
-            ->label('Ubah Status')
+            ->label(__('Ubah Status'))
             ->icon('heroicon-o-arrow-path')
             ->color('warning')
             ->authorize('changeStatus')
             ->form([
                 Forms\Components\Select::make('status')
-                    ->label('Status Baru')
+                    ->label(__('Status Baru'))
                     ->options(PpdbStatus::options())
                     ->required(),
 
                 Forms\Components\Textarea::make('status_notes')
-                    ->label('Catatan Alasan')
+                    ->label(__('Catatan Alasan'))
                     ->rows(3)
                     ->required()
-                    ->helperText('Wajib diisi — perubahan status disimpan bersama alasannya.'),
+                    ->helperText(__('Wajib diisi — perubahan status disimpan bersama alasannya.')),
             ])
             ->fillForm(fn (PpdbRegistration $record) => [
                 'status' => $record->status->value,
@@ -210,14 +210,14 @@ class PpdbRegistrationResource extends Resource
                 // NOTIF-03 poin 1 — trigger tersedia untuk "PPDB status berubah";
                 // Phase 1 memakai wa.me manual link (Ringkasan Eksekutif).
                 $notification = Notification::make()
-                    ->title('Status pendaftaran diperbarui')
+                    ->title(__('Status pendaftaran diperbarui'))
                     ->body("{$record->full_name} — {$record->status->label()}")
                     ->success();
 
                 if ($link = $record->refresh()->waLink()) {
                     $notification->actions([
                         NotificationAction::make('wa')
-                            ->label('Buka WhatsApp')
+                            ->label(__('Buka WhatsApp'))
                             ->url($link, shouldOpenInNewTab: true),
                     ]);
                 }
@@ -233,15 +233,15 @@ class PpdbRegistrationResource extends Resource
     public static function waLinkAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('waLink')
-            ->label('Link WhatsApp')
+            ->label(__('Link WhatsApp'))
             ->icon('heroicon-o-chat-bubble-left-right')
             ->color('success')
             ->authorize('generateWaLink')
             ->visible(fn (PpdbRegistration $record) => WhatsAppLink::normalizePhone($record->parent_phone) !== null)
-            ->modalSubmitActionLabel('Buka WhatsApp')
+            ->modalSubmitActionLabel(__('Buka WhatsApp'))
             ->form([
                 Forms\Components\Textarea::make('message')
-                    ->label('Teks Notifikasi')
+                    ->label(__('Teks Notifikasi'))
                     ->rows(6)
                     ->required()
                     ->helperText('Template mengikuti status terkini. Placeholder tersedia: '
@@ -253,7 +253,7 @@ class PpdbRegistrationResource extends Resource
 
                 if ($link === null) {
                     Notification::make()
-                        ->title('Nomor HP orang tua tidak valid')
+                        ->title(__('Nomor HP orang tua tidak valid'))
                         ->danger()
                         ->send();
 
@@ -271,70 +271,70 @@ class PpdbRegistrationResource extends Resource
     public static function enrollAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('enroll')
-            ->label('Enroll Siswa')
+            ->label(__('Enroll Siswa'))
             ->icon('heroicon-o-user-plus')
             ->color('primary')
             ->authorize('enroll')
-            ->modalHeading('Enroll Pendaftar Menjadi Siswa')
-            ->modalSubmitActionLabel('Konfirmasi Enroll')
+            ->modalHeading(__('Enroll Pendaftar Menjadi Siswa'))
+            ->modalSubmitActionLabel(__('Konfirmasi Enroll'))
             // PPDB-05 poin 2 — Admin dapat melengkapi data sebelum konfirmasi.
             ->form(fn (PpdbRegistration $record) => [
                 Forms\Components\TextInput::make('nis')
-                    ->label('NIS')
+                    ->label(__('NIS'))
                     ->required()
                     ->maxLength(20)
                     // SIS-01 poin 3 — NIS unik dalam satu sekolah.
                     ->rule(fn () => Rule::unique('students', 'nis')->where('school_id', $record->school_id))
-                    ->helperText('Nomor Induk Siswa, unik dalam satu cabang.'),
+                    ->helperText(__('Nomor Induk Siswa, unik dalam satu cabang.')),
 
                 Forms\Components\TextInput::make('nisn')
-                    ->label('NISN')
+                    ->label(__('NISN'))
                     ->maxLength(10)
                     ->rule('digits:10'),
 
                 Forms\Components\TextInput::make('full_name')
-                    ->label('Nama Lengkap')
+                    ->label(__('Nama Lengkap'))
                     ->required()
                     ->maxLength(150),
 
                 Forms\Components\Select::make('gender')
-                    ->label('Jenis Kelamin')
+                    ->label(__('Jenis Kelamin'))
                     ->options(Gender::options())
                     ->required(),
 
                 Forms\Components\TextInput::make('birth_place')
-                    ->label('Tempat Lahir')
+                    ->label(__('Tempat Lahir'))
                     ->maxLength(100),
 
                 Forms\Components\DatePicker::make('birth_date')
-                    ->label('Tanggal Lahir'),
+                    ->label(__('Tanggal Lahir')),
 
                 Forms\Components\TextInput::make('religion')
-                    ->label('Agama')
+                    ->label(__('Agama'))
                     ->maxLength(30),
 
                 Forms\Components\TextInput::make('entry_year')
-                    ->label('Tahun Masuk')
+                    ->label(__('Tahun Masuk'))
                     ->numeric()
                     ->minValue(1900)
                     ->maxValue((int) now()->addYear()->format('Y')),
 
                 Forms\Components\Textarea::make('address')
-                    ->label('Alamat')
+                    ->label(__('Alamat'))
                     ->rows(2)
                     ->columnSpanFull(),
 
                 Forms\Components\TextInput::make('parent_name')
-                    ->label('Nama Orang Tua / Wali')
+                    ->label(__('Nama Orang Tua / Wali'))
                     ->maxLength(150),
 
                 Forms\Components\TextInput::make('parent_phone')
-                    ->label('No. HP Orang Tua')
+                    ->label(__('No. HP Orang Tua'))
                     ->tel()
                     ->maxLength(20),
 
                 Forms\Components\TextInput::make('parent_email')
-                    ->label('Email Orang Tua')
+                    ->label(__('Email Orang Tua'))
                     ->email()
                     ->maxLength(150),
             ])
@@ -369,7 +369,7 @@ class PpdbRegistrationResource extends Resource
                 });
 
                 Notification::make()
-                    ->title('Pendaftar berhasil menjadi siswa aktif')
+                    ->title(__('Pendaftar berhasil menjadi siswa aktif'))
                     ->body("{$student->full_name} — NIS {$student->nis}")
                     ->success()
                     ->send();
@@ -382,5 +382,25 @@ class PpdbRegistrationResource extends Resource
             'index' => Pages\ListPpdbRegistrations::route('/'),
             'view' => Pages\ViewPpdbRegistration::route('/{record}'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

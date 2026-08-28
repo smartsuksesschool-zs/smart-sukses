@@ -19,8 +19,8 @@ enum AssessmentType: string
     public function label(): string
     {
         return match ($this) {
-            self::Formative => 'Formatif (tidak dihitung)',
-            self::Summative => 'Sumatif (dihitung)',
+            self::Formative => __('Formatif (tidak dihitung)'),
+            self::Summative => __('Sumatif (dihitung)'),
         };
     }
 

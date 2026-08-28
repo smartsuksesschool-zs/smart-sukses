@@ -64,7 +64,7 @@ class PengaturanTampilan extends Page implements HasForms
         return $form
             ->schema([
                 Forms\Components\Select::make('school_id')
-                    ->label('Cabang Sekolah')
+                    ->label(__('Cabang Sekolah'))
                     ->options(fn () => School::query()
                         ->orderBy('name')
                         ->pluck('name', 'id')
@@ -80,7 +80,7 @@ class PengaturanTampilan extends Page implements HasForms
                         }
                     })
                     ->visible(fn () => Auth::user()?->isSuperAdmin())
-                    ->helperText('Tampilan yang disimpan hanya berlaku untuk cabang ini.'),
+                    ->helperText(__('Tampilan yang disimpan hanya berlaku untuk cabang ini.')),
 
                 SchoolResource::brandingSection(),
             ])
@@ -97,8 +97,8 @@ class PengaturanTampilan extends Page implements HasForms
 
         if ($school === null) {
             Notification::make()
-                ->title('Cabang belum ditentukan')
-                ->body('Pilih cabang sekolah terlebih dahulu sebelum menyimpan tampilan.')
+                ->title(__('Cabang belum ditentukan'))
+                ->body(__('Pilih cabang sekolah terlebih dahulu sebelum menyimpan tampilan.'))
                 ->danger()
                 ->send();
 
@@ -109,8 +109,8 @@ class PengaturanTampilan extends Page implements HasForms
         // tetapi state Livewire tetap dapat dikirim apa adanya.
         if (Auth::user()?->cannot('configureBranding', $school)) {
             Notification::make()
-                ->title('Tidak diizinkan')
-                ->body('Anda hanya dapat menyetel tampilan cabang Anda sendiri.')
+                ->title(__('Tidak diizinkan'))
+                ->body(__('Anda hanya dapat menyetel tampilan cabang Anda sendiri.'))
                 ->danger()
                 ->send();
 
@@ -124,8 +124,8 @@ class PengaturanTampilan extends Page implements HasForms
         ]);
 
         Notification::make()
-            ->title('Tampilan cabang disimpan')
-            ->body('Perubahan berlaku pada muat ulang halaman berikutnya.')
+            ->title(__('Tampilan cabang disimpan'))
+            ->body(__('Perubahan berlaku pada muat ulang halaman berikutnya.'))
             ->success()
             ->send();
     }
@@ -178,5 +178,20 @@ class PengaturanTampilan extends Page implements HasForms
     public function previewedSchool(): ?School
     {
         return static::schoolById(static::resolveSchoolId($this->data['school_id'] ?? null));
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public function getTitle(): string
+    {
+        return __(static::$title);
     }
 }

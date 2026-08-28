@@ -58,7 +58,7 @@ class QuestionsRelationManager extends RelationManager
     {
         return $form->schema([
             Forms\Components\Select::make('question_type')
-                ->label('Jenis Soal')
+                ->label(__('Jenis Soal'))
                 // Hanya jenis yang didukung rilis ini yang ditawarkan. ESSAY ada
                 // di skema tetapi tidak boleh dapat dipilih (butir 266).
                 ->options(ExamQuestionType::supportedOptions())
@@ -67,7 +67,7 @@ class QuestionsRelationManager extends RelationManager
                 ->in(ExamQuestionType::supportedValues()),
 
             Forms\Components\TextInput::make('points')
-                ->label('Bobot Soal')
+                ->label(__('Bobot Soal'))
                 ->numeric()
                 ->step(0.01)
                 ->minValue(0.01)
@@ -78,7 +78,7 @@ class QuestionsRelationManager extends RelationManager
                     .'persentase dari total bobot seluruh soal.'),
 
             Forms\Components\TextInput::make('position')
-                ->label('Nomor Urut')
+                ->label(__('Nomor Urut'))
                 ->numeric()
                 ->minValue(1)
                 ->maxValue(9999)
@@ -86,7 +86,7 @@ class QuestionsRelationManager extends RelationManager
                 ->required(),
 
             Forms\Components\Textarea::make('question_text')
-                ->label('Pertanyaan')
+                ->label(__('Pertanyaan'))
                 ->rows(3)
                 ->required()
                 ->columnSpanFull(),
@@ -106,12 +106,12 @@ class QuestionsRelationManager extends RelationManager
     protected function optionsField(): Forms\Components\Repeater
     {
         return Forms\Components\Repeater::make('options')
-            ->label('Pilihan Jawaban')
+            ->label(__('Pilihan Jawaban'))
             ->columns(12)
             ->minItems(2)
             ->defaultItems(4)
             ->reorderable(false)
-            ->addActionLabel('Tambah pilihan')
+            ->addActionLabel(__('Tambah pilihan'))
             ->columnSpanFull()
             ->schema([
                 // Menandai baris yang sudah ada, supaya menyunting soal
@@ -121,7 +121,7 @@ class QuestionsRelationManager extends RelationManager
                 Forms\Components\Hidden::make('id'),
 
                 Forms\Components\TextInput::make('position')
-                    ->label('No.')
+                    ->label(__('No.'))
                     ->numeric()
                     ->minValue(1)
                     ->default(1)
@@ -129,13 +129,13 @@ class QuestionsRelationManager extends RelationManager
                     ->columnSpan(2),
 
                 Forms\Components\TextInput::make('option_text')
-                    ->label('Teks Pilihan')
+                    ->label(__('Teks Pilihan'))
                     ->required()
                     ->maxLength(500)
                     ->columnSpan(7),
 
                 Forms\Components\Toggle::make('is_correct')
-                    ->label('Kunci')
+                    ->label(__('Kunci'))
                     ->inline(false)
                     ->columnSpan(3),
             ])
@@ -169,34 +169,34 @@ class QuestionsRelationManager extends RelationManager
             ->defaultSort('position')
             ->columns([
                 Tables\Columns\TextColumn::make('position')
-                    ->label('No.')
+                    ->label(__('No.'))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('question_text')
-                    ->label('Pertanyaan')
+                    ->label(__('Pertanyaan'))
                     ->wrap()
                     ->limit(120),
 
                 Tables\Columns\TextColumn::make('question_type')
-                    ->label('Jenis')
+                    ->label(__('Jenis'))
                     ->badge()
                     ->formatStateUsing(fn (ExamQuestionType $state) => $state->label()),
 
                 Tables\Columns\TextColumn::make('points')
-                    ->label('Bobot'),
+                    ->label(__('Bobot')),
 
                 // Jumlah pilihan, bukan isinya — dan tidak pernah mana yang
                 // benar. Kunci jawaban tidak punya kolom di daftar mana pun
                 // (butir 292).
                 Tables\Columns\TextColumn::make('options_count')
-                    ->label('Pilihan')
+                    ->label(__('Pilihan'))
                     ->counts('options')
                     ->badge()
                     ->color(fn (int $state) => $state >= 2 ? 'gray' : 'danger'),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
-                    ->label('Tambah Soal')
+                    ->label(__('Tambah Soal'))
                     ->using(fn (array $data) => $this->persistQuestion(null, $data)),
             ])
             ->actions([
@@ -397,5 +397,15 @@ class QuestionsRelationManager extends RelationManager
             ->all();
 
         return $data;
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

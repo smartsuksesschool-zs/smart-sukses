@@ -13,8 +13,8 @@ enum StudentClassStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Active => 'Aktif',
-            self::Moved => 'Pindah Kelas',
+            self::Active => __('Aktif'),
+            self::Moved => __('Pindah Kelas'),
         };
     }
 

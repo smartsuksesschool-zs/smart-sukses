@@ -64,8 +64,8 @@ class PengaturanPenilaian extends Page implements HasForms
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Skala Predikat Sikap')
-                    ->description('Batas bawah tiap predikat. Nilai sikap tidak masuk perhitungan nilai akademik dan hanya dilaporkan sebagai predikat pada rapor.')
+                Forms\Components\Section::make(__('Skala Predikat Sikap'))
+                    ->description(__('Batas bawah tiap predikat. Nilai sikap tidak masuk perhitungan nilai akademik dan hanya dilaporkan sebagai predikat pada rapor.'))
                     ->schema([
                         // `attitude_scale` adalah konfigurasi per cabang (butir 27),
                         // sedangkan Super Admin memang tidak memiliki `school_id`
@@ -74,7 +74,7 @@ class PengaturanPenilaian extends Page implements HasForms
                         // GradeConfigResource: field hanya dirender untuk Super
                         // Admin, sementara Admin Sekolah tetap terikat akunnya.
                         Forms\Components\Select::make('school_id')
-                            ->label('Cabang Sekolah')
+                            ->label(__('Cabang Sekolah'))
                             ->options(fn () => School::query()
                                 ->where('is_active', true)
                                 ->orderBy('name')
@@ -91,7 +91,7 @@ class PengaturanPenilaian extends Page implements HasForms
                                 ));
                             })
                             ->visible(fn () => Auth::user()?->isSuperAdmin())
-                            ->helperText('Skala yang disimpan hanya berlaku untuk cabang ini.'),
+                            ->helperText(__('Skala yang disimpan hanya berlaku untuk cabang ini.')),
 
                         Forms\Components\Repeater::make('attitude_scale')
                             ->label('')
@@ -101,12 +101,12 @@ class PengaturanPenilaian extends Page implements HasForms
                             ->reorderable(false)
                             ->schema([
                                 Forms\Components\TextInput::make('predicate')
-                                    ->label('Predikat')
+                                    ->label(__('Predikat'))
                                     ->disabled()
                                     ->dehydrated(),
 
                                 Forms\Components\TextInput::make('minimum')
-                                    ->label('Batas Bawah')
+                                    ->label(__('Batas Bawah'))
                                     ->numeric()
                                     ->minValue(0)
                                     ->maxValue(100)
@@ -164,8 +164,8 @@ class PengaturanPenilaian extends Page implements HasForms
 
         if ($school === null) {
             Notification::make()
-                ->title('Cabang belum ditentukan')
-                ->body('Pilih cabang sekolah terlebih dahulu sebelum menyimpan skala predikat.')
+                ->title(__('Cabang belum ditentukan'))
+                ->body(__('Pilih cabang sekolah terlebih dahulu sebelum menyimpan skala predikat.'))
                 ->danger()
                 ->send();
 
@@ -238,5 +238,20 @@ class PengaturanPenilaian extends Page implements HasForms
     protected function school(): ?School
     {
         return static::schoolById(static::resolveSchoolId($this->data['school_id'] ?? null));
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public function getTitle(): string
+    {
+        return __(static::$title);
     }
 }

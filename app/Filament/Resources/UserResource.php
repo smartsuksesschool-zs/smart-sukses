@@ -40,29 +40,29 @@ class UserResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Identitas')
+            Forms\Components\Section::make(__('Identitas'))
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('name')
-                        ->label('Nama Lengkap')
+                        ->label(__('Nama Lengkap'))
                         ->required()
                         ->maxLength(150),
 
                     Forms\Components\TextInput::make('email')
-                        ->label('Email')
+                        ->label(__('Email'))
                         ->email()
                         ->required()
                         ->maxLength(150)
                         ->unique(ignoreRecord: true),
 
                     Forms\Components\TextInput::make('phone')
-                        ->label('No. HP')
+                        ->label(__('No. HP'))
                         ->tel()
                         ->maxLength(20)
-                        ->helperText('Dipakai untuk generate link wa.me.'),
+                        ->helperText(__('Dipakai untuk generate link wa.me.')),
 
                     Forms\Components\FileUpload::make('avatar_url')
-                        ->label('Foto Profil')
+                        ->label(__('Foto Profil'))
                         ->image()
                         ->avatar()
                         ->disk('public')
@@ -70,11 +70,11 @@ class UserResource extends Resource
                         ->maxSize(2048),
                 ]),
 
-            Forms\Components\Section::make('Akses')
+            Forms\Components\Section::make(__('Akses'))
                 ->columns(2)
                 ->schema([
                     Forms\Components\Select::make('school_id')
-                        ->label('Cabang Sekolah')
+                        ->label(__('Cabang Sekolah'))
                         ->relationship(
                             name: 'school',
                             titleAttribute: 'name',
@@ -85,10 +85,10 @@ class UserResource extends Resource
                         // Hanya Super Admin yang boleh memindahkan user antar cabang.
                         ->visible(fn () => Auth::user()?->isSuperAdmin())
                         ->default(fn () => Auth::user()?->school_id)
-                        ->helperText('Kosongkan hanya untuk Super Administrator (akses lintas cabang).'),
+                        ->helperText(__('Kosongkan hanya untuk Super Administrator (akses lintas cabang).')),
 
                     Forms\Components\Select::make('roles')
-                        ->label('Peran')
+                        ->label(__('Peran'))
                         ->relationship(
                             name: 'roles',
                             titleAttribute: 'name',
@@ -104,27 +104,27 @@ class UserResource extends Resource
                         ),
 
                     Forms\Components\Select::make('locale')
-                        ->label('Bahasa')
+                        ->label(__('Bahasa'))
                         ->options(['id' => 'Bahasa Indonesia', 'en' => 'English'])
                         ->default('id')
                         ->required(),
 
                     Forms\Components\Toggle::make('is_active')
-                        ->label('Aktif')
+                        ->label(__('Aktif'))
                         ->default(true)
-                        ->helperText('Pengguna nonaktif tidak dapat login.'),
+                        ->helperText(__('Pengguna nonaktif tidak dapat login.')),
                 ]),
 
-            Forms\Components\Section::make('Kata Sandi')
+            Forms\Components\Section::make(__('Kata Sandi'))
                 ->schema([
                     Forms\Components\TextInput::make('password')
-                        ->label('Password')
+                        ->label(__('Password'))
                         ->password()
                         ->revealable()
                         ->rule(Password::defaults())
                         ->required(fn (string $operation) => $operation === 'create')
                         ->dehydrated(fn (?string $state) => filled($state))
-                        ->helperText('Kosongkan saat mengedit bila password tidak diubah.'),
+                        ->helperText(__('Kosongkan saat mengedit bila password tidak diubah.')),
                 ]),
         ]);
     }
@@ -134,57 +134,57 @@ class UserResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Nama')
+                    ->label(__('Nama'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('email')
-                    ->label('Email')
+                    ->label(__('Email'))
                     ->searchable()
                     ->copyable(),
 
                 Tables\Columns\TextColumn::make('roles.name')
-                    ->label('Peran')
+                    ->label(__('Peran'))
                     ->badge()
                     ->formatStateUsing(fn (string $state) => RoleName::tryFrom($state)?->label() ?? $state),
 
                 Tables\Columns\TextColumn::make('school.name')
-                    ->label('Cabang')
-                    ->placeholder('Semua cabang')
+                    ->label(__('Cabang'))
+                    ->placeholder(__('Semua cabang'))
                     ->visible(fn () => Auth::user()?->isSuperAdmin())
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('is_active')
-                    ->label('Aktif')
+                    ->label(__('Aktif'))
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('last_login_at')
-                    ->label('Login Terakhir')
+                    ->label(__('Login Terakhir'))
                     ->dateTime('d M Y H:i')
-                    ->placeholder('Belum pernah')
+                    ->placeholder(__('Belum pernah'))
                     ->sortable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('roles')
-                    ->label('Peran')
+                    ->label(__('Peran'))
                     ->relationship('roles', 'name')
                     ->getOptionLabelFromRecordUsing(
                         fn ($record) => RoleName::tryFrom($record->name)?->label() ?? $record->name,
                     ),
 
                 Tables\Filters\TernaryFilter::make('is_active')
-                    ->label('Status Aktif'),
+                    ->label(__('Status Aktif')),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
 
                 // API 4.4 — POST /users/{id}/reset-password (password sementara).
                 Tables\Actions\Action::make('resetPassword')
-                    ->label('Reset Password')
+                    ->label(__('Reset Password'))
                     ->icon('heroicon-o-key')
                     ->color('warning')
                     ->requiresConfirmation()
-                    ->modalDescription('Password sementara akan dibuat dan ditampilkan sekali saja.')
+                    ->modalDescription(__('Password sementara akan dibuat dan ditampilkan sekali saja.'))
                     ->visible(fn (User $record) => Auth::user()?->can('resetPassword', $record))
                     ->action(function (User $record) {
                         $temporary = Str::password(12);
@@ -195,7 +195,7 @@ class UserResource extends Resource
                         ])->save();
 
                         Notification::make()
-                            ->title('Password sementara dibuat')
+                            ->title(__('Password sementara dibuat'))
                             ->body("Password baru untuk {$record->email}: {$temporary}")
                             ->persistent()
                             ->success()
@@ -239,5 +239,25 @@ class UserResource extends Resource
             'create' => Pages\CreateUser::route('/create'),
             'edit' => Pages\EditUser::route('/{record}/edit'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

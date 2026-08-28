@@ -142,7 +142,7 @@ class PortalLogin extends Component
     {
         return view('livewire.portal.portal-login')
             ->layout('layouts.portal', [
-                'title' => 'Masuk Portal Orang Tua',
+                'title' => __('Masuk Portal Orang Tua'),
                 'bare' => true,
             ]);
     }

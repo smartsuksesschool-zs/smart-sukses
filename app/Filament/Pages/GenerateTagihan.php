@@ -97,14 +97,14 @@ class GenerateTagihan extends Page implements HasForms
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Tagihan yang akan diterbitkan')
+                Forms\Components\Section::make(__('Tagihan yang akan diterbitkan'))
                     ->columns(2)
                     ->schema([
                         // Super Admin tidak memiliki school_id (Arsitektur 3.2),
                         // sehingga cabang harus dipilih eksplisit. Pola sama
                         // dengan FeeTypeResource dan PengaturanPenilaian.
                         Forms\Components\Select::make('school_id')
-                            ->label('Cabang Sekolah')
+                            ->label(__('Cabang Sekolah'))
                             ->options(fn () => School::query()
                                 ->where('is_active', true)
                                 ->orderBy('name')
@@ -117,10 +117,10 @@ class GenerateTagihan extends Page implements HasForms
                             ->afterStateUpdated(fn (Forms\Set $set) => $set('fee_type_id', null))
                             ->visible(fn () => Auth::user()?->isSuperAdmin())
                             ->columnSpanFull()
-                            ->helperText('Jenis tagihan dan daftar siswa mengikuti cabang ini.'),
+                            ->helperText(__('Jenis tagihan dan daftar siswa mengikuti cabang ini.')),
 
                         Forms\Components\Select::make('fee_type_id')
-                            ->label('Jenis Tagihan')
+                            ->label(__('Jenis Tagihan'))
                             ->options(fn (Forms\Get $get) => static::feeTypeOptions(
                                 static::resolveSchoolId($get('school_id')),
                             ))
@@ -136,10 +136,10 @@ class GenerateTagihan extends Page implements HasForms
                                     ->where('school_id', static::resolveSchoolId($get('school_id')))
                                     ->where('is_active', true),
                             )
-                            ->helperText('Hanya jenis tagihan yang berstatus aktif.'),
+                            ->helperText(__('Hanya jenis tagihan yang berstatus aktif.')),
 
                         Forms\Components\TextInput::make('period')
-                            ->label('Periode')
+                            ->label(__('Periode'))
                             ->required()
                             ->maxLength(7)
                             ->placeholder('2026-08')
@@ -160,11 +160,11 @@ class GenerateTagihan extends Page implements HasForms
                             }),
 
                         Forms\Components\DatePicker::make('due_date')
-                            ->label('Jatuh Tempo')
+                            ->label(__('Jatuh Tempo'))
                             ->required()
                             ->native(false)
                             ->live()
-                            ->helperText('Bawaan: tanggal 10 pada periode terpilih (SPP-02 poin 2). Dapat diubah.'),
+                            ->helperText(__('Bawaan: tanggal 10 pada periode terpilih (SPP-02 poin 2). Dapat diubah.')),
                     ]),
             ])
             ->statePath('data');
@@ -185,7 +185,7 @@ class GenerateTagihan extends Page implements HasForms
             $this->forgetPreview();
 
             Notification::make()
-                ->title('Jenis tagihan tidak ditemukan pada cabang ini')
+                ->title(__('Jenis tagihan tidak ditemukan pada cabang ini'))
                 ->danger()
                 ->send();
 
@@ -227,8 +227,8 @@ class GenerateTagihan extends Page implements HasForms
             $this->forgetPreview();
 
             Notification::make()
-                ->title('Pratinjau belum dibuat atau sudah tidak sesuai')
-                ->body('Isian berubah setelah pratinjau terakhir. Jalankan Pratinjau lagi sebelum menerbitkan.')
+                ->title(__('Pratinjau belum dibuat atau sudah tidak sesuai'))
+                ->body(__('Isian berubah setelah pratinjau terakhir. Jalankan Pratinjau lagi sebelum menerbitkan.'))
                 ->warning()
                 ->send();
 
@@ -241,7 +241,7 @@ class GenerateTagihan extends Page implements HasForms
             $this->forgetPreview();
 
             Notification::make()
-                ->title('Jenis tagihan tidak ditemukan pada cabang ini')
+                ->title(__('Jenis tagihan tidak ditemukan pada cabang ini'))
                 ->danger()
                 ->send();
 
@@ -414,5 +414,20 @@ class GenerateTagihan extends Page implements HasForms
             ->take(self::PREVIEW_LIST_LIMIT)
             ->map(fn (Student $student) => "{$student->full_name} ({$student->nis})")
             ->all();
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public function getTitle(): string
+    {
+        return __(static::$title);
     }
 }

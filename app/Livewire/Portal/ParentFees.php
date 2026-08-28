@@ -33,6 +33,6 @@ class ParentFees extends Component
         return view('livewire.portal.parent-fees', [
             'children' => $this->children(),
             'data' => $this->fees(),
-        ])->layout('layouts.portal', ['title' => 'Tagihan']);
+        ])->layout('layouts.portal', ['title' => __('Tagihan')]);
     }
 }

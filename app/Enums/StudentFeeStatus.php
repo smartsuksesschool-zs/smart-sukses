@@ -26,10 +26,10 @@ enum StudentFeeStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Unpaid => 'Belum Bayar',
-            self::Partial => 'Bayar Sebagian',
-            self::Paid => 'Lunas',
-            self::Waived => 'Dibebaskan',
+            self::Unpaid => __('Belum Bayar'),
+            self::Partial => __('Bayar Sebagian'),
+            self::Paid => __('Lunas'),
+            self::Waived => __('Dibebaskan'),
         };
     }
 

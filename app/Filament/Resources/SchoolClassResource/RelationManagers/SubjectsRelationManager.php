@@ -29,13 +29,13 @@ class SubjectsRelationManager extends RelationManager
     {
         return $form->schema([
             Forms\Components\Select::make('subject_id')
-                ->label('Mata Pelajaran')
+                ->label(__('Mata Pelajaran'))
                 ->options(fn () => Subject::query()->active()->orderBy('name')->pluck('name', 'id')->all())
                 ->searchable()
                 ->required(),
 
             Forms\Components\Select::make('teacher_id')
-                ->label('Guru Pengajar')
+                ->label(__('Guru Pengajar'))
                 ->options(fn () => static::teacherOptions())
                 ->searchable()
                 ->required(),
@@ -48,25 +48,25 @@ class SubjectsRelationManager extends RelationManager
             ->recordTitleAttribute('id')
             ->columns([
                 Tables\Columns\TextColumn::make('subject.code')
-                    ->label('Kode')
+                    ->label(__('Kode'))
                     ->badge(),
 
                 Tables\Columns\TextColumn::make('subject.name')
-                    ->label('Mata Pelajaran')
+                    ->label(__('Mata Pelajaran'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('teacher.name')
-                    ->label('Guru Pengajar')
+                    ->label(__('Guru Pengajar'))
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('schedules_count')
-                    ->label('Jadwal')
+                    ->label(__('Jadwal'))
                     ->counts('schedules'),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
-                    ->label('Tambahkan Mata Pelajaran')
+                    ->label(__('Tambahkan Mata Pelajaran'))
                     ->mutateFormDataUsing(function (array $data): array {
                         /** @var SchoolClass $class */
                         $class = $this->getOwnerRecord();
@@ -103,5 +103,10 @@ class SubjectsRelationManager extends RelationManager
             ->orderBy('name')
             ->pluck('name', 'id')
             ->all();
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
     }
 }

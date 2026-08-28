@@ -47,25 +47,25 @@ class ReportCardResource extends Resource
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist->schema([
-            Infolists\Components\Section::make('Identitas')
+            Infolists\Components\Section::make(__('Identitas'))
                 ->columns(3)
                 ->schema([
-                    Infolists\Components\TextEntry::make('student.full_name')->label('Siswa'),
-                    Infolists\Components\TextEntry::make('student.nis')->label('NIS'),
-                    Infolists\Components\TextEntry::make('schoolClass.name')->label('Kelas'),
-                    Infolists\Components\TextEntry::make('academicYear.name')->label('Tahun Ajaran'),
+                    Infolists\Components\TextEntry::make('student.full_name')->label(__('Siswa')),
+                    Infolists\Components\TextEntry::make('student.nis')->label(__('NIS')),
+                    Infolists\Components\TextEntry::make('schoolClass.name')->label(__('Kelas')),
+                    Infolists\Components\TextEntry::make('academicYear.name')->label(__('Tahun Ajaran')),
                     Infolists\Components\TextEntry::make('is_published')
-                        ->label('Status')
+                        ->label(__('Status'))
                         ->badge()
                         ->formatStateUsing(fn (bool $state) => $state ? 'Diterbitkan' : 'Draft')
                         ->color(fn (bool $state) => $state ? 'success' : 'gray'),
                     Infolists\Components\TextEntry::make('published_at')
-                        ->label('Diterbitkan')
+                        ->label(__('Diterbitkan'))
                         ->dateTime('d M Y H:i')
                         ->placeholder('—'),
                 ]),
 
-            Infolists\Components\Section::make('Nilai Akhir per Mata Pelajaran')
+            Infolists\Components\Section::make(__('Nilai Akhir per Mata Pelajaran'))
                 ->schema([
                     Infolists\Components\KeyValueEntry::make('final_scores')
                         ->label('')
@@ -73,22 +73,22 @@ class ReportCardResource extends Resource
                         ->valueLabel('Nilai Akhir'),
 
                     Infolists\Components\TextEntry::make('average')
-                        ->label('Rata-rata')
+                        ->label(__('Rata-rata'))
                         ->state(fn (ReportCard $record) => $record->averageScore() ?? '—'),
                 ]),
 
-            Infolists\Components\Section::make('Sikap & Catatan')
+            Infolists\Components\Section::make(__('Sikap & Catatan'))
                 ->columns(2)
                 ->schema([
                     Infolists\Components\TextEntry::make('attitude_score')
-                        ->label('Predikat Sikap')
+                        ->label(__('Predikat Sikap'))
                         ->badge()
                         ->formatStateUsing(fn (?AttitudePredicate $state) => $state?->label() ?? '—')
                         ->color(fn (?AttitudePredicate $state) => $state?->color() ?? 'gray')
                         ->placeholder('—'),
 
                     Infolists\Components\TextEntry::make('homeroom_notes')
-                        ->label('Catatan Wali Kelas')
+                        ->label(__('Catatan Wali Kelas'))
                         ->placeholder('—'),
                 ]),
         ]);
@@ -99,46 +99,46 @@ class ReportCardResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('student.full_name')
-                    ->label('Siswa')
+                    ->label(__('Siswa'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('student.nis')
-                    ->label('NIS')
+                    ->label(__('NIS'))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('schoolClass.name')
-                    ->label('Kelas')
+                    ->label(__('Kelas'))
                     ->badge(),
 
                 Tables\Columns\TextColumn::make('academicYear.name')
-                    ->label('Tahun Ajaran')
+                    ->label(__('Tahun Ajaran'))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('average')
-                    ->label('Rata-rata')
+                    ->label(__('Rata-rata'))
                     ->state(fn (ReportCard $record) => $record->averageScore())
                     ->placeholder('—')
                     ->numeric(2),
 
                 Tables\Columns\TextColumn::make('attitude_score')
-                    ->label('Sikap')
+                    ->label(__('Sikap'))
                     ->badge()
                     ->placeholder('—')
                     ->color(fn (?AttitudePredicate $state) => $state?->color() ?? 'gray'),
 
                 Tables\Columns\IconColumn::make('is_published')
-                    ->label('Terbit')
+                    ->label(__('Terbit'))
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('published_at')
-                    ->label('Waktu Terbit')
+                    ->label(__('Waktu Terbit'))
                     ->dateTime('d M Y H:i')
                     ->placeholder('—')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('pdf_status')
-                    ->label('PDF')
+                    ->label(__('PDF'))
                     ->badge()
                     ->placeholder('—')
                     ->formatStateUsing(fn (?ReportCardPdfStatus $state) => $state?->label())
@@ -147,14 +147,14 @@ class ReportCardResource extends Resource
             ])
             // API 4.8 — filter: student_id, academic_year_id, is_published.
             ->filters([
-                Tables\Filters\TernaryFilter::make('is_published')->label('Sudah Terbit'),
+                Tables\Filters\TernaryFilter::make('is_published')->label(__('Sudah Terbit')),
 
                 Tables\Filters\SelectFilter::make('academic_year_id')
-                    ->label('Tahun Ajaran')
+                    ->label(__('Tahun Ajaran'))
                     ->options(fn () => AcademicYear::query()->orderByDesc('start_date')->pluck('name', 'id')),
 
                 Tables\Filters\SelectFilter::make('class_id')
-                    ->label('Kelas')
+                    ->label(__('Kelas'))
                     ->options(fn () => SchoolClass::query()->orderBy('name')->pluck('name', 'id')),
             ])
             ->actions([
@@ -173,18 +173,18 @@ class ReportCardResource extends Resource
     public static function publishAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('publish')
-            ->label('Terbitkan')
+            ->label(__('Terbitkan'))
             ->icon('heroicon-o-paper-airplane')
             ->color('success')
             ->authorize('publish')
             ->requiresConfirmation()
-            ->modalDescription('Setelah diterbitkan, nilai siswa ini terkunci dan tidak dapat diedit.')
+            ->modalDescription(__('Setelah diterbitkan, nilai siswa ini terkunci dan tidak dapat diedit.'))
             ->action(function (ReportCard $record): void {
                 try {
                     app(ReportCardGenerator::class)->publish($record, Auth::user());
                 } catch (ValidationException $exception) {
                     Notification::make()
-                        ->title('Rapor belum dapat diterbitkan')
+                        ->title(__('Rapor belum dapat diterbitkan'))
                         ->body((string) collect($exception->errors())->flatten()->first())
                         ->danger()
                         ->send();
@@ -202,7 +202,7 @@ class ReportCardResource extends Resource
     public static function pdfAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('pdf')
-            ->label('Unduh PDF')
+            ->label(__('Unduh PDF'))
             ->icon('heroicon-o-arrow-down-tray')
             ->color('gray')
             ->authorize('downloadPdf')
@@ -233,7 +233,7 @@ class ReportCardResource extends Resource
     public static function pdfFromStorageAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('pdfFromStorage')
-            ->label('Unduh PDF (hasil antrean)')
+            ->label(__('Unduh PDF (hasil antrean)'))
             ->icon('heroicon-o-arrow-down-on-square')
             ->color('success')
             ->authorize('downloadPdf')
@@ -254,5 +254,25 @@ class ReportCardResource extends Resource
             'index' => Pages\ListReportCards::route('/'),
             'view' => Pages\ViewReportCard::route('/{record}'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

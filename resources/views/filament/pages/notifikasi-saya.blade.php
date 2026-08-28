@@ -23,11 +23,11 @@
              bukan hanya terlihat. --}}
         <p class="text-sm text-gray-500 dark:text-gray-400" aria-live="polite">
             @if ($unreadCount > 0)
-                {{ $unreadCount }} belum dibaca dari {{ count($items) }} notifikasi
+                {{ __(':unread belum dibaca dari :total notifikasi', ['unread' => $unreadCount, 'total' => count($items)]) }}
             @elseif (count($items) > 0)
-                Semua notifikasi sudah dibaca
+                {{ __('Semua notifikasi sudah dibaca') }}
             @else
-                Belum ada notifikasi
+                {{ __('Belum ada notifikasi') }}
             @endif
         </p>
 
@@ -37,7 +37,7 @@
                 wire:click="markAllRead"
                 wire:loading.attr="disabled"
             >
-                Tandai semua dibaca
+                {{ __('Tandai semua dibaca') }}
             </x-filament::button>
         @endif
     </div>
@@ -79,9 +79,9 @@
 
                         {{-- Keadaan terbaca selalu punya teksnya sendiri. --}}
                         @if ($item['is_read'])
-                            <x-filament::badge color="gray">Sudah dibaca</x-filament::badge>
+                            <x-filament::badge color="gray">{{ __('Sudah dibaca') }}</x-filament::badge>
                         @else
-                            <x-filament::badge color="warning">Belum dibaca</x-filament::badge>
+                            <x-filament::badge color="warning">{{ __('Belum dibaca') }}</x-filament::badge>
                         @endif
                     </span>
                 </button>
@@ -92,13 +92,13 @@
 
                         <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
                             @if ($item['sender_name'])
-                                Dari {{ $item['sender_name'] }}
+                                {{ __('Dari') }} {{ $item['sender_name'] }}
                             @else
-                                Notifikasi sistem
+                                {{ __('Notifikasi sistem') }}
                             @endif
 
                             @if ($item['read_at_label'])
-                                &middot; Dibaca {{ $item['read_at_label'] }}
+                                &middot; {{ __('Dibaca') }} {{ $item['read_at_label'] }}
                             @endif
                         </p>
                     </div>
@@ -106,9 +106,9 @@
             </x-filament::section>
         @empty
             <x-filament::section>
-                <div class="font-medium text-gray-950 dark:text-white">Belum ada notifikasi</div>
+                <div class="font-medium text-gray-950 dark:text-white">{{ __('Belum ada notifikasi') }}</div>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    Pengumuman yang ditujukan kepada Anda akan muncul di halaman ini.
+                    {{ __('Pengumuman yang ditujukan kepada Anda akan muncul di halaman ini.') }}
                 </p>
             </x-filament::section>
         @endforelse

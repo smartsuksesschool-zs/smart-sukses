@@ -13,7 +13,7 @@ class ManageAcademicYears extends ManageRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make()->label('Tambah Tahun Ajaran'),
+            Actions\CreateAction::make()->label(__('Tambah Tahun Ajaran')),
         ];
     }
 }

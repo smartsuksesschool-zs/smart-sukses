@@ -60,7 +60,7 @@ class TransactionResource extends Resource
             // cabang harus dipilih eksplisit. Pola sama dengan FeeTypeResource
             // dan GenerateTagihan.
             Forms\Components\Select::make('school_id')
-                ->label('Cabang Sekolah')
+                ->label(__('Cabang Sekolah'))
                 ->options(fn (): array => School::query()
                     ->where('is_active', true)
                     ->orderBy('name')
@@ -74,10 +74,10 @@ class TransactionResource extends Resource
                 // yang sudah tercatat di buku kas cabang lain.
                 ->disabledOn('edit')
                 ->columnSpanFull()
-                ->helperText('Transaksi tercatat pada buku kas cabang ini.'),
+                ->helperText(__('Transaksi tercatat pada buku kas cabang ini.')),
 
             Forms\Components\Select::make('type')
-                ->label('Jenis')
+                ->label(__('Jenis'))
                 ->options(TransactionType::options())
                 ->default(TransactionType::Income->value)
                 ->required()
@@ -90,14 +90,14 @@ class TransactionResource extends Resource
             // ERD: `category` VARCHAR(100) — teks bebas, bukan enum. Contoh
             // pada ERD ditawarkan sebagai saran, bukan sebagai batasan.
             Forms\Components\TextInput::make('category')
-                ->label('Kategori')
+                ->label(__('Kategori'))
                 ->required()
                 ->maxLength(100)
                 ->datalist(static::categorySuggestions())
-                ->helperText('Boleh kategori lain di luar saran, maksimal 100 karakter.'),
+                ->helperText(__('Boleh kategori lain di luar saran, maksimal 100 karakter.')),
 
             Forms\Components\TextInput::make('amount')
-                ->label('Jumlah')
+                ->label(__('Jumlah'))
                 ->prefix('Rp')
                 ->numeric()
                 ->required()
@@ -108,10 +108,10 @@ class TransactionResource extends Resource
                 ->validationMessages([
                     'gt' => 'Jumlah harus lebih besar dari 0.',
                 ])
-                ->helperText('Selalu positif; pemasukan atau pengeluaran ditentukan oleh Jenis.'),
+                ->helperText(__('Selalu positif; pemasukan atau pengeluaran ditentukan oleh Jenis.')),
 
             Forms\Components\DatePicker::make('transaction_date')
-                ->label('Tanggal Transaksi')
+                ->label(__('Tanggal Transaksi'))
                 ->required()
                 ->default(now()),
 
@@ -119,13 +119,13 @@ class TransactionResource extends Resource
             // ERD: nullability database dan aturan alur kerja adalah dua hal
             // berbeda, dan skemanya tidak diubah untuk ini (butir 81).
             Forms\Components\TextInput::make('reference_number')
-                ->label('Nomor Referensi')
+                ->label(__('Nomor Referensi'))
                 ->required()
                 ->maxLength(100)
-                ->helperText('Nomor nota atau kuitansi yang menjadi dasar transaksi ini.'),
+                ->helperText(__('Nomor nota atau kuitansi yang menjadi dasar transaksi ini.')),
 
             Forms\Components\FileUpload::make('proof_url')
-                ->label('Bukti Transaksi')
+                ->label(__('Bukti Transaksi'))
                 // Disk privat: berkas ini tidak boleh punya URL statis.
                 ->disk(TransactionRecorder::PROOF_DISK)
                 ->directory(fn (?Transaction $record): string => TransactionRecorder::proofDirectory(
@@ -134,15 +134,15 @@ class TransactionResource extends Resource
                 ->visibility('private')
                 ->acceptedFileTypes(TransactionRecorder::PROOF_MIME_TYPES)
                 ->maxSize(TransactionRecorder::PROOF_MAX_KILOBYTES)
-                ->helperText('Scan nota/kwitansi — JPG/PNG/PDF, maksimal 5 MB.')
+                ->helperText(__('Scan nota/kwitansi — JPG/PNG/PDF, maksimal 5 MB.'))
                 ->columnSpanFull(),
 
             Forms\Components\Textarea::make('description')
-                ->label('Keterangan')
+                ->label(__('Keterangan'))
                 ->required()
                 ->rows(3)
                 ->columnSpanFull()
-                ->helperText('Penjelasan detail transaksi — wajib diisi.'),
+                ->helperText(__('Penjelasan detail transaksi — wajib diisi.')),
         ])->columns(2);
     }
 
@@ -151,45 +151,45 @@ class TransactionResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('transaction_date')
-                    ->label('Tanggal')
+                    ->label(__('Tanggal'))
                     ->date('d M Y')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('type')
-                    ->label('Jenis')
+                    ->label(__('Jenis'))
                     ->badge()
                     ->formatStateUsing(fn (TransactionType $state): string => $state->label())
                     ->color(fn (TransactionType $state): string => $state->color())
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('category')
-                    ->label('Kategori')
+                    ->label(__('Kategori'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('amount')
-                    ->label('Jumlah')
+                    ->label(__('Jumlah'))
                     ->money('IDR')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('reference_number')
-                    ->label('Referensi')
+                    ->label(__('Referensi'))
                     ->placeholder('—')
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('description')
-                    ->label('Keterangan')
+                    ->label(__('Keterangan'))
                     ->placeholder('—')
                     ->limit(40)
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('createdBy.name')
-                    ->label('Pencatat')
+                    ->label(__('Pencatat'))
                     ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('school.name')
-                    ->label('Cabang')
+                    ->label(__('Cabang'))
                     ->visible(fn (): bool => Auth::user()?->isSuperAdmin() ?? false)
                     ->toggleable(),
             ])
@@ -197,14 +197,14 @@ class TransactionResource extends Resource
                 // API 4.9 — GET /transactions, "Filter: type, category,
                 // date_from, date_to".
                 Tables\Filters\SelectFilter::make('type')
-                    ->label('Jenis')
+                    ->label(__('Jenis'))
                     ->options(TransactionType::options()),
 
                 Tables\Filters\Filter::make('transaction_date')
-                    ->label('Rentang Tanggal')
+                    ->label(__('Rentang Tanggal'))
                     ->form([
-                        Forms\Components\DatePicker::make('from')->label('Dari Tanggal'),
-                        Forms\Components\DatePicker::make('until')->label('Sampai Tanggal'),
+                        Forms\Components\DatePicker::make('from')->label(__('Dari Tanggal')),
+                        Forms\Components\DatePicker::make('until')->label(__('Sampai Tanggal')),
                     ])
                     ->query(fn (Builder $query, array $data): Builder => $query->betweenDates(
                         $data['from'] ?? null,
@@ -244,24 +244,24 @@ class TransactionResource extends Resource
     protected static function deleteAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('softDelete')
-            ->label('Hapus')
+            ->label(__('Hapus'))
             ->icon('heroicon-m-trash')
             ->color('danger')
             ->requiresConfirmation()
-            ->modalHeading('Hapus transaksi kas')
+            ->modalHeading(__('Hapus transaksi kas'))
             ->modalDescription(
                 'Transaksi tidak akan lagi muncul di buku kas, saldo, laporan, maupun ekspor. '
                 .'Datanya tetap tersimpan untuk keperluan audit, tetapi tidak ada cara '
                 .'mengembalikannya sendiri dari halaman ini.'
             )
-            ->modalSubmitActionLabel('Hapus transaksi')
+            ->modalSubmitActionLabel(__('Hapus transaksi'))
             ->visible(fn (Transaction $record): bool => Auth::user()?->can('delete', $record) ?? false)
             ->action(function (Transaction $record): void {
                 try {
                     app(TransactionRecorder::class)->delete($record->getKey(), Auth::user());
                 } catch (AuthorizationException|ValidationException $e) {
                     Notification::make()
-                        ->title('Transaksi tidak dapat dihapus')
+                        ->title(__('Transaksi tidak dapat dihapus'))
                         ->body($e->getMessage())
                         ->danger()
                         ->send();
@@ -270,7 +270,7 @@ class TransactionResource extends Resource
                 }
 
                 Notification::make()
-                    ->title('Transaksi dihapus')
+                    ->title(__('Transaksi dihapus'))
                     ->success()
                     ->send();
             });
@@ -279,33 +279,33 @@ class TransactionResource extends Resource
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist->schema([
-            Infolists\Components\Section::make('Transaksi')
+            Infolists\Components\Section::make(__('Transaksi'))
                 ->columns(3)
                 ->schema([
                     Infolists\Components\TextEntry::make('transaction_date')
-                        ->label('Tanggal')
+                        ->label(__('Tanggal'))
                         ->date('d M Y'),
                     Infolists\Components\TextEntry::make('type')
-                        ->label('Jenis')
+                        ->label(__('Jenis'))
                         ->badge()
                         ->formatStateUsing(fn (TransactionType $state): string => $state->label())
                         ->color(fn (TransactionType $state): string => $state->color()),
-                    Infolists\Components\TextEntry::make('category')->label('Kategori'),
-                    Infolists\Components\TextEntry::make('amount')->label('Jumlah')->money('IDR'),
+                    Infolists\Components\TextEntry::make('category')->label(__('Kategori')),
+                    Infolists\Components\TextEntry::make('amount')->label(__('Jumlah'))->money('IDR'),
                     Infolists\Components\TextEntry::make('reference_number')
-                        ->label('Nomor Referensi')
+                        ->label(__('Nomor Referensi'))
                         ->placeholder('—'),
                     Infolists\Components\TextEntry::make('createdBy.name')
-                        ->label('Dicatat Oleh')
+                        ->label(__('Dicatat Oleh'))
                         ->placeholder('—'),
                     Infolists\Components\TextEntry::make('created_at')
-                        ->label('Dicatat Pada')
+                        ->label(__('Dicatat Pada'))
                         ->dateTime('d M Y H:i'),
                     Infolists\Components\TextEntry::make('school.name')
-                        ->label('Cabang')
+                        ->label(__('Cabang'))
                         ->visible(fn (): bool => Auth::user()?->isSuperAdmin() ?? false),
                     Infolists\Components\TextEntry::make('description')
-                        ->label('Keterangan')
+                        ->label(__('Keterangan'))
                         ->placeholder('—')
                         ->columnSpanFull(),
                 ]),
@@ -321,7 +321,7 @@ class TransactionResource extends Resource
     public static function downloadProofAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('downloadProof')
-            ->label('Unduh Bukti')
+            ->label(__('Unduh Bukti'))
             ->icon('heroicon-o-arrow-down-tray')
             ->visible(fn (Transaction $record): bool => $record->hasDownloadableProof()
                 && (Auth::user()?->can('downloadProof', $record) ?? false))
@@ -370,5 +370,25 @@ class TransactionResource extends Resource
             'view' => Pages\ViewTransaction::route('/{record}'),
             'edit' => Pages\EditTransaction::route('/{record}/edit'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

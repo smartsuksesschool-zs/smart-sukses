@@ -42,34 +42,34 @@ class GradeResource extends Resource
     {
         return $form->schema([
             Forms\Components\Select::make('class_subject_id')
-                ->label('Kelas — Mata Pelajaran')
+                ->label(__('Kelas — Mata Pelajaran'))
                 ->options(fn () => static::classSubjectOptions())
                 ->searchable()
                 ->required()
                 ->disabledOn('edit'),
 
             Forms\Components\Select::make('student_id')
-                ->label('Siswa')
+                ->label(__('Siswa'))
                 ->options(fn () => Student::query()->active()->orderBy('full_name')->pluck('full_name', 'id'))
                 ->searchable()
                 ->required()
                 ->disabledOn('edit'),
 
             Forms\Components\Select::make('grade_type')
-                ->label('Komponen')
+                ->label(__('Komponen'))
                 ->options(GradeType::options())
                 ->required()
                 ->disabledOn('edit'),
 
             Forms\Components\Select::make('assessment_type')
-                ->label('Jenis Penilaian')
+                ->label(__('Jenis Penilaian'))
                 ->options(AssessmentType::options())
                 ->default(AssessmentType::Summative->value)
                 ->required()
-                ->helperText('Hanya penilaian sumatif yang dihitung ke rapor.'),
+                ->helperText(__('Hanya penilaian sumatif yang dihitung ke rapor.')),
 
             Forms\Components\TextInput::make('score')
-                ->label('Nilai')
+                ->label(__('Nilai'))
                 ->numeric()
                 // NILAI-01 poin 1 — skala 0–100.
                 ->minValue(Grade::MIN_SCORE)
@@ -78,9 +78,9 @@ class GradeResource extends Resource
                 ->required(),
 
             Forms\Components\TextInput::make('description')
-                ->label('Keterangan')
+                ->label(__('Keterangan'))
                 ->maxLength(200)
-                ->placeholder('Ulangan Harian Bab 3')
+                ->placeholder(__('Ulangan Harian Bab 3'))
                 ->columnSpanFull(),
         ])->columns(2);
     }
@@ -90,41 +90,41 @@ class GradeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('student.full_name')
-                    ->label('Siswa')
+                    ->label(__('Siswa'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('classSubject.subject.name')
-                    ->label('Mata Pelajaran'),
+                    ->label(__('Mata Pelajaran')),
 
                 Tables\Columns\TextColumn::make('classSubject.schoolClass.name')
-                    ->label('Kelas')
+                    ->label(__('Kelas'))
                     ->badge(),
 
                 Tables\Columns\TextColumn::make('grade_type')
-                    ->label('Komponen')
+                    ->label(__('Komponen'))
                     ->badge()
                     ->formatStateUsing(fn (GradeType $state) => $state->label()),
 
                 Tables\Columns\TextColumn::make('assessment_type')
-                    ->label('Jenis')
+                    ->label(__('Jenis'))
                     ->badge()
                     ->formatStateUsing(fn (AssessmentType $state) => $state->label())
                     ->color(fn (AssessmentType $state) => $state->color()),
 
                 Tables\Columns\TextColumn::make('score')
-                    ->label('Nilai')
+                    ->label(__('Nilai'))
                     ->numeric(2)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('weight')
-                    ->label('Bobot (snapshot)')
+                    ->label(__('Bobot (snapshot)'))
                     ->placeholder('—')
                     ->numeric(2)
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('graded_at')
-                    ->label('Diinput')
+                    ->label(__('Diinput'))
                     ->dateTime('d M Y H:i')
                     ->sortable()
                     ->toggleable(),
@@ -132,24 +132,24 @@ class GradeResource extends Resource
             // API 4.8 — filter: student_id, class_subject_id, academic_year_id, grade_type.
             ->filters([
                 Tables\Filters\SelectFilter::make('class_subject_id')
-                    ->label('Kelas — Mapel')
+                    ->label(__('Kelas — Mapel'))
                     ->options(fn () => static::classSubjectOptions()),
 
                 Tables\Filters\SelectFilter::make('student_id')
-                    ->label('Siswa')
+                    ->label(__('Siswa'))
                     ->options(fn () => Student::query()->orderBy('full_name')->pluck('full_name', 'id'))
                     ->searchable(),
 
                 Tables\Filters\SelectFilter::make('academic_year_id')
-                    ->label('Tahun Ajaran')
+                    ->label(__('Tahun Ajaran'))
                     ->options(fn () => AcademicYear::query()->orderByDesc('start_date')->pluck('name', 'id')),
 
                 Tables\Filters\SelectFilter::make('grade_type')
-                    ->label('Komponen')
+                    ->label(__('Komponen'))
                     ->options(GradeType::options()),
 
                 Tables\Filters\SelectFilter::make('assessment_type')
-                    ->label('Jenis Penilaian')
+                    ->label(__('Jenis Penilaian'))
                     ->options(AssessmentType::options()),
             ])
             ->actions([
@@ -187,5 +187,25 @@ class GradeResource extends Resource
             'create' => Pages\CreateGrade::route('/create'),
             'edit' => Pages\EditGrade::route('/{record}/edit'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

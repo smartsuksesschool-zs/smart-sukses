@@ -3,9 +3,9 @@
         @include('livewire.student.partials.unlinked')
     @else
         <div class="portal-card" style="margin-bottom:1rem;">
-            <div class="portal-label">Ujian Online</div>
+            <div class="portal-label">{{ __('Ujian Online') }}</div>
             <div class="portal-muted" style="margin-top:.25rem;">
-                Ujian untuk kelas Anda pada tahun ajaran yang sedang berjalan.
+                {{ __('Ujian untuk kelas Anda pada tahun ajaran yang sedang berjalan.') }}
             </div>
         </div>
 
@@ -19,7 +19,7 @@
         @if (empty($rows))
             <div class="portal-card">
                 <p class="portal-muted" style="margin:0;">
-                    Belum ada ujian online untuk kelas Anda.
+                    {{ __('Belum ada ujian online untuk kelas Anda.') }}
                 </p>
             </div>
         @else
@@ -34,35 +34,35 @@
                         </div>
 
                         <div class="portal-muted" style="margin-top:.375rem;">
-                            {{ $row['subject_name'] ?? 'Mata pelajaran' }}
+                            {{ $row['subject_name'] ?? __('Mata pelajaran') }}
                             @if ($row['class_name'])
-                                — Kelas {{ $row['class_name'] }}
+                                — {{ __('Kelas') }} {{ $row['class_name'] }}
                             @endif
                         </div>
 
                         <ul class="portal-list" style="margin-top:.75rem;">
                             <li>
-                                <span class="portal-muted">Dibuka</span>
+                                <span class="portal-muted">{{ __('Dibuka') }}</span>
                                 <span>{{ $row['available_from']?->translatedFormat('d M Y H:i') ?? '—' }}</span>
                             </li>
                             <li>
-                                <span class="portal-muted">Ditutup</span>
+                                <span class="portal-muted">{{ __('Ditutup') }}</span>
                                 <span>{{ $row['available_until']?->translatedFormat('d M Y H:i') ?? '—' }}</span>
                             </li>
                             <li>
-                                <span class="portal-muted">Durasi</span>
-                                <span>{{ $row['duration_minutes'] }} menit · {{ $row['question_count'] }} soal</span>
+                                <span class="portal-muted">{{ __('Durasi') }}</span>
+                                <span>{{ trans_choice(':count menit|:count menit', $row['duration_minutes']) }} · {{ trans_choice(':count soal|:count soal', $row['question_count']) }}</span>
                             </li>
 
                             @if ($row['state']->hasResult())
                                 <li>
-                                    <span class="portal-muted">Nilai</span>
+                                    <span class="portal-muted">{{ __('Nilai') }}</span>
                                     <span style="font-weight:700;">
                                         {{ $row['score'] === null ? '—' : number_format($row['score'], 2, ',', '.') }}
                                     </span>
                                 </li>
                                 <li>
-                                    <span class="portal-muted">Dikumpulkan</span>
+                                    <span class="portal-muted">{{ __('Dikumpulkan') }}</span>
                                     <span>{{ $row['submitted_at']?->translatedFormat('d M Y H:i') ?? '—' }}</span>
                                 </li>
                             @endif
@@ -85,8 +85,8 @@
                                  terlihat, tetapi tidak ada yang dapat ditekan. --}}
                             <p class="portal-muted" style="margin:.75rem 0 0;">
                                 {{ $row['state'] === \App\Enums\StudentExamState::Upcoming
-                                    ? 'Ujian ini belum dibuka.'
-                                    : 'Waktu ujian ini sudah berakhir.' }}
+                                    ? __('Ujian ini belum dibuka.')
+                                    : __('Waktu ujian ini sudah berakhir.') }}
                             </p>
                         @endif
                     </div>

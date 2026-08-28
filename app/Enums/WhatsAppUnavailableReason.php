@@ -27,9 +27,9 @@ enum WhatsAppUnavailableReason: string
     public function label(): string
     {
         return match ($this) {
-            self::MissingPhone => 'Nomor HP belum diisi',
-            self::InvalidPhone => 'Nomor HP tidak valid',
-            self::AmbiguousPhone => 'Nomor HP orang tua berbeda antar anak',
+            self::MissingPhone => __('Nomor HP belum diisi'),
+            self::InvalidPhone => __('Nomor HP tidak valid'),
+            self::AmbiguousPhone => __('Nomor HP orang tua berbeda antar anak'),
         };
     }
 

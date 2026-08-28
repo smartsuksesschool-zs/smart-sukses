@@ -18,13 +18,13 @@ enum DayOfWeek: int
     public function label(): string
     {
         return match ($this) {
-            self::Monday => 'Senin',
-            self::Tuesday => 'Selasa',
-            self::Wednesday => 'Rabu',
-            self::Thursday => 'Kamis',
-            self::Friday => 'Jumat',
-            self::Saturday => 'Sabtu',
-            self::Sunday => 'Minggu',
+            self::Monday => __('Senin'),
+            self::Tuesday => __('Selasa'),
+            self::Wednesday => __('Rabu'),
+            self::Thursday => __('Kamis'),
+            self::Friday => __('Jumat'),
+            self::Saturday => __('Sabtu'),
+            self::Sunday => __('Minggu'),
         };
     }
 

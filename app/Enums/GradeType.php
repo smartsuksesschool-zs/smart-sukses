@@ -22,12 +22,12 @@ enum GradeType: string
     public function label(): string
     {
         return match ($this) {
-            self::Daily => 'Harian',
-            self::Midterm => 'UTS',
-            self::Final => 'UAS',
-            self::Assignment => 'Tugas',
-            self::Skill => 'Keterampilan',
-            self::Attitude => 'Sikap',
+            self::Daily => __('Harian'),
+            self::Midterm => __('UTS'),
+            self::Final => __('UAS'),
+            self::Assignment => __('Tugas'),
+            self::Skill => __('Keterampilan'),
+            self::Attitude => __('Sikap'),
         };
     }
 

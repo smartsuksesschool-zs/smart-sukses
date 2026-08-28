@@ -24,7 +24,7 @@ class ListTransactions extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make()->label('Catat Transaksi'),
+            Actions\CreateAction::make()->label(__('Catat Transaksi')),
             static::exportAction(),
         ];
     }
@@ -40,12 +40,12 @@ class ListTransactions extends ListRecords
     public static function exportAction(): Actions\Action
     {
         return Actions\Action::make('export')
-            ->label('Export Excel')
+            ->label(__('Export Excel'))
             ->icon('heroicon-o-arrow-down-tray')
             ->color('gray')
-            ->modalHeading('Export Buku Kas')
-            ->modalDescription('Berkas .xlsx berisi tanggal, jenis, kategori, jumlah, keterangan, nomor referensi, dan pencatat. Tagihan SPP tidak termasuk — laporan itu diekspor dari halaman Tagihan Siswa.')
-            ->modalSubmitActionLabel('Unduh')
+            ->modalHeading(__('Export Buku Kas'))
+            ->modalDescription(__('Berkas .xlsx berisi tanggal, jenis, kategori, jumlah, keterangan, nomor referensi, dan pencatat. Tagihan SPP tidak termasuk — laporan itu diekspor dari halaman Tagihan Siswa.'))
+            ->modalSubmitActionLabel(__('Unduh'))
             // Disembunyikan bila tidak berwenang — tetapi pagarnya ada di
             // CashLedgerExporter, yang memeriksa izin yang sama pada jalur yang
             // benar-benar menghasilkan berkas.
@@ -64,7 +64,7 @@ class ListTransactions extends ListRecords
             // cabang, jadi Super Admin memilih cabangnya lebih dulu alih-alih
             // mengunduh seluruh cabang tanpa menyadarinya.
             Forms\Components\Select::make('school_id')
-                ->label('Cabang Sekolah')
+                ->label(__('Cabang Sekolah'))
                 ->options(fn (): array => School::query()
                     ->orderBy('name')
                     ->pluck('name', 'id')
@@ -75,16 +75,16 @@ class ListTransactions extends ListRecords
                 ->live()
                 ->afterStateUpdated(fn (Forms\Set $set) => $set('category', null))
                 ->visible(fn (): bool => Auth::user()?->isSuperAdmin() ?? false)
-                ->helperText('Laporan berisi satu cabang.'),
+                ->helperText(__('Laporan berisi satu cabang.')),
 
             Forms\Components\DatePicker::make('date_from')
-                ->label('Dari Tanggal')
+                ->label(__('Dari Tanggal'))
                 ->required()
                 ->default(now()->startOfMonth())
-                ->helperText('Rentang wajib diisi supaya tidak seluruh riwayat ikut terunduh.'),
+                ->helperText(__('Rentang wajib diisi supaya tidak seluruh riwayat ikut terunduh.')),
 
             Forms\Components\DatePicker::make('date_until')
-                ->label('Sampai Tanggal')
+                ->label(__('Sampai Tanggal'))
                 ->required()
                 ->default(now()->endOfMonth())
                 ->afterOrEqual('date_from')
@@ -93,19 +93,19 @@ class ListTransactions extends ListRecords
                 ]),
 
             Forms\Components\Select::make('type')
-                ->label('Jenis')
+                ->label(__('Jenis'))
                 ->options(TransactionType::options())
-                ->placeholder('Pemasukan dan pengeluaran')
+                ->placeholder(__('Pemasukan dan pengeluaran'))
                 ->rule(Rule::enum(TransactionType::class)),
 
             // ERD: `category` VARCHAR bebas. Daftarnya hanya saran dari
             // kategori yang benar-benar dipakai cabang ini.
             Forms\Components\Select::make('category')
-                ->label('Kategori')
+                ->label(__('Kategori'))
                 ->options(fn (Forms\Get $get): array => app(CashLedgerExporter::class)
                     ->categoryOptions(static::resolveSchoolId($get('school_id'))))
                 ->searchable()
-                ->placeholder('Semua kategori'),
+                ->placeholder(__('Semua kategori')),
         ];
     }
 

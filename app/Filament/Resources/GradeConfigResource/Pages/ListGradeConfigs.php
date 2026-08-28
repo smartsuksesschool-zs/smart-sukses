@@ -12,6 +12,6 @@ class ListGradeConfigs extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [Actions\CreateAction::make()->label('Konfigurasi Baru')];
+        return [Actions\CreateAction::make()->label(__('Konfigurasi Baru'))];
     }
 }

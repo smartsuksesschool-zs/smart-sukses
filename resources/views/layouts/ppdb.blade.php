@@ -135,6 +135,34 @@
         .nav-links { margin-top: 1rem; font-size: .875rem; }
 
         .nav-links a { color: var(--color-primary); }
+
+        /* -------------------------------------------- pemilih bahasa (AUTH-05) */
+
+        .locale-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: .125rem;
+            margin-top: .75rem;
+        }
+
+        .locale-switch__item {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            /* Sasaran sentuh untuk jari, bukan kursor. */
+            min-width: 2.75rem;
+            min-height: 2.75rem;
+            padding: 0 .5rem;
+            border-radius: .5rem;
+            color: #fff;
+            font-size: .8125rem;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .locale-switch__item--active { background: rgba(255, 255, 255, .28); }
+
+        a.locale-switch__item:hover { background: rgba(255, 255, 255, .18); }
     </style>
 
     @livewireStyles
@@ -144,6 +172,7 @@
         <div class="ppdb-shell">
             <h1>{{ $school?->name ?? config('app.name') }}</h1>
             <p>{{ __('Penerimaan Peserta Didik Baru (PPDB) Online') }}</p>
+            <x-locale-switch />
         </div>
     </header>
 

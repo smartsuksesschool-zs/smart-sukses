@@ -3,25 +3,25 @@
 
     @if ($data === null)
         <div class="portal-card">
-            <h1 style="margin-top:0;font-size:1.25rem;">Belum ada data anak</h1>
+            <h1 style="margin-top:0;font-size:1.25rem;">{{ __('Belum ada data anak') }}</h1>
             <p class="portal-muted" style="margin-bottom:0;">
-                Akun Anda belum terhubung dengan data siswa mana pun.
+                {{ __('Akun Anda belum terhubung dengan data siswa mana pun.') }}
             </p>
         </div>
     @else
         @php($child = $data['child'])
 
         <div class="portal-card" style="margin-bottom:1rem;">
-            <div class="portal-label">Nilai</div>
+            <div class="portal-label">{{ __('Nilai') }}</div>
             <div style="font-size:1.25rem;font-weight:700;">{{ $child->full_name }}</div>
             <div class="portal-muted">
                 @if ($data['academic_year'])
-                    Tahun ajaran {{ $data['academic_year']->name }}
+                    {{ __('Tahun Ajaran') }} {{ $data['academic_year']->name }}
                 @else
-                    Belum ada tahun ajaran aktif
+                    {{ __('Belum ada tahun ajaran aktif') }}
                 @endif
                 @if ($child->activeStudentClass?->schoolClass)
-                    — Kelas {{ $child->activeStudentClass->schoolClass->name }}
+                    — {{ __('Kelas') }} {{ $child->activeStudentClass->schoolClass->name }}
                 @endif
             </div>
         </div>
@@ -29,12 +29,12 @@
         {{-- NILAI-04 poin 2 & 3 — rapor hanya setelah diterbitkan. --}}
         @if ($data['report_card'])
             <div class="portal-card" style="margin-bottom:1rem;">
-                <div class="portal-label">Rapor Final</div>
+                <div class="portal-label">{{ __('Rapor Final') }}</div>
                 <div class="portal-muted" style="margin-bottom:.5rem;">
-                    Diterbitkan
+                    {{ __('Diterbitkan') }}
                     {{ $data['report_card']->published_at?->translatedFormat('d F Y') }}
                     @if ($data['report_card']->averageScore() !== null)
-                        — rata-rata {{ number_format($data['report_card']->averageScore(), 2, ',', '.') }}
+                        — {{ __('Rata-rata') }} {{ number_format($data['report_card']->averageScore(), 2, ',', '.') }}
                     @endif
                 </div>
                 <a
@@ -44,20 +44,20 @@
                     ]) }}"
                     class="portal-child-button"
                     style="text-decoration:none;display:inline-flex;align-items:center;"
-                >Unduh Rapor (PDF)</a>
+                >{{ __('Unduh Rapor (PDF)') }}</a>
             </div>
         @endif
 
         @if ($data['academic_year'] === null)
             <div class="portal-card">
                 <p class="portal-muted" style="margin:0;">
-                    Belum ada tahun ajaran aktif di sekolah ini, sehingga nilai belum dapat ditampilkan.
+                    {{ __('Belum ada tahun ajaran aktif di sekolah ini, sehingga nilai belum dapat ditampilkan.') }}
                 </p>
             </div>
         @elseif (empty($data['subjects']))
             <div class="portal-card">
                 <p class="portal-muted" style="margin:0;">
-                    Belum ada nilai pada tahun ajaran yang sedang berjalan.
+                    {{ __('Belum ada nilai pada tahun ajaran yang sedang berjalan.') }}
                 </p>
             </div>
         @else
@@ -75,10 +75,10 @@
                                 <div class="portal-muted">{{ $subject['subject_code'] }}</div>
                             </div>
                             <div style="text-align:right;">
-                                <div class="portal-label">Nilai Akhir</div>
+                                <div class="portal-label">{{ __('Nilai Akhir') }}</div>
                                 <div style="font-size:1.25rem;font-weight:700;">
                                     @if ($subject['final_score'] === null)
-                                        <span class="portal-muted" style="font-size:.9375rem;">belum lengkap</span>
+                                        <span class="portal-muted" style="font-size:.9375rem;">{{ __('belum lengkap') }}</span>
                                     @else
                                         {{ number_format($subject['final_score'], 2, ',', '.') }}
                                     @endif
@@ -90,9 +90,9 @@
                             <table class="portal-table">
                                 <thead>
                                     <tr>
-                                        <th>Penilaian</th>
-                                        <th>Sifat</th>
-                                        <th style="text-align:right;">Nilai</th>
+                                        <th>{{ __('Penilaian') }}</th>
+                                        <th>{{ __('Sifat') }}</th>
+                                        <th style="text-align:right;">{{ __('Nilai') }}</th>
                                     </tr>
                                 </thead>
                                 <tbody>

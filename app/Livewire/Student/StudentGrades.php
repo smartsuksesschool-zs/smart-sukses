@@ -21,6 +21,6 @@ class StudentGrades extends Component
             'data' => $this->hasStudent()
                 ? app(StudentPortalService::class)->grades(Auth::user())
                 : null,
-        ])->layout('layouts.portal', ['title' => 'Nilai']);
+        ])->layout('layouts.portal', ['title' => __('Nilai')]);
     }
 }

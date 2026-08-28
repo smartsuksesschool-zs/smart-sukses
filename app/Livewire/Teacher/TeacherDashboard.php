@@ -17,6 +17,6 @@ class TeacherDashboard extends Component
     {
         return view('livewire.teacher.dashboard', [
             'data' => app(TeacherPortalService::class)->dashboard(Auth::user()),
-        ])->layout('layouts.portal', ['title' => 'Dasbor Guru']);
+        ])->layout('layouts.portal', ['title' => __('Dasbor Guru')]);
     }
 }

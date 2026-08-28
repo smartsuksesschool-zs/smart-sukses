@@ -3,23 +3,23 @@
 
     @if ($data === null)
         <div class="portal-card">
-            <h1 style="margin-top:0;font-size:1.25rem;">Belum ada data anak</h1>
+            <h1 style="margin-top:0;font-size:1.25rem;">{{ __('Belum ada data anak') }}</h1>
             <p class="portal-muted" style="margin-bottom:0;">
-                Akun Anda belum terhubung dengan data siswa mana pun.
+                {{ __('Akun Anda belum terhubung dengan data siswa mana pun.') }}
             </p>
         </div>
     @else
         @php($child = $data['child'])
 
         <div class="portal-card" style="margin-bottom:1rem;">
-            <div class="portal-label">Tagihan</div>
+            <div class="portal-label">{{ __('Tagihan') }}</div>
             <div style="font-size:1.25rem;font-weight:700;">{{ $child->full_name }}</div>
             <div class="portal-muted">NIS {{ $child->nis }}</div>
         </div>
 
         @if ($data['fees']->isEmpty())
             <div class="portal-card">
-                <p class="portal-muted" style="margin:0;">Belum ada tagihan untuk anak ini.</p>
+                <p class="portal-muted" style="margin:0;">{{ __('Belum ada tagihan untuk anak ini.') }}</p>
             </div>
         @else
             {{-- SPP-04 poin 1 — daftar per periode, terbaru lebih dulu. --}}
@@ -31,9 +31,9 @@
                             <div>
                                 <div style="font-weight:700;">{{ $fee->feeType?->name }}</div>
                                 <div class="portal-muted">
-                                    Periode {{ $fee->period }}
+                                    {{ __('Periode') }} {{ $fee->period }}
                                     @if ($fee->due_date)
-                                        — jatuh tempo {{ $fee->due_date->translatedFormat('d M Y') }}
+                                        — {{ __('jatuh tempo') }} {{ $fee->due_date->translatedFormat('d M Y') }}
                                     @endif
                                 </div>
                             </div>
@@ -57,15 +57,15 @@
 
                         <div class="portal-grid portal-grid--3" style="margin-top:.75rem;gap:.5rem;">
                             <div>
-                                <div class="portal-label">Tagihan</div>
+                                <div class="portal-label">{{ __('Tagihan') }}</div>
                                 <div>Rp {{ number_format((float) $fee->amount, 0, ',', '.') }}</div>
                             </div>
                             <div>
-                                <div class="portal-label">Dibayar</div>
+                                <div class="portal-label">{{ __('Dibayar') }}</div>
                                 <div>Rp {{ number_format((float) $fee->amount_paid, 0, ',', '.') }}</div>
                             </div>
                             <div>
-                                <div class="portal-label">Sisa</div>
+                                <div class="portal-label">{{ __('Sisa') }}</div>
                                 <div style="font-weight:700;">
                                     Rp {{ number_format($remaining, 0, ',', '.') }}
                                 </div>
@@ -74,7 +74,7 @@
 
                         @if ($fee->isWaived() && $fee->waive_reason)
                             <p class="portal-muted" style="margin:.75rem 0 0;">
-                                Dibebaskan: {{ $fee->waive_reason }}
+                                {{ __('Dibebaskan') }}: {{ $fee->waive_reason }}
                             </p>
                         @endif
 
@@ -82,7 +82,7 @@
                         @if ($fee->payments->isNotEmpty())
                             <details style="margin-top:.75rem;">
                                 <summary style="cursor:pointer;min-height:2.75rem;display:flex;align-items:center;">
-                                    Riwayat pembayaran ({{ $fee->payments->count() }})
+                                    {{ __('Riwayat pembayaran (:count)', ['count' => $fee->payments->count()]) }}
                                 </summary>
                                 <ul class="portal-list" style="margin-top:.5rem;">
                                     @foreach ($fee->payments->sortByDesc('payment_date') as $payment)

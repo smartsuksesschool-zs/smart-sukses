@@ -12,6 +12,6 @@ class ListFeeTypes extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [Actions\CreateAction::make()->label('Jenis Tagihan Baru')];
+        return [Actions\CreateAction::make()->label(__('Jenis Tagihan Baru'))];
     }
 }

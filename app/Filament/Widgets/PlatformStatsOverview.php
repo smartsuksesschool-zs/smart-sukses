@@ -43,19 +43,19 @@ class PlatformStatsOverview extends StatsOverviewWidget
 
         return [
             Stat::make('Total Siswa', number_format($summary['total_students'], 0, ',', '.'))
-                ->description('Siswa aktif di seluruh cabang')
+                ->description(__('Siswa aktif di seluruh cabang'))
                 ->icon('heroicon-m-academic-cap')
                 ->color('primary'),
 
             Stat::make('Total SPP Terkumpul', 'Rp '.number_format(
                 (float) $summary['total_spp_collected'], 0, ',', '.'
             ))
-                ->description('Seluruh pembayaran yang tercatat')
+                ->description(__('Seluruh pembayaran yang tercatat'))
                 ->icon('heroicon-m-banknotes')
                 ->color('success'),
 
             Stat::make('PPDB Aktif', number_format($summary['active_ppdb'], 0, ',', '.'))
-                ->description('Pendaftaran yang masih berjalan')
+                ->description(__('Pendaftaran yang masih berjalan'))
                 ->icon('heroicon-m-clipboard-document-list')
                 ->color('warning'),
         ];

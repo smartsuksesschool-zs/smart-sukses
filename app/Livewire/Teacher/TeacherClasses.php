@@ -16,6 +16,6 @@ class TeacherClasses extends Component
     {
         return view('livewire.teacher.classes', [
             'classes' => app(TeacherPortalService::class)->classes(Auth::user()),
-        ])->layout('layouts.portal', ['title' => 'Kelas Ajar']);
+        ])->layout('layouts.portal', ['title' => __('Kelas Ajar')]);
     }
 }

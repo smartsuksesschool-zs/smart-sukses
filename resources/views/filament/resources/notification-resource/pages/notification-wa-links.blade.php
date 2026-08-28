@@ -19,36 +19,35 @@
         {{-- Draf belum menjadi komunikasi kepada siapa pun, jadi belum ada yang
              "siap kirim" — dan tidak satu pun nomor telepon dibaca (butir 224). --}}
         <x-filament::section>
-            <div class="font-medium text-gray-950 dark:text-white">Pengumuman ini masih draf</div>
+            <div class="font-medium text-gray-950 dark:text-white">{{ __('Pengumuman ini masih draf') }}</div>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Tautan wa.me baru tersedia setelah pengumuman dikirim. Isi dan targetnya masih dapat diubah
-                sampai saat itu.
+                {{ __('Tautan wa.me baru tersedia setelah pengumuman dikirim. Isi dan targetnya masih dapat diubah sampai saat itu.') }}
             </p>
         </x-filament::section>
     @else
         <x-filament::section :compact="true">
             <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm" aria-live="polite">
                 <span class="text-gray-950 dark:text-white">
-                    <span class="font-semibold">{{ $links['summary']['recipient_count'] }}</span> penerima
+                    <span class="font-semibold">{{ $links['summary']['recipient_count'] }}</span> {{ __('penerima') }}
                 </span>
 
                 <span class="text-gray-500 dark:text-gray-400">
                     <span class="font-semibold text-success-600 dark:text-success-400">{{ $links['summary']['available_count'] }}</span>
-                    dapat dikirimi WhatsApp
+                    {{ __('dapat dikirimi WhatsApp') }}
                 </span>
 
                 <span class="text-gray-500 dark:text-gray-400">
                     <span class="font-semibold text-danger-600 dark:text-danger-400">{{ $links['summary']['unavailable_count'] }}</span>
-                    tanpa nomor yang dapat dipakai
+                    {{ __('tanpa nomor yang dapat dipakai') }}
                 </span>
 
-                <span class="text-gray-500 dark:text-gray-400">Target: {{ $this->targetSummary() }}</span>
+                <span class="text-gray-500 dark:text-gray-400">{{ __('Target') }}: {{ $this->targetSummary() }}</span>
             </div>
 
             {{-- Angka di atas selalu menghitung seluruh penerima, bukan hanya
                  yang tampil setelah disaring (butir 226). --}}
             <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                Ringkasan menghitung seluruh penerima pengumuman ini, termasuk yang tidak tampil karena penyaringan.
+                {{ __('Ringkasan menghitung seluruh penerima pengumuman ini, termasuk yang tidak tampil karena penyaringan.') }}
             </p>
         </x-filament::section>
 
@@ -56,27 +55,27 @@
             <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div class="flex-1">
                     <label for="wa-links-search" class="mb-1 block text-sm font-medium text-gray-950 dark:text-white">
-                        Cari nama atau nomor
+                        {{ __('Cari nama atau nomor') }}
                     </label>
                     <x-filament::input.wrapper>
                         <x-filament::input
                             type="search"
                             id="wa-links-search"
                             wire:model.live.debounce.400ms="search"
-                            placeholder="Nama penerima atau nomor HP"
+                            placeholder="{{ __('Nama penerima atau nomor HP') }}"
                         />
                     </x-filament::input.wrapper>
                 </div>
 
                 <div class="sm:w-64">
                     <label for="wa-links-availability" class="mb-1 block text-sm font-medium text-gray-950 dark:text-white">
-                        Ketersediaan
+                        {{ __('Ketersediaan') }}
                     </label>
                     <x-filament::input.wrapper>
                         <x-filament::input.select id="wa-links-availability" wire:model.live="availability">
-                            <option value="">Semua penerima</option>
-                            <option value="available">Dapat dikirimi WhatsApp</option>
-                            <option value="unavailable">Tidak dapat dikirimi</option>
+                            <option value="">{{ __('Semua penerima') }}</option>
+                            <option value="available">{{ __('Dapat dikirimi WhatsApp') }}</option>
+                            <option value="unavailable">{{ __('Tidak dapat dikirimi') }}</option>
                         </x-filament::input.select>
                     </x-filament::input.wrapper>
                 </div>
@@ -145,8 +144,8 @@
                                         icon="heroicon-m-clipboard"
                                         x-on:click="copy(@js($recipient['wa_url']))"
                                     >
-                                        <span x-show="! copied">Salin link</span>
-                                        <span x-show="copied" x-cloak>Tersalin</span>
+                                        <span x-show="! copied">{{ __('Salin link') }}</span>
+                                        <span x-show="copied" x-cloak>{{ __('Tersalin') }}</span>
                                     </x-filament::button>
 
                                     {{-- NOTIF-02 poin 3 — "Tombol 'Buka WA' membuka
@@ -161,7 +160,7 @@
                                         target="_blank"
                                         rel="noopener noreferrer"
                                     >
-                                        Buka WA
+                                        {{ __('Buka WA') }}
                                     </x-filament::button>
                                 </div>
 
@@ -175,10 +174,10 @@
                                         value="{{ $recipient['wa_url'] }}"
                                         x-on:focus="$el.select()"
                                         class="w-full rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs text-gray-950 dark:border-white/20 dark:bg-white/5 dark:text-white"
-                                        aria-label="Link WhatsApp untuk {{ $recipient['name'] }}"
+                                        aria-label="{{ __('Link WhatsApp untuk :name', ['name' => $recipient['name']]) }}"
                                     />
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        Salin otomatis tidak tersedia. Pilih teks di atas lalu salin manual.
+                                        {{ __('Salin otomatis tidak tersedia. Pilih teks di atas lalu salin manual.') }}
                                     </p>
                                 </div>
                             </div>
@@ -187,12 +186,12 @@
                 </x-filament::section>
             @empty
                 <x-filament::section>
-                    <div class="font-medium text-gray-950 dark:text-white">Tidak ada penerima yang cocok</div>
+                    <div class="font-medium text-gray-950 dark:text-white">{{ __('Tidak ada penerima yang cocok') }}</div>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         @if ($links['summary']['recipient_count'] === 0)
-                            Pengumuman ini tidak memiliki penerima.
+                            {{ __('Pengumuman ini tidak memiliki penerima.') }}
                         @else
-                            Ubah kata pencarian atau penyaring ketersediaan untuk melihat penerima lainnya.
+                            {{ __('Ubah kata pencarian atau penyaring ketersediaan untuk melihat penerima lainnya.') }}
                         @endif
                     </p>
                 </x-filament::section>

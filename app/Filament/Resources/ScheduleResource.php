@@ -40,27 +40,27 @@ class ScheduleResource extends Resource
     {
         return $form->schema([
             Forms\Components\Select::make('class_subject_id')
-                ->label('Kelas & Mata Pelajaran')
+                ->label(__('Kelas & Mata Pelajaran'))
                 ->options(fn () => static::classSubjectOptions())
                 ->searchable()
                 ->required()
                 ->live()
-                ->helperText('Daftar diambil dari mata pelajaran yang sudah ditugaskan ke kelas.'),
+                ->helperText(__('Daftar diambil dari mata pelajaran yang sudah ditugaskan ke kelas.')),
 
             Forms\Components\Select::make('day_of_week')
-                ->label('Hari')
+                ->label(__('Hari'))
                 ->options(DayOfWeek::options())
                 ->required()
                 ->live(),
 
             Forms\Components\TimePicker::make('start_time')
-                ->label('Jam Mulai')
+                ->label(__('Jam Mulai'))
                 ->seconds(false)
                 ->required()
                 ->live(onBlur: true),
 
             Forms\Components\TimePicker::make('end_time')
-                ->label('Jam Selesai')
+                ->label(__('Jam Selesai'))
                 ->seconds(false)
                 ->required()
                 ->after('start_time')
@@ -76,7 +76,7 @@ class ScheduleResource extends Resource
                 }),
 
             Forms\Components\TextInput::make('room')
-                ->label('Ruang')
+                ->label(__('Ruang'))
                 ->maxLength(50)
                 ->live(onBlur: true),
         ])->columns(2);
@@ -87,48 +87,48 @@ class ScheduleResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('day_of_week')
-                    ->label('Hari')
+                    ->label(__('Hari'))
                     ->badge()
                     ->formatStateUsing(fn (DayOfWeek $state) => $state->label())
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('start_time')
-                    ->label('Mulai')
+                    ->label(__('Mulai'))
                     ->formatStateUsing(fn ($state) => substr((string) $state, 0, 5))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('end_time')
-                    ->label('Selesai')
+                    ->label(__('Selesai'))
                     ->formatStateUsing(fn ($state) => substr((string) $state, 0, 5)),
 
                 Tables\Columns\TextColumn::make('classSubject.schoolClass.name')
-                    ->label('Kelas')
+                    ->label(__('Kelas'))
                     ->badge()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('classSubject.subject.name')
-                    ->label('Mata Pelajaran')
+                    ->label(__('Mata Pelajaran'))
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('classSubject.teacher.name')
-                    ->label('Guru')
+                    ->label(__('Guru'))
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('room')
-                    ->label('Ruang')
+                    ->label(__('Ruang'))
                     ->placeholder('—'),
             ])
             ->filters([
                 // API 4.6 — GET /schedules filter class_id, teacher_id, day_of_week.
                 Tables\Filters\SelectFilter::make('class')
-                    ->label('Kelas')
+                    ->label(__('Kelas'))
                     ->options(fn () => SchoolClass::query()->orderBy('name')->pluck('name', 'id')->all())
                     ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null)
                         ? $query->forClass((int) $data['value'])
                         : $query),
 
                 Tables\Filters\SelectFilter::make('day_of_week')
-                    ->label('Hari')
+                    ->label(__('Hari'))
                     ->options(DayOfWeek::options()),
             ])
             ->actions([
@@ -224,5 +224,25 @@ class ScheduleResource extends Resource
         return [
             'index' => Pages\ManageSchedules::route('/'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

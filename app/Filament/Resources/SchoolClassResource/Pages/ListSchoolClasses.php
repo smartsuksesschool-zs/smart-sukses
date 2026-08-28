@@ -13,7 +13,7 @@ class ListSchoolClasses extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make()->label('Tambah Kelas'),
+            Actions\CreateAction::make()->label(__('Tambah Kelas')),
         ];
     }
 }

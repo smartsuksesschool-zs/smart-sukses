@@ -13,7 +13,7 @@ class ManageSchedules extends ManageRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make()->label('Tambah Jadwal'),
+            Actions\CreateAction::make()->label(__('Tambah Jadwal')),
         ];
     }
 }

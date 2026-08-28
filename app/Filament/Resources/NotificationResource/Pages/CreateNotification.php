@@ -27,15 +27,15 @@ class CreateNotification extends CreateRecord
     {
         return [
             Actions\Action::make('saveDraft')
-                ->label('Simpan Draf')
+                ->label(__('Simpan Draf'))
                 ->color('gray')
                 ->action(fn () => $this->submitAs(send: false)),
 
             Actions\Action::make('send')
-                ->label('Kirim Sekarang')
+                ->label(__('Kirim Sekarang'))
                 ->requiresConfirmation()
-                ->modalHeading('Kirim pengumuman')
-                ->modalDescription('Setelah terkirim, isi dan target pengumuman tidak dapat diubah lagi.')
+                ->modalHeading(__('Kirim pengumuman'))
+                ->modalDescription(__('Setelah terkirim, isi dan target pengumuman tidak dapat diubah lagi.'))
                 ->action(fn () => $this->submitAs(send: true)),
 
             $this->getCancelFormAction(),

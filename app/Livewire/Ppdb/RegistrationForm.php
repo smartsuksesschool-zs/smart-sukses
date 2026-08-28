@@ -160,7 +160,7 @@ class RegistrationForm extends Component
             'academicYear' => $this->academicYear(),
         ])->layout('layouts.ppdb', [
             'school' => $this->school,
-            'title' => 'Formulir Pendaftaran',
+            'title' => __('Formulir Pendaftaran'),
         ]);
     }
 }

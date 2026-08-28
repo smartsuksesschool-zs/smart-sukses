@@ -36,25 +36,25 @@ class RoleResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Peran')
+            Forms\Components\Section::make(__('Peran'))
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('name')
-                        ->label('Kode Peran')
+                        ->label(__('Kode Peran'))
                         ->required()
                         ->maxLength(125)
                         ->unique(ignoreRecord: true)
-                        ->helperText('Contoh: SCHOOL_ADMIN'),
+                        ->helperText(__('Contoh: SCHOOL_ADMIN')),
 
                     Forms\Components\TextInput::make('guard_name')
-                        ->label('Guard')
+                        ->label(__('Guard'))
                         ->default('web')
                         ->required()
                         ->maxLength(125),
                 ]),
 
-            Forms\Components\Section::make('Izin per Modul')
-                ->description('⭕ Lihat = akses baca saja, ✅ Kelola = akses penuh (create, update, delete).')
+            Forms\Components\Section::make(__('Izin per Modul'))
+                ->description(__('⭕ Lihat = akses baca saja, ✅ Kelola = akses penuh (create, update, delete).'))
                 ->schema([
                     Forms\Components\CheckboxList::make('permissions')
                         ->label('')
@@ -74,27 +74,27 @@ class RoleResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Kode Peran')
+                    ->label(__('Kode Peran'))
                     ->badge()
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('label')
-                    ->label('Nama Peran')
+                    ->label(__('Nama Peran'))
                     ->state(fn (Role $record) => RoleName::tryFrom($record->name)?->label() ?? '—'),
 
                 Tables\Columns\TextColumn::make('level')
-                    ->label('Level')
+                    ->label(__('Level'))
                     ->badge()
                     ->color(fn (string $state) => $state === 'Platform' ? 'danger' : 'gray')
                     ->state(fn (Role $record) => RoleName::tryFrom($record->name)?->isPlatformLevel() ? 'Platform' : 'Sekolah'),
 
                 Tables\Columns\TextColumn::make('permissions_count')
-                    ->label('Jumlah Izin')
+                    ->label(__('Jumlah Izin'))
                     ->counts('permissions'),
 
                 Tables\Columns\TextColumn::make('users_count')
-                    ->label('Jumlah Pengguna')
+                    ->label(__('Jumlah Pengguna'))
                     ->counts('users'),
             ])
             ->actions([
@@ -111,5 +111,25 @@ class RoleResource extends Resource
             'create' => Pages\CreateRole::route('/create'),
             'edit' => Pages\EditRole::route('/{record}/edit'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

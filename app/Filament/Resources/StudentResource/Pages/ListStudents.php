@@ -21,11 +21,11 @@ class ListStudents extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make()->label('Tambah Siswa'),
+            Actions\CreateAction::make()->label(__('Tambah Siswa')),
 
             // SIS-05 / API 4.5 — GET /students/export.
             Actions\Action::make('export')
-                ->label('Export Excel')
+                ->label(__('Export Excel'))
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('gray')
                 ->visible(fn () => Auth::user()?->can('export', Student::class))
@@ -37,14 +37,14 @@ class ListStudents extends ListRecords
 
             // API 4.5 — POST /students/import.
             Actions\Action::make('import')
-                ->label('Import Excel')
+                ->label(__('Import Excel'))
                 ->icon('heroicon-o-arrow-up-tray')
                 ->color('gray')
                 ->visible(fn () => Auth::user()?->can('import', Student::class))
-                ->modalDescription('Kolom yang dibaca: nis, nisn, nama_lengkap, jenis_kelamin, tempat_lahir, tanggal_lahir, agama, alamat, nama_orang_tua, hp_orang_tua, email_orang_tua, tahun_masuk, status.')
+                ->modalDescription(__('Kolom yang dibaca: nis, nisn, nama_lengkap, jenis_kelamin, tempat_lahir, tanggal_lahir, agama, alamat, nama_orang_tua, hp_orang_tua, email_orang_tua, tahun_masuk, status.'))
                 ->form([
                     Forms\Components\FileUpload::make('file')
-                        ->label('Berkas Excel (.xlsx)')
+                        ->label(__('Berkas Excel (.xlsx)'))
                         ->required()
                         ->acceptedFileTypes([
                             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -85,8 +85,8 @@ class ListStudents extends ListRecords
 
             if ($schoolId === null) {
                 Notification::make()
-                    ->title('Pilih cabang terlebih dahulu')
-                    ->body('Super Admin tidak terikat pada satu cabang, sehingga import massal harus dijalankan oleh Admin Sekolah.')
+                    ->title(__('Pilih cabang terlebih dahulu'))
+                    ->body(__('Super Admin tidak terikat pada satu cabang, sehingga import massal harus dijalankan oleh Admin Sekolah.'))
                     ->danger()
                     ->send();
 

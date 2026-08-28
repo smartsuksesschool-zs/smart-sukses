@@ -43,11 +43,11 @@ class SchoolResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Identitas Cabang')
+            Forms\Components\Section::make(__('Identitas Cabang'))
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('name')
-                        ->label('Nama Cabang')
+                        ->label(__('Nama Cabang'))
                         ->required()
                         ->maxLength(150)
                         ->live(onBlur: true)
@@ -64,50 +64,50 @@ class SchoolResource extends Resource
                         }),
 
                     Forms\Components\TextInput::make('code')
-                        ->label('Kode Cabang')
+                        ->label(__('Kode Cabang'))
                         ->required()
                         ->maxLength(20)
                         // ERD 2.2 — code UQ. Dipakai `reg_number` PPDB dan URL
                         // publik /ppdb/[kode_cabang].
                         ->unique(ignoreRecord: true)
                         ->rule('alpha_dash')
-                        ->helperText('Dipakai pada nomor pendaftaran PPDB. Contoh: PUSAT, MADANI.')
+                        ->helperText(__('Dipakai pada nomor pendaftaran PPDB. Contoh: PUSAT, MADANI.'))
                         ->afterStateUpdated(fn (?string $state, Forms\Set $set) => $set('code', Str::upper((string) $state))),
 
                     Forms\Components\TextInput::make('slug')
-                        ->label('Slug')
+                        ->label(__('Slug'))
                         ->required()
                         ->maxLength(50)
                         ->unique(ignoreRecord: true)
                         ->rule('alpha_dash')
-                        ->helperText('Pengenal ramah-URL, huruf kecil. Contoh: madani.')
+                        ->helperText(__('Pengenal ramah-URL, huruf kecil. Contoh: madani.'))
                         ->afterStateUpdated(fn (?string $state, Forms\Set $set) => $set('slug', Str::lower((string) $state))),
 
                     Forms\Components\Toggle::make('is_active')
-                        ->label('Cabang Aktif')
+                        ->label(__('Cabang Aktif'))
                         ->default(true)
-                        ->helperText('Cabang nonaktif tidak menerima pendaftaran PPDB dan tidak tampil di halaman publik.'),
+                        ->helperText(__('Cabang nonaktif tidak menerima pendaftaran PPDB dan tidak tampil di halaman publik.')),
                 ]),
 
-            Forms\Components\Section::make('Kontak')
+            Forms\Components\Section::make(__('Kontak'))
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('head_name')
-                        ->label('Nama Kepala Sekolah')
+                        ->label(__('Nama Kepala Sekolah'))
                         ->maxLength(150),
 
                     Forms\Components\TextInput::make('phone')
-                        ->label('Telepon')
+                        ->label(__('Telepon'))
                         ->tel()
                         ->maxLength(20),
 
                     Forms\Components\TextInput::make('email')
-                        ->label('Email Resmi')
+                        ->label(__('Email Resmi'))
                         ->email()
                         ->maxLength(150),
 
                     Forms\Components\Textarea::make('address')
-                        ->label('Alamat')
+                        ->label(__('Alamat'))
                         ->rows(3)
                         ->columnSpanFull(),
                 ]),
@@ -116,20 +116,20 @@ class SchoolResource extends Resource
             // Admin Sekolah lewat halaman Pengaturan Tampilan.
             static::brandingSection(),
 
-            Forms\Components\Section::make('Template WhatsApp')
-                ->description('Dipakai saat menyusun pesan wa.me. Dikosongkan berarti memakai template bawaan sistem.')
+            Forms\Components\Section::make(__('Template WhatsApp'))
+                ->description(__('Dipakai saat menyusun pesan wa.me. Dikosongkan berarti memakai template bawaan sistem.'))
                 ->collapsed()
                 ->schema([
                     Forms\Components\Textarea::make('wa_template_ppdb')
-                        ->label('Template PPDB')
+                        ->label(__('Template PPDB'))
                         ->rows(3),
 
                     Forms\Components\Textarea::make('wa_template_spp')
-                        ->label('Template Tagihan')
+                        ->label(__('Template Tagihan'))
                         ->rows(3),
 
                     Forms\Components\Textarea::make('wa_template_rapor')
-                        ->label('Template Rapor')
+                        ->label(__('Template Rapor'))
                         ->rows(3),
                 ]),
         ]);
@@ -142,12 +142,12 @@ class SchoolResource extends Resource
      */
     public static function brandingSection(): Forms\Components\Section
     {
-        return Forms\Components\Section::make('Tampilan (White-Label)')
-            ->description('Logo dan warna yang dilihat pengguna cabang ini. Perubahan langsung berlaku tanpa deployment ulang.')
+        return Forms\Components\Section::make(__('Tampilan (White-Label)'))
+            ->description(__('Logo dan warna yang dilihat pengguna cabang ini. Perubahan langsung berlaku tanpa deployment ulang.'))
             ->columns(2)
             ->schema([
                 Forms\Components\FileUpload::make('logo_url')
-                    ->label('Logo Cabang')
+                    ->label(__('Logo Cabang'))
                     ->image()
                     ->disk(School::LOGO_DISK)
                     ->directory('schools/logos')
@@ -164,11 +164,11 @@ class SchoolResource extends Resource
                     // dengan dua unggahan lain yang batasnya memang tertulis —
                     // foto siswa (SIS-03) dan dokumen PPDB (butir 17).
                     ->maxSize(2048)
-                    ->helperText('JPG atau PNG, maksimal 2 MB.')
+                    ->helperText(__('JPG atau PNG, maksimal 2 MB.'))
                     ->columnSpanFull(),
 
                 Forms\Components\ColorPicker::make('primary_color')
-                    ->label('Warna Utama')
+                    ->label(__('Warna Utama'))
                     ->required()
                     ->default(SchoolBranding::FALLBACK_PRIMARY)
                     // Kolomnya VARCHAR(7): hanya hex 6 digit yang muat, dan
@@ -177,7 +177,7 @@ class SchoolResource extends Resource
                     ->validationMessages(['regex' => 'Warna harus berupa hex 6 digit, contoh #1B3A6B.']),
 
                 Forms\Components\ColorPicker::make('secondary_color')
-                    ->label('Warna Aksen')
+                    ->label(__('Warna Aksen'))
                     ->required()
                     ->default(SchoolBranding::FALLBACK_SECONDARY)
                     ->rule('regex:/^#[0-9A-Fa-f]{6}$/')
@@ -190,35 +190,35 @@ class SchoolResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\ImageColumn::make('logo_url')
-                    ->label('Logo')
+                    ->label(__('Logo'))
                     ->disk(School::LOGO_DISK)
                     ->height(28),
 
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Nama Cabang')
+                    ->label(__('Nama Cabang'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('code')
-                    ->label('Kode')
+                    ->label(__('Kode'))
                     ->badge()
                     ->searchable(),
 
                 Tables\Columns\ColorColumn::make('primary_color')
-                    ->label('Warna Utama'),
+                    ->label(__('Warna Utama')),
 
                 Tables\Columns\TextColumn::make('users_count')
-                    ->label('Pengguna')
+                    ->label(__('Pengguna'))
                     ->counts('users')
                     ->alignRight(),
 
                 Tables\Columns\IconColumn::make('is_active')
-                    ->label('Aktif')
+                    ->label(__('Aktif'))
                     ->boolean(),
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('is_active')
-                    ->label('Status Aktif'),
+                    ->label(__('Status Aktif')),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
@@ -275,5 +275,25 @@ class SchoolResource extends Resource
             'view' => Pages\ViewSchool::route('/{record}'),
             'edit' => Pages\EditSchool::route('/{record}/edit'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

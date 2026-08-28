@@ -26,23 +26,23 @@ class ListReportCards extends ListRecords
     {
         return [
             Actions\Action::make('generate')
-                ->label('Generate Rapor Kelas')
+                ->label(__('Generate Rapor Kelas'))
                 ->icon('heroicon-o-sparkles')
                 ->color('primary')
                 ->form([
                     Forms\Components\Select::make('class_id')
-                        ->label('Kelas')
+                        ->label(__('Kelas'))
                         ->options(fn () => $this->classOptions())
                         ->required()
-                        ->helperText('Draft rapor dibuat untuk seluruh siswa aktif di kelas ini.'),
+                        ->helperText(__('Draft rapor dibuat untuk seluruh siswa aktif di kelas ini.')),
                 ])
                 ->action(function (array $data): void {
                     $class = SchoolClass::query()->findOrFail($data['class_id']);
 
                     if (! Auth::user()?->can('generate', [ReportCard::class, $class])) {
                         Notification::make()
-                            ->title('Tidak diizinkan')
-                            ->body('Hanya wali kelas dari kelas tersebut yang dapat men-generate rapor.')
+                            ->title(__('Tidak diizinkan'))
+                            ->body(__('Hanya wali kelas dari kelas tersebut yang dapat men-generate rapor.'))
                             ->danger()
                             ->send();
 
@@ -89,7 +89,7 @@ class ListReportCards extends ListRecords
                     }
 
                     $notification = Notification::make()
-                        ->title('Draft rapor diproses')
+                        ->title(__('Draft rapor diproses'))
                         ->body(implode('', $body));
 
                     $summary['incomplete'] === [] && $summary['ignored'] === []
@@ -104,23 +104,23 @@ class ListReportCards extends ListRecords
             // puluhan detik untuk kelas berisi tiga puluh siswa; VPS 2 core
             // tidak punya kemewahan itu.
             Actions\Action::make('generatePdfKelas')
-                ->label('Generate PDF Kelas')
+                ->label(__('Generate PDF Kelas'))
                 ->icon('heroicon-o-document-arrow-down')
                 ->color('gray')
                 ->form([
                     Forms\Components\Select::make('class_id')
-                        ->label('Kelas')
+                        ->label(__('Kelas'))
                         ->options(fn () => $this->classOptions())
                         ->required()
-                        ->helperText('PDF dibuat di latar belakang. Kolom PDF akan berubah menjadi "Siap diunduh" bila selesai.'),
+                        ->helperText(__('PDF dibuat di latar belakang. Kolom PDF akan berubah menjadi "Siap diunduh" bila selesai.')),
                 ])
                 ->action(function (array $data): void {
                     $class = SchoolClass::query()->findOrFail($data['class_id']);
 
                     if (! Auth::user()?->can('generate', [ReportCard::class, $class])) {
                         Notification::make()
-                            ->title('Tidak diizinkan')
-                            ->body('Hanya wali kelas dari kelas tersebut yang dapat membuat PDF rapor sekelas.')
+                            ->title(__('Tidak diizinkan'))
+                            ->body(__('Hanya wali kelas dari kelas tersebut yang dapat membuat PDF rapor sekelas.'))
                             ->danger()
                             ->send();
 
@@ -139,14 +139,14 @@ class ListReportCards extends ListRecords
                 }),
 
             Actions\Action::make('publishClass')
-                ->label('Terbitkan Sekelas')
+                ->label(__('Terbitkan Sekelas'))
                 ->icon('heroicon-o-paper-airplane')
                 ->color('success')
                 ->requiresConfirmation()
-                ->modalDescription('Seluruh draft rapor kelas ini akan diterbitkan dan nilainya terkunci.')
+                ->modalDescription(__('Seluruh draft rapor kelas ini akan diterbitkan dan nilainya terkunci.'))
                 ->form([
                     Forms\Components\Select::make('class_id')
-                        ->label('Kelas')
+                        ->label(__('Kelas'))
                         ->options(fn () => $this->classOptions())
                         ->required(),
                 ])
@@ -155,8 +155,8 @@ class ListReportCards extends ListRecords
 
                     if (! Auth::user()?->can('generate', [ReportCard::class, $class])) {
                         Notification::make()
-                            ->title('Tidak diizinkan')
-                            ->body('Hanya wali kelas dari kelas tersebut yang dapat menerbitkan rapor.')
+                            ->title(__('Tidak diizinkan'))
+                            ->body(__('Hanya wali kelas dari kelas tersebut yang dapat menerbitkan rapor.'))
                             ->danger()
                             ->send();
 

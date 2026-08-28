@@ -18,9 +18,9 @@ enum NotificationTargetType: string
     public function label(): string
     {
         return match ($this) {
-            self::All => 'Semua pengguna cabang',
-            self::SchoolClass => 'Orang tua satu kelas',
-            self::Individual => 'Satu pengguna',
+            self::All => __('Semua pengguna cabang'),
+            self::SchoolClass => __('Orang tua satu kelas'),
+            self::Individual => __('Satu pengguna'),
         };
     }
 

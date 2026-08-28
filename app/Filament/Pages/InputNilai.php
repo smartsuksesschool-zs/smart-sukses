@@ -62,36 +62,36 @@ class InputNilai extends Page implements HasForms
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Pilih Kelas & Komponen')
+                Forms\Components\Section::make(__('Pilih Kelas & Komponen'))
                     ->columns(2)
                     ->schema([
                         Forms\Components\Select::make('class_subject_id')
-                            ->label('Kelas — Mata Pelajaran')
+                            ->label(__('Kelas — Mata Pelajaran'))
                             ->options(fn () => $this->classSubjectOptions())
                             ->required()
                             ->live()
                             ->afterStateUpdated(fn () => $this->refreshStudentRows()),
 
                         Forms\Components\Select::make('grade_type')
-                            ->label('Komponen')
+                            ->label(__('Komponen'))
                             ->options(GradeType::options())
                             ->required()
                             ->live(),
 
                         Forms\Components\Select::make('assessment_type')
-                            ->label('Jenis Penilaian')
+                            ->label(__('Jenis Penilaian'))
                             ->options(AssessmentType::options())
                             ->default(AssessmentType::Summative->value)
                             ->required()
-                            ->helperText('Hanya penilaian sumatif yang dihitung ke rapor.'),
+                            ->helperText(__('Hanya penilaian sumatif yang dihitung ke rapor.')),
 
                         Forms\Components\TextInput::make('description')
-                            ->label('Keterangan')
+                            ->label(__('Keterangan'))
                             ->maxLength(200)
-                            ->placeholder('Ulangan Harian Bab 3'),
+                            ->placeholder(__('Ulangan Harian Bab 3')),
                     ]),
 
-                Forms\Components\Section::make('Nilai Siswa')
+                Forms\Components\Section::make(__('Nilai Siswa'))
                     ->visible(fn (Forms\Get $get) => filled($get('class_subject_id')))
                     ->schema([
                         Forms\Components\Repeater::make('rows')
@@ -102,17 +102,17 @@ class InputNilai extends Page implements HasForms
                             ->reorderable(false)
                             ->schema([
                                 Forms\Components\TextInput::make('student_name')
-                                    ->label('Siswa')
+                                    ->label(__('Siswa'))
                                     ->disabled()
                                     ->dehydrated(false),
 
                                 Forms\Components\TextInput::make('score')
-                                    ->label('Nilai')
+                                    ->label(__('Nilai'))
                                     ->numeric()
                                     ->minValue(Grade::MIN_SCORE)
                                     ->maxValue(Grade::MAX_SCORE)
                                     ->step(0.01)
-                                    ->helperText('Kosongkan bila siswa ini belum dinilai.'),
+                                    ->helperText(__('Kosongkan bila siswa ini belum dinilai.')),
 
                                 Forms\Components\Hidden::make('student_id'),
                             ]),
@@ -163,8 +163,8 @@ class InputNilai extends Page implements HasForms
 
         if (! Auth::user()?->can('gradeClassSubject', [Grade::class, $classSubject])) {
             Notification::make()
-                ->title('Tidak diizinkan')
-                ->body('Anda hanya dapat menginput nilai untuk kelas yang Anda ampu.')
+                ->title(__('Tidak diizinkan'))
+                ->body(__('Anda hanya dapat menginput nilai untuk kelas yang Anda ampu.'))
                 ->danger()
                 ->send();
 
@@ -233,5 +233,20 @@ class InputNilai extends Page implements HasForms
                 $cs->id => trim(($cs->schoolClass?->name ?? '?').' — '.($cs->subject?->name ?? '?')),
             ])
             ->all();
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public function getTitle(): string
+    {
+        return __(static::$title);
     }
 }

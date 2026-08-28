@@ -13,7 +13,7 @@ class ListNotifications extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make()->label('Buat Pengumuman'),
+            Actions\CreateAction::make()->label(__('Buat Pengumuman')),
         ];
     }
 }

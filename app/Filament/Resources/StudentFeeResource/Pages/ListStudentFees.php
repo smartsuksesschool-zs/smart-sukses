@@ -41,12 +41,12 @@ class ListStudentFees extends ListRecords
     public static function exportAction(): Actions\Action
     {
         return Actions\Action::make('export')
-            ->label('Export Excel')
+            ->label(__('Export Excel'))
             ->icon('heroicon-o-arrow-down-tray')
             ->color('gray')
-            ->modalHeading('Export Laporan Tagihan')
-            ->modalDescription('Berkas .xlsx berisi nama siswa, kelas, periode, jumlah tagihan, jumlah bayar, sisa, dan status.')
-            ->modalSubmitActionLabel('Unduh')
+            ->modalHeading(__('Export Laporan Tagihan'))
+            ->modalDescription(__('Berkas .xlsx berisi nama siswa, kelas, periode, jumlah tagihan, jumlah bayar, sisa, dan status.'))
+            ->modalSubmitActionLabel(__('Unduh'))
             // Disembunyikan bila tidak berwenang — tetapi pagarnya ada di
             // StudentFeeReportExporter, yang memeriksa izin yang sama pada
             // jalur yang benar-benar menghasilkan berkas.
@@ -65,7 +65,7 @@ class ListStudentFees extends ListRecords
             // laporan satu cabang, jadi Super Admin memilih cabangnya lebih
             // dulu alih-alih mengunduh seluruh cabang tanpa menyadarinya.
             Forms\Components\Select::make('school_id')
-                ->label('Cabang Sekolah')
+                ->label(__('Cabang Sekolah'))
                 ->options(fn (): array => School::query()
                     ->orderBy('name')
                     ->pluck('name', 'id')
@@ -76,10 +76,10 @@ class ListStudentFees extends ListRecords
                 ->live()
                 ->afterStateUpdated(fn (Forms\Set $set) => $set('class_id', null))
                 ->visible(fn (): bool => Auth::user()?->isSuperAdmin() ?? false)
-                ->helperText('Laporan berisi satu cabang.'),
+                ->helperText(__('Laporan berisi satu cabang.')),
 
             Forms\Components\TextInput::make('period')
-                ->label('Periode')
+                ->label(__('Periode'))
                 ->required()
                 ->maxLength(7)
                 ->default(now()->format('Y-m'))
@@ -89,20 +89,20 @@ class ListStudentFees extends ListRecords
                 ->validationMessages([
                     'regex' => 'Periode harus berformat YYYY-MM, misalnya 2026-08.',
                 ])
-                ->helperText('SPP-05 adalah laporan per periode, jadi bulannya wajib dipilih.'),
+                ->helperText(__('SPP-05 adalah laporan per periode, jadi bulannya wajib dipilih.')),
 
             Forms\Components\Select::make('class_id')
-                ->label('Kelas')
+                ->label(__('Kelas'))
                 ->options(fn (Forms\Get $get): array => app(StudentFeeReportExporter::class)
                     ->classOptions(static::resolveSchoolId($get('school_id'))))
                 ->searchable()
-                ->placeholder('Semua kelas')
-                ->helperText('Kelas mengikuti tahun ajaran tagihannya, bukan kelas siswa saat ini.'),
+                ->placeholder(__('Semua kelas'))
+                ->helperText(__('Kelas mengikuti tahun ajaran tagihannya, bukan kelas siswa saat ini.')),
 
             Forms\Components\Select::make('status')
-                ->label('Status')
+                ->label(__('Status'))
                 ->options(StudentFeeStatus::options())
-                ->placeholder('Semua status')
+                ->placeholder(__('Semua status'))
                 ->rule(Rule::enum(StudentFeeStatus::class)),
         ];
     }

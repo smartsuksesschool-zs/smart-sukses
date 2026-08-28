@@ -34,7 +34,7 @@ class StudentExamResult extends Component
     {
         if (! $this->hasStudent()) {
             return view('livewire.student.exam-result', ['result' => null])
-                ->layout('layouts.portal', ['title' => 'Hasil Ujian']);
+                ->layout('layouts.portal', ['title' => __('Hasil Ujian')]);
         }
 
         $user = Auth::user();
@@ -67,6 +67,6 @@ class StudentExamResult extends Component
                 'started_at' => $attempt->started_at,
                 'duration_minutes' => (int) $exam->duration_minutes,
             ],
-        ])->layout('layouts.portal', ['title' => 'Hasil Ujian']);
+        ])->layout('layouts.portal', ['title' => __('Hasil Ujian')]);
     }
 }

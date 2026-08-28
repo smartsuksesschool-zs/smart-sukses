@@ -21,8 +21,8 @@ enum ExamAttemptStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::InProgress => 'Sedang dikerjakan',
-            self::Submitted => 'Sudah dikumpulkan',
+            self::InProgress => __('Sedang dikerjakan'),
+            self::Submitted => __('Sudah dikumpulkan'),
         };
     }
 

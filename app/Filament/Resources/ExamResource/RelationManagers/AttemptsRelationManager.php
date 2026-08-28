@@ -90,32 +90,32 @@ class AttemptsRelationManager extends RelationManager
             ->modifyQueryUsing(fn (Builder $query) => $query->with(['student', 'grade']))
             ->columns([
                 Tables\Columns\TextColumn::make('student.full_name')
-                    ->label('Siswa')
+                    ->label(__('Siswa'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('student.nis')
-                    ->label('NIS')
+                    ->label(__('NIS'))
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->badge()
                     ->formatStateUsing(fn (ExamAttemptStatus $state) => $state->label())
                     ->color(fn (ExamAttemptStatus $state) => $state->color()),
 
                 Tables\Columns\TextColumn::make('score')
-                    ->label('Nilai')
+                    ->label(__('Nilai'))
                     ->placeholder('—')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('started_at')
-                    ->label('Mulai')
+                    ->label(__('Mulai'))
                     ->dateTime('d M Y H:i')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('submitted_at')
-                    ->label('Dikumpulkan')
+                    ->label(__('Dikumpulkan'))
                     ->dateTime('d M Y H:i')
                     ->placeholder('—')
                     ->sortable(),
@@ -128,7 +128,7 @@ class AttemptsRelationManager extends RelationManager
                 // dan kolom bernilai NULL tidak melewati `formatStateUsing()`
                 // sehingga "Belum masuk nilai" tidak pernah tercetak.
                 Tables\Columns\TextColumn::make('grade_status')
-                    ->label('Nilai Akademik')
+                    ->label(__('Nilai Akademik'))
                     ->badge()
                     ->state(fn (ExamAttempt $record) => $record->grade_id === null
                         ? 'Belum masuk nilai'
@@ -138,7 +138,7 @@ class AttemptsRelationManager extends RelationManager
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
-                    ->label('Status')
+                    ->label(__('Status'))
                     ->options(ExamAttemptStatus::options()),
             ])
             ->actions([
@@ -161,32 +161,32 @@ class AttemptsRelationManager extends RelationManager
     public static function bridgeAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('bridgeToGrade')
-            ->label('Masukkan ke Nilai')
+            ->label(__('Masukkan ke Nilai'))
             ->icon('heroicon-o-arrow-right-circle')
             ->color('success')
-            ->modalHeading('Masukkan Hasil Ujian ke Nilai')
+            ->modalHeading(__('Masukkan Hasil Ujian ke Nilai'))
             ->modalDescription('Nilai formatif tidak ikut menghitung rapor. Pilih Sumatif hanya bila '
                 .'nilai ini memang menjadi komponen rapor.')
-            ->modalSubmitActionLabel('Masukkan')
+            ->modalSubmitActionLabel(__('Masukkan'))
             ->form([
                 Forms\Components\Select::make('grade_type')
-                    ->label('Jenis Nilai')
+                    ->label(__('Jenis Nilai'))
                     ->options(ExamGradeBridge::gradeTypeOptions())
                     ->required()
                     ->in(array_keys(ExamGradeBridge::gradeTypeOptions())),
 
                 Forms\Components\Select::make('assessment_type')
-                    ->label('Jenis Penilaian')
+                    ->label(__('Jenis Penilaian'))
                     ->options(AssessmentType::options())
                     ->default(AssessmentType::Formative->value)
                     ->required()
                     ->in(AssessmentType::values())
-                    ->helperText('Formatif tidak dihitung ke rapor.'),
+                    ->helperText(__('Formatif tidak dihitung ke rapor.')),
 
                 Forms\Components\TextInput::make('description')
-                    ->label('Keterangan')
+                    ->label(__('Keterangan'))
                     ->maxLength(200)
-                    ->placeholder('Dikosongkan berarti memakai judul ujiannya.'),
+                    ->placeholder(__('Dikosongkan berarti memakai judul ujiannya.')),
             ])
             ->visible(fn (ExamAttempt $record, RelationManager $livewire) => $livewire->mayBridge($record))
             ->action(function (ExamAttempt $record, array $data): void {
@@ -200,7 +200,7 @@ class AttemptsRelationManager extends RelationManager
                     );
                 } catch (ValidationException $exception) {
                     Notification::make()
-                        ->title('Gagal memasukkan ke nilai')
+                        ->title(__('Gagal memasukkan ke nilai'))
                         ->body((string) collect($exception->errors())->flatten()->first())
                         ->danger()
                         ->send();
@@ -228,27 +228,27 @@ class AttemptsRelationManager extends RelationManager
     public static function bulkBridgeAction(): Tables\Actions\BulkAction
     {
         return Tables\Actions\BulkAction::make('bridgeSelectedToGrade')
-            ->label('Masukkan ke Nilai')
+            ->label(__('Masukkan ke Nilai'))
             ->icon('heroicon-o-arrow-right-circle')
             ->color('success')
-            ->modalHeading('Masukkan Hasil Terpilih ke Nilai')
+            ->modalHeading(__('Masukkan Hasil Terpilih ke Nilai'))
             ->modalDescription('Jenis nilai yang dipilih berlaku untuk seluruh hasil terpilih. '
                 .'Hasil yang sudah masuk nilai atau yang rapornya sudah terbit akan dilewati.')
-            ->modalSubmitActionLabel('Masukkan')
+            ->modalSubmitActionLabel(__('Masukkan'))
             ->form([
                 Forms\Components\Select::make('grade_type')
-                    ->label('Jenis Nilai')
+                    ->label(__('Jenis Nilai'))
                     ->options(ExamGradeBridge::gradeTypeOptions())
                     ->required()
                     ->in(array_keys(ExamGradeBridge::gradeTypeOptions())),
 
                 Forms\Components\Select::make('assessment_type')
-                    ->label('Jenis Penilaian')
+                    ->label(__('Jenis Penilaian'))
                     ->options(AssessmentType::options())
                     ->default(AssessmentType::Formative->value)
                     ->required()
                     ->in(AssessmentType::values())
-                    ->helperText('Formatif tidak dihitung ke rapor.'),
+                    ->helperText(__('Formatif tidak dihitung ke rapor.')),
             ])
             ->visible(fn (RelationManager $livewire) => $livewire->mayBridgeAny())
             ->deselectRecordsAfterCompletion()
@@ -352,5 +352,15 @@ class AttemptsRelationManager extends RelationManager
 
         return $this->mayBridgeCache = $exam instanceof Exam
             && Auth::user()?->can('bridgeToGrade', $exam) === true;
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

@@ -9,16 +9,16 @@
     model Notification, sehingga tidak ada kolom yang tidak disebut presenter
     yang dapat sampai ke halaman.
 --}}
-@props(['notifications', 'route', 'label' => 'Notifikasi'])
+@props(['notifications', 'route', 'label' => null])
 
 <div class="portal-card">
-    <div class="portal-label">{{ $label }}</div>
+    <div class="portal-label">{{ $label ?? __('Notifikasi') }}</div>
 
     @if ($notifications['unread_count'] > 0)
         <div class="portal-metric">{{ $notifications['unread_count'] }}</div>
-        <div class="portal-muted">belum dibaca</div>
+        <div class="portal-muted">{{ __('belum dibaca') }}</div>
     @else
-        <div style="font-weight:600;margin-top:.25rem;">Tidak ada notifikasi belum dibaca</div>
+        <div style="font-weight:600;margin-top:.25rem;">{{ __('Tidak ada notifikasi belum dibaca') }}</div>
     @endif
 
     @if (count($notifications['items']) > 0)
@@ -53,6 +53,6 @@
     @endif
 
     <div style="margin-top:.75rem;">
-        <a href="{{ $route }}">Lihat semua notifikasi</a>
+        <a href="{{ $route }}">{{ __('Lihat semua notifikasi') }}</a>
     </div>
 </div>

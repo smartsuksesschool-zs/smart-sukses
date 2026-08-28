@@ -51,34 +51,34 @@ class PaymentsRelationManager extends RelationManager
             ->recordTitleAttribute('reference_number')
             ->columns([
                 Tables\Columns\TextColumn::make('payment_date')
-                    ->label('Tanggal')
+                    ->label(__('Tanggal'))
                     ->date('d M Y')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('payment_method')
-                    ->label('Metode')
+                    ->label(__('Metode'))
                     ->badge()
                     ->formatStateUsing(fn (PaymentMethod $state): string => $state->label()),
 
                 Tables\Columns\TextColumn::make('amount_paid')
-                    ->label('Jumlah')
+                    ->label(__('Jumlah'))
                     ->money('IDR'),
 
                 Tables\Columns\TextColumn::make('reference_number')
-                    ->label('Referensi')
+                    ->label(__('Referensi'))
                     ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('receivedBy.name')
-                    ->label('Dicatat Oleh')
+                    ->label(__('Dicatat Oleh'))
                     ->placeholder('—'),
 
                 Tables\Columns\IconColumn::make('proof_url')
-                    ->label('Bukti')
+                    ->label(__('Bukti'))
                     ->boolean()
                     ->state(fn (Payment $record): bool => filled($record->proof_url)),
 
                 Tables\Columns\TextColumn::make('created_at')
-                    ->label('Dicatat Pada')
+                    ->label(__('Dicatat Pada'))
                     ->dateTime('d M Y H:i')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
@@ -96,8 +96,8 @@ class PaymentsRelationManager extends RelationManager
             ->defaultSort(fn (Builder $query): Builder => $query
                 ->orderByDesc('created_at')
                 ->orderByDesc('id'))
-            ->emptyStateHeading('Belum ada pembayaran')
-            ->emptyStateDescription('Tagihan ini belum pernah menerima pembayaran.');
+            ->emptyStateHeading(__('Belum ada pembayaran'))
+            ->emptyStateDescription(__('Tagihan ini belum pernah menerima pembayaran.'));
     }
 
     /**
@@ -120,17 +120,17 @@ class PaymentsRelationManager extends RelationManager
     public static function attachProofAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('attachProof')
-            ->label('Lampirkan Bukti')
+            ->label(__('Lampirkan Bukti'))
             ->icon('heroicon-o-paper-clip')
             ->color('gray')
-            ->modalHeading('Lampirkan Bukti Pembayaran')
-            ->modalDescription('Hanya berkas buktinya yang ditambahkan. Nominal, metode, dan tanggal pembayaran tidak berubah.')
-            ->modalSubmitActionLabel('Lampirkan')
+            ->modalHeading(__('Lampirkan Bukti Pembayaran'))
+            ->modalDescription(__('Hanya berkas buktinya yang ditambahkan. Nominal, metode, dan tanggal pembayaran tidak berubah.'))
+            ->modalSubmitActionLabel(__('Lampirkan'))
             ->visible(fn (Payment $record): bool => blank($record->proof_url)
                 && (Auth::user()?->can('attachProof', $record) ?? false))
             ->form([
                 Forms\Components\FileUpload::make('proof')
-                    ->label('Bukti Pembayaran')
+                    ->label(__('Bukti Pembayaran'))
                     ->required()
                     // Disk privat, aturan yang sama dengan pengunggahan saat
                     // pencatatan pembayaran.
@@ -139,7 +139,7 @@ class PaymentsRelationManager extends RelationManager
                     ->visibility('private')
                     ->acceptedFileTypes(PaymentRecorder::PROOF_MIME_TYPES)
                     ->maxSize(PaymentRecorder::PROOF_MAX_KILOBYTES)
-                    ->helperText('JPG/PNG/PDF, maksimal 5 MB.'),
+                    ->helperText(__('JPG/PNG/PDF, maksimal 5 MB.')),
             ])
             ->action(function (Payment $record, array $data): void {
                 $user = Auth::user();
@@ -155,7 +155,7 @@ class PaymentsRelationManager extends RelationManager
                 );
 
                 Notification::make()
-                    ->title('Bukti pembayaran dilampirkan')
+                    ->title(__('Bukti pembayaran dilampirkan'))
                     ->success()
                     ->send();
             });
@@ -164,7 +164,7 @@ class PaymentsRelationManager extends RelationManager
     public static function downloadProofAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('downloadProof')
-            ->label('Unduh Bukti')
+            ->label(__('Unduh Bukti'))
             ->icon('heroicon-o-arrow-down-tray')
             ->visible(fn (Payment $record): bool => $record->hasDownloadableProof()
                 && (Auth::user()?->can('downloadProof', $record) ?? false))
@@ -196,5 +196,15 @@ class PaymentsRelationManager extends RelationManager
     protected function canCreate(): bool
     {
         return false;
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

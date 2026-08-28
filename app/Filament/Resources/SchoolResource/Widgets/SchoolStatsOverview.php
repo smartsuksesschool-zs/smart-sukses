@@ -40,11 +40,11 @@ class SchoolStatsOverview extends StatsOverviewWidget
 
         return [
             Stat::make('Jumlah Siswa', number_format($stats['student_count'], 0, ',', '.'))
-                ->description('Berstatus aktif')
+                ->description(__('Berstatus aktif'))
                 ->icon('heroicon-m-academic-cap'),
 
             Stat::make('Jumlah Guru', number_format($stats['teacher_count'], 0, ',', '.'))
-                ->description('Guru dan wali kelas aktif')
+                ->description(__('Guru dan wali kelas aktif'))
                 ->icon('heroicon-m-user-group'),
 
             Stat::make('Terkumpul Bulan Ini', 'Rp '.number_format(
@@ -57,7 +57,7 @@ class SchoolStatsOverview extends StatsOverviewWidget
             Stat::make('Tunggakan', 'Rp '.number_format(
                 (float) $stats['arrears'], 0, ',', '.'
             ))
-                ->description('Seluruh periode, di luar tagihan yang dibebaskan')
+                ->description(__('Seluruh periode, di luar tagihan yang dibebaskan'))
                 ->icon('heroicon-m-exclamation-triangle')
                 ->color('danger'),
         ];

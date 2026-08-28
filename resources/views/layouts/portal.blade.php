@@ -49,7 +49,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $title ?? 'Portal Orang Tua' }} — {{ $branding->brandName() }}</title>
+    <title>{{ $title ?? __('Portal Orang Tua') }} — {{ $branding->brandName() }}</title>
 
     <style>
         :root {
@@ -321,6 +321,45 @@
             border: 0;
         }
 
+        /* ------------------------------------------- pemilih bahasa (AUTH-05) */
+
+        .locale-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: .125rem;
+        }
+
+        .locale-switch__item {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            /* Sasaran sentuh yang sama dengan tombol portal lain. */
+            min-width: 2.75rem;
+            min-height: 2.75rem;
+            padding: 0 .5rem;
+            border-radius: .5rem;
+            font-size: .8125rem;
+            font-weight: 600;
+            text-decoration: none;
+            color: var(--color-muted);
+        }
+
+        .locale-switch__item--active { background: #eef0f4; color: #1b2130; }
+
+        a.locale-switch__item:hover { background: #eef0f4; }
+
+        /* Di dalam header berwarna cabang, teksnya putih. */
+        .locale-switch--onbrand .locale-switch__item { color: #fff; }
+        .locale-switch--onbrand .locale-switch__item--active { background: rgba(255, 255, 255, .28); }
+        .locale-switch--onbrand a.locale-switch__item:hover { background: rgba(255, 255, 255, .18); }
+
+        /* Halaman masuk tidak punya header, jadi pemilihnya berdiri sendiri. */
+        .locale-switch-bar {
+            display: flex;
+            justify-content: center;
+            padding: 1rem 1rem 0;
+        }
+
         /* ---------------------------------------------- notifikasi (NOTIF-04) */
 
         .portal-bell {
@@ -453,6 +492,10 @@
     @livewireStyles
 </head>
 <body>
+    @if ($bare)
+        <div class="locale-switch-bar"><x-locale-switch /></div>
+    @endif
+
     @unless ($bare)
         <header class="portal-header">
             <div class="portal-header__inner">
@@ -465,6 +508,8 @@
 
                 @auth
                     <div class="portal-user">
+                        <x-locale-switch class="locale-switch--onbrand" />
+
                         {{--
                             NOTIF-04 poin 1 menyebut lencana pada ikon lonceng.
                             Lonceng ini tautan ke kotak masuk portal yang sedang
@@ -482,10 +527,10 @@
                                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                                 <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
                             </svg>
-                            <span class="portal-sr-only">Notifikasi</span>
+                            <span class="portal-sr-only">{{ __('Notifikasi') }}</span>
                             @if ($unreadNotifications > 0)
                                 <span class="portal-bell__count">{{ $unreadNotifications }}</span>
-                                <span class="portal-sr-only">{{ $unreadNotifications }} belum dibaca</span>
+                                <span class="portal-sr-only">{{ __(':count belum dibaca', ['count' => $unreadNotifications]) }}</span>
                             @endif
                         </a>
 
@@ -504,7 +549,7 @@
                         @endphp
                         <form method="POST" action="{{ $logoutRoute }}">
                             @csrf
-                            <button type="submit" class="portal-logout">Keluar</button>
+                            <button type="submit" class="portal-logout">{{ __('Keluar') }}</button>
                         </form>
                     </div>
                 @endauth
@@ -533,27 +578,27 @@
                             penanda mati (butir 208).
                         --}}
                         <a href="{{ route('student.schedule') }}"
-                           @if (request()->routeIs('student.schedule')) aria-current="page" @endif>Jadwal</a>
+                           @if (request()->routeIs('student.schedule')) aria-current="page" @endif>{{ __('Jadwal') }}</a>
                         <a href="{{ route('student.grades') }}"
-                           @if (request()->routeIs('student.grades')) aria-current="page" @endif>Nilai</a>
+                           @if (request()->routeIs('student.grades')) aria-current="page" @endif>{{ __('Nilai') }}</a>
                         {{-- Ujian online: tambahan scope atas permintaan pemilik,
                              di luar keempat menu PORTAL-03. --}}
                         <a href="{{ route('student.exams') }}"
-                           @if (request()->routeIs('student.exam*')) aria-current="page" @endif>Ujian</a>
+                           @if (request()->routeIs('student.exam*')) aria-current="page" @endif>{{ __('Ujian') }}</a>
                         <x-portal.notification-nav
                             :route="route('student.notifications')"
                             :active="request()->routeIs('student.notifications')"
                             :count="$unreadNotifications"
                         />
                         <a href="{{ route('student.profile') }}"
-                           @if (request()->routeIs('student.profile')) aria-current="page" @endif>Profil</a>
+                           @if (request()->routeIs('student.profile')) aria-current="page" @endif>{{ __('Profil') }}</a>
                     @elseif (request()->routeIs('teacher.*'))
                         <a href="{{ route('teacher.dashboard') }}"
-                           @if (request()->routeIs('teacher.dashboard')) aria-current="page" @endif>Dasbor</a>
+                           @if (request()->routeIs('teacher.dashboard')) aria-current="page" @endif>{{ __('Dasbor') }}</a>
                         <a href="{{ route('teacher.classes') }}"
-                           @if (request()->routeIs('teacher.classes') || request()->routeIs('teacher.class-students')) aria-current="page" @endif>Kelas Ajar</a>
+                           @if (request()->routeIs('teacher.classes') || request()->routeIs('teacher.class-students')) aria-current="page" @endif>{{ __('Kelas Ajar') }}</a>
                         <a href="{{ route('teacher.schedule') }}"
-                           @if (request()->routeIs('teacher.schedule')) aria-current="page" @endif>Jadwal</a>
+                           @if (request()->routeIs('teacher.schedule')) aria-current="page" @endif>{{ __('Jadwal') }}</a>
                         <x-portal.notification-nav
                             :route="route('teacher.notifications')"
                             :active="request()->routeIs('teacher.notifications')"
@@ -561,16 +606,16 @@
                         />
                         {{-- Input Nilai memang menyeberang ke panel: alur
                              penilaiannya sudah ada di sana (butir 178). --}}
-                        <a href="{{ \App\Filament\Pages\InputNilai::getUrl() }}">Input Nilai</a>
+                        <a href="{{ \App\Filament\Pages\InputNilai::getUrl() }}">{{ __('Input Nilai') }}</a>
                     @else
                         <a href="{{ route('portal.dashboard') }}"
-                           @if (request()->routeIs('portal.dashboard')) aria-current="page" @endif>Ringkasan</a>
+                           @if (request()->routeIs('portal.dashboard')) aria-current="page" @endif>{{ __('Ringkasan') }}</a>
                         <a href="{{ route('portal.grades') }}"
-                           @if (request()->routeIs('portal.grades')) aria-current="page" @endif>Nilai</a>
+                           @if (request()->routeIs('portal.grades')) aria-current="page" @endif>{{ __('Nilai') }}</a>
                         <a href="{{ route('portal.fees') }}"
-                           @if (request()->routeIs('portal.fees')) aria-current="page" @endif>Tagihan</a>
+                           @if (request()->routeIs('portal.fees')) aria-current="page" @endif>{{ __('Tagihan') }}</a>
                         <a href="{{ route('portal.schedule') }}"
-                           @if (request()->routeIs('portal.schedule')) aria-current="page" @endif>Jadwal</a>
+                           @if (request()->routeIs('portal.schedule')) aria-current="page" @endif>{{ __('Jadwal') }}</a>
                         <x-portal.notification-nav
                             :route="route('portal.notifications')"
                             :active="request()->routeIs('portal.notifications')"

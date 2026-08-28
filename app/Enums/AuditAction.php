@@ -21,9 +21,9 @@ enum AuditAction: string
     public function label(): string
     {
         return match ($this) {
-            self::Created => 'Dibuat',
-            self::Updated => 'Diubah',
-            self::Deleted => 'Dihapus',
+            self::Created => __('Dibuat'),
+            self::Updated => __('Diubah'),
+            self::Deleted => __('Dihapus'),
         };
     }
 

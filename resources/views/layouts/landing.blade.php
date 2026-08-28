@@ -166,6 +166,36 @@
 
         .nav__links a:hover { color: var(--brand); background: var(--soft); }
 
+        /* -------------------------------------------- pemilih bahasa (AUTH-05) */
+
+        .locale-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: .125rem;
+            margin-left: .35rem;
+            padding-left: .35rem;
+            border-left: 1px solid var(--line);
+        }
+
+        .locale-switch__item {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            /* Sasaran sentuh untuk jari, bukan kursor. */
+            min-width: 2.75rem;
+            min-height: 2.75rem;
+            padding: 0 .5rem;
+            border-radius: .5rem;
+            color: var(--muted);
+            font-size: .8125rem;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .locale-switch__item--active { background: var(--soft); color: var(--brand); }
+
+        a.locale-switch__item:hover { color: var(--brand); background: var(--soft); }
+
         .btn {
             display: inline-flex;
             align-items: center;
@@ -448,7 +478,7 @@
     </style>
 </head>
 <body>
-    <a class="skip" href="#konten">Lompat ke konten utama</a>
+    <a class="skip" href="#konten">{{ __('Lompat ke konten utama') }}</a>
 
     @yield('content')
 </body>

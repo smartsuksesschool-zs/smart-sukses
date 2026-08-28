@@ -36,6 +36,6 @@ class ParentGrades extends Component
         return view('livewire.portal.parent-grades', [
             'children' => $this->children(),
             'data' => $this->grades(),
-        ])->layout('layouts.portal', ['title' => 'Nilai']);
+        ])->layout('layouts.portal', ['title' => __('Nilai')]);
     }
 }

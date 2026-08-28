@@ -23,7 +23,7 @@ class StudentExams extends Component
     {
         return view('livewire.student.exams', [
             'rows' => $this->hasStudent() ? $this->rows() : null,
-        ])->layout('layouts.portal', ['title' => 'Ujian']);
+        ])->layout('layouts.portal', ['title' => __('Ujian')]);
     }
 
     /**

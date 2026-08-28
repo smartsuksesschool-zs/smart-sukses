@@ -71,7 +71,7 @@ class PengaturanNotifikasi extends Page implements HasForms
         return $form
             ->schema([
                 Forms\Components\Select::make('school_id')
-                    ->label('Cabang Sekolah')
+                    ->label(__('Cabang Sekolah'))
                     ->options(fn (): array => School::query()
                         ->orderBy('name')
                         ->pluck('name', 'id')
@@ -87,24 +87,24 @@ class PengaturanNotifikasi extends Page implements HasForms
                         }
                     })
                     ->visible(fn (): bool => Auth::user()?->isSuperAdmin() ?? false)
-                    ->helperText('Template yang disimpan hanya berlaku untuk cabang ini.'),
+                    ->helperText(__('Template yang disimpan hanya berlaku untuk cabang ini.')),
 
-                Forms\Components\Section::make('Template WhatsApp')
+                Forms\Components\Section::make(__('Template WhatsApp'))
                     ->description('Dipakai saat menyusun pesan wa.me. Dikosongkan berarti memakai teks bawaan sistem. '
                         .'Pengirimannya tetap manual — sistem hanya menyiapkan tautannya.')
                     ->schema([
                         Forms\Components\Textarea::make('wa_template_ppdb')
-                            ->label('Template PPDB')
+                            ->label(__('Template PPDB'))
                             ->rows(4)
                             ->helperText('Placeholder yang dikenali: '.implode(', ', PpdbWaTemplate::placeholders()).'.'),
 
                         Forms\Components\Textarea::make('wa_template_spp')
-                            ->label('Template Tagihan')
+                            ->label(__('Template Tagihan'))
                             ->rows(4)
                             ->helperText('Placeholder yang dikenali: '.implode(', ', StudentWaTemplate::placeholders()).'.'),
 
                         Forms\Components\Textarea::make('wa_template_rapor')
-                            ->label('Template Rapor')
+                            ->label(__('Template Rapor'))
                             ->rows(4)
                             ->helperText('Placeholder yang dikenali: '.implode(', ', StudentWaTemplate::placeholders()).'.'),
                     ]),
@@ -120,8 +120,8 @@ class PengaturanNotifikasi extends Page implements HasForms
 
         if ($school === null) {
             Notification::make()
-                ->title('Cabang belum ditentukan')
-                ->body('Pilih cabang sekolah terlebih dahulu sebelum menyimpan template.')
+                ->title(__('Cabang belum ditentukan'))
+                ->body(__('Pilih cabang sekolah terlebih dahulu sebelum menyimpan template.'))
                 ->danger()
                 ->send();
 
@@ -132,8 +132,8 @@ class PengaturanNotifikasi extends Page implements HasForms
         // tetapi state Livewire tetap dapat dikirim apa adanya.
         if (Auth::user()?->cannot('configureWaTemplates', $school)) {
             Notification::make()
-                ->title('Tidak diizinkan')
-                ->body('Anda hanya dapat menyetel template cabang Anda sendiri.')
+                ->title(__('Tidak diizinkan'))
+                ->body(__('Anda hanya dapat menyetel template cabang Anda sendiri.'))
                 ->danger()
                 ->send();
 
@@ -149,8 +149,8 @@ class PengaturanNotifikasi extends Page implements HasForms
         ]);
 
         Notification::make()
-            ->title('Template WhatsApp disimpan')
-            ->body('Notifikasi yang sudah terbit tidak berubah — template ini berlaku untuk kejadian berikutnya.')
+            ->title(__('Template WhatsApp disimpan'))
+            ->body(__('Notifikasi yang sudah terbit tidak berubah — template ini berlaku untuk kejadian berikutnya.'))
             ->success()
             ->send();
     }
@@ -200,5 +200,20 @@ class PengaturanNotifikasi extends Page implements HasForms
             'wa_template_spp' => $school?->wa_template_spp,
             'wa_template_rapor' => $school?->wa_template_rapor,
         ];
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public function getTitle(): string
+    {
+        return __(static::$title);
     }
 }

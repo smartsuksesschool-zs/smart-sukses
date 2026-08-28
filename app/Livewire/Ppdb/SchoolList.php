@@ -17,6 +17,6 @@ class SchoolList extends Component
         return view('livewire.ppdb.school-list', [
             // Cabang yang membuka PPDB = tenant aktif (ERD 2.2 schools.is_active).
             'schools' => School::query()->active()->orderBy('name')->get(),
-        ])->layout('layouts.ppdb', ['school' => null, 'title' => 'Daftar Cabang']);
+        ])->layout('layouts.ppdb', ['school' => null, 'title' => __('Daftar Cabang')]);
     }
 }

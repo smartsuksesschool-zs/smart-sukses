@@ -8,11 +8,11 @@
 @props(['route', 'active' => false, 'count' => 0])
 
 <a href="{{ $route }}" @if ($active) aria-current="page" @endif>
-    Notifikasi
+    {{ __('Notifikasi') }}
     @if ($count > 0)
         {{-- Angkanya teks, bukan warna, dan disertai keterangan untuk pembaca
              layar supaya lencana tidak terbaca sebagai angka tanpa arti. --}}
         <span class="portal-nav__badge">{{ $count }}</span>
-        <span class="portal-sr-only">notifikasi belum dibaca</span>
+        <span class="portal-sr-only">{{ __('notifikasi belum dibaca') }}</span>
     @endif
 </a>

@@ -21,9 +21,9 @@ enum FeeFrequency: string
     public function label(): string
     {
         return match ($this) {
-            self::Monthly => 'Bulanan',
-            self::Yearly => 'Tahunan',
-            self::Once => 'Sekali',
+            self::Monthly => __('Bulanan'),
+            self::Yearly => __('Tahunan'),
+            self::Once => __('Sekali'),
         };
     }
 

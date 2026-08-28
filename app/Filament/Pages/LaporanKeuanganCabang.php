@@ -81,7 +81,7 @@ class LaporanKeuanganCabang extends Page implements HasForms
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Filter')
+                Forms\Components\Section::make(__('Filter'))
                     ->columns(2)
                     ->schema([
                         // Tahun ajaran adalah baris milik masing-masing cabang
@@ -90,16 +90,16 @@ class LaporanKeuanganCabang extends Page implements HasForms
                         // setiap cabang dicocokkan pada baris miliknya sendiri
                         // yang bernama sama (butir 92).
                         Forms\Components\Select::make('academic_year')
-                            ->label('Tahun Ajaran')
+                            ->label(__('Tahun Ajaran'))
                             ->options(fn (): array => static::academicYearOptions())
                             ->searchable()
-                            ->placeholder('Semua tahun ajaran')
+                            ->placeholder(__('Semua tahun ajaran'))
                             ->live()
                             ->afterStateUpdated(fn () => $this->refreshRows())
-                            ->helperText('Dicocokkan berdasarkan nama tahun ajaran di setiap cabang.'),
+                            ->helperText(__('Dicocokkan berdasarkan nama tahun ajaran di setiap cabang.')),
 
                         Forms\Components\TextInput::make('period')
-                            ->label('Bulan')
+                            ->label(__('Bulan'))
                             ->maxLength(7)
                             ->placeholder('2026-08')
                             ->live(onBlur: true)
@@ -109,7 +109,7 @@ class LaporanKeuanganCabang extends Page implements HasForms
                                 'regex' => 'Bulan harus berformat YYYY-MM, misalnya 2026-08.',
                             ])
                             ->afterStateUpdated(fn () => $this->refreshRows())
-                            ->helperText('Kosongkan untuk seluruh bulan.'),
+                            ->helperText(__('Kosongkan untuk seluruh bulan.')),
                     ]),
             ])
             ->statePath('data');
@@ -176,5 +176,20 @@ class LaporanKeuanganCabang extends Page implements HasForms
         }
 
         return app(CrossSchoolFinanceSummaryService::class)->academicYearOptions($user);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public function getTitle(): string
+    {
+        return __(static::$title);
     }
 }

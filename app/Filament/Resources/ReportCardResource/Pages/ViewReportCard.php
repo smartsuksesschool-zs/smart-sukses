@@ -19,7 +19,7 @@ class ViewReportCard extends ViewRecord
     {
         return [
             Actions\Action::make('pdf')
-                ->label('Unduh PDF')
+                ->label(__('Unduh PDF'))
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('gray')
                 ->authorize('downloadPdf')

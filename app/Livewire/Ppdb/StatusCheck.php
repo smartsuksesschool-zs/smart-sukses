@@ -73,7 +73,7 @@ class StatusCheck extends Component
         return view('livewire.ppdb.status-check')
             ->layout('layouts.ppdb', [
                 'school' => $this->school,
-                'title' => 'Cek Status Pendaftaran',
+                'title' => __('Cek Status Pendaftaran'),
             ]);
     }
 }

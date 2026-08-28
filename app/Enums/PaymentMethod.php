@@ -18,9 +18,9 @@ enum PaymentMethod: string
     public function label(): string
     {
         return match ($this) {
-            self::Cash => 'Tunai',
-            self::Transfer => 'Transfer',
-            self::PaymentGateway => 'Payment Gateway',
+            self::Cash => __('Tunai'),
+            self::Transfer => __('Transfer'),
+            self::PaymentGateway => __('Payment Gateway'),
         };
     }
 

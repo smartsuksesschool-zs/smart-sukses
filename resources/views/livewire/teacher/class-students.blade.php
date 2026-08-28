@@ -1,17 +1,17 @@
 <div>
     <div class="portal-card" style="margin-bottom:1rem;">
-        <div class="portal-label">Daftar Siswa</div>
-        <div style="font-size:1.25rem;font-weight:700;">Kelas {{ $schoolClass->name }}</div>
+        <div class="portal-label">{{ __('Daftar Siswa') }}</div>
+        <div style="font-size:1.25rem;font-weight:700;">{{ __('Kelas') }} {{ $schoolClass->name }}</div>
         <div class="portal-muted">
-            {{ $students->count() }} siswa aktif ·
-            <a href="{{ route('teacher.classes') }}">kembali ke kelas ajar</a>
+            {{ __(':count siswa aktif', ['count' => $students->count()]) }} ·
+            <a href="{{ route('teacher.classes') }}">{{ __('kembali ke kelas ajar') }}</a>
         </div>
     </div>
 
     @if ($students->isEmpty())
         <div class="portal-card">
             <p class="portal-muted" style="margin:0;">
-                Belum ada siswa aktif di kelas ini pada tahun ajaran yang berjalan.
+                {{ __('Belum ada siswa aktif di kelas ini pada tahun ajaran yang berjalan.') }}
             </p>
         </div>
     @else
@@ -31,7 +31,7 @@
                             keadaan sebenarnya, bukan "Hadir" maupun angka nol
                             (butir 152).
                         --}}
-                        <span class="portal-badge portal-badge--muted">Kehadiran belum tersedia</span>
+                        <span class="portal-badge portal-badge--muted">{{ __('Kehadiran belum tersedia') }}</span>
                     </li>
                 @endforeach
             </ul>

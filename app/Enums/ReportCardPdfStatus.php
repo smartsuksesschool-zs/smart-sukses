@@ -22,9 +22,9 @@ enum ReportCardPdfStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Queued => 'Dalam antrean',
-            self::Ready => 'Siap diunduh',
-            self::Failed => 'Gagal dibuat',
+            self::Queued => __('Dalam antrean'),
+            self::Ready => __('Siap diunduh'),
+            self::Failed => __('Gagal dibuat'),
         };
     }
 

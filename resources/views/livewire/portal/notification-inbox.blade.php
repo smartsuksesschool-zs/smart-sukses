@@ -14,18 +14,18 @@
 <div>
     <div class="notif-head">
         <div>
-            <h1 class="notif-head__title">Notifikasi</h1>
+            <h1 class="notif-head__title">{{ __('Notifikasi') }}</h1>
             {{--
                 Lencana halaman. `aria-live` supaya pembaca layar mendengar
                 angkanya berubah setelah menandai terbaca, bukan hanya melihat.
             --}}
             <p class="portal-muted" aria-live="polite">
                 @if ($unreadCount > 0)
-                    {{ $unreadCount }} belum dibaca dari {{ count($items) }} notifikasi
+                    {{ __(':unread belum dibaca dari :total notifikasi', ['unread' => $unreadCount, 'total' => count($items)]) }}
                 @elseif (count($items) > 0)
-                    Semua notifikasi sudah dibaca
+                    {{ __('Semua notifikasi sudah dibaca') }}
                 @else
-                    Belum ada notifikasi
+                    {{ __('Belum ada notifikasi') }}
                 @endif
             </p>
         </div>
@@ -36,7 +36,7 @@
                 class="notif-markall"
                 wire:click="markAllRead"
                 wire:loading.attr="disabled"
-            >Tandai semua dibaca</button>
+            >{{ __('Tandai semua dibaca') }}</button>
         @endif
     </div>
 
@@ -70,9 +70,9 @@
                             teksnya, dan yang belum dibaca juga ditebalkan.
                         --}}
                         @if ($item['is_read'])
-                            <span class="portal-badge portal-badge--muted">Sudah dibaca</span>
+                            <span class="portal-badge portal-badge--muted">{{ __('Sudah dibaca') }}</span>
                         @else
-                            <span class="portal-badge portal-badge--warning">Belum dibaca</span>
+                            <span class="portal-badge portal-badge--warning">{{ __('Belum dibaca') }}</span>
                         @endif
                     </span>
                 </button>
@@ -83,13 +83,13 @@
 
                         <p class="portal-muted notif__from">
                             @if ($item['sender_name'])
-                                Dari {{ $item['sender_name'] }}
+                                {{ __('Dari') }} {{ $item['sender_name'] }}
                             @else
-                                Notifikasi sistem
+                                {{ __('Notifikasi sistem') }}
                             @endif
 
                             @if ($item['read_at_label'])
-                                · Dibaca {{ $item['read_at_label'] }}
+                                · {{ __('Dibaca') }} {{ $item['read_at_label'] }}
                             @endif
                         </p>
                     </div>
@@ -97,9 +97,9 @@
             </article>
         @empty
             <div class="portal-card">
-                <div style="font-weight:600;">Belum ada notifikasi</div>
+                <div style="font-weight:600;">{{ __('Belum ada notifikasi') }}</div>
                 <p class="portal-muted" style="margin:.25rem 0 0;">
-                    Pengumuman dari sekolah akan muncul di halaman ini.
+                    {{ __('Pengumuman dari sekolah akan muncul di halaman ini.') }}
                 </p>
             </div>
         @endforelse

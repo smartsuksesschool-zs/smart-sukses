@@ -48,59 +48,59 @@ class AuditLogResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('created_at')
-                    ->label('Waktu')
+                    ->label(__('Waktu'))
                     ->dateTime('d M Y H:i:s')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('user.name')
-                    ->label('Pengguna')
-                    ->placeholder('Sistem')
+                    ->label(__('Pengguna'))
+                    ->placeholder(__('Sistem'))
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('school.name')
-                    ->label('Cabang')
-                    ->placeholder('Platform')
+                    ->label(__('Cabang'))
+                    ->placeholder(__('Platform'))
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('action')
-                    ->label('Aksi')
+                    ->label(__('Aksi'))
                     ->badge()
                     ->formatStateUsing(fn (AuditAction $state) => $state->label())
                     ->color(fn (AuditAction $state) => $state->color()),
 
                 Tables\Columns\TextColumn::make('auditable_type')
-                    ->label('Tabel')
+                    ->label(__('Tabel'))
                     ->formatStateUsing(fn (AuditLog $record) => $record->tableName())
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('auditable_id')
-                    ->label('ID Record')
+                    ->label(__('ID Record'))
                     ->alignRight(),
 
                 Tables\Columns\TextColumn::make('ip_address')
-                    ->label('IP')
+                    ->label(__('IP'))
                     ->placeholder('—')
                     ->toggleable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('school_id')
-                    ->label('Cabang')
+                    ->label(__('Cabang'))
                     ->options(fn () => School::query()->orderBy('name')->pluck('name', 'id')->all())
                     ->searchable(),
 
                 Tables\Filters\SelectFilter::make('action')
-                    ->label('Aksi')
+                    ->label(__('Aksi'))
                     ->options(AuditAction::options()),
 
                 Tables\Filters\SelectFilter::make('user_id')
-                    ->label('Pengguna')
+                    ->label(__('Pengguna'))
                     ->options(fn () => User::query()->orderBy('name')->pluck('name', 'id')->all())
                     ->searchable(),
 
                 Tables\Filters\Filter::make('created_at')
                     ->form([
-                        Forms\Components\DatePicker::make('from')->label('Dari Tanggal'),
-                        Forms\Components\DatePicker::make('until')->label('Sampai Tanggal'),
+                        Forms\Components\DatePicker::make('from')->label(__('Dari Tanggal')),
+                        Forms\Components\DatePicker::make('until')->label(__('Sampai Tanggal')),
                     ])
                     ->query(fn (Builder $query, array $data) => $query
                         ->when($data['from'] ?? null, fn (Builder $q, $date) => $q->whereDate('created_at', '>=', $date))
@@ -116,37 +116,37 @@ class AuditLogResource extends Resource
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist->schema([
-            Infolists\Components\Section::make('Jejak Aksi')
+            Infolists\Components\Section::make(__('Jejak Aksi'))
                 ->columns(2)
                 ->schema([
                     Infolists\Components\TextEntry::make('created_at')
-                        ->label('Waktu')
+                        ->label(__('Waktu'))
                         ->dateTime('d M Y H:i:s'),
 
                     Infolists\Components\TextEntry::make('action')
-                        ->label('Aksi')
+                        ->label(__('Aksi'))
                         ->badge()
                         ->formatStateUsing(fn (AuditAction $state) => $state->label())
                         ->color(fn (AuditAction $state) => $state->color()),
 
                     Infolists\Components\TextEntry::make('user.name')
-                        ->label('Pengguna')
-                        ->placeholder('Sistem (job/CLI)'),
+                        ->label(__('Pengguna'))
+                        ->placeholder(__('Sistem (job/CLI)')),
 
                     Infolists\Components\TextEntry::make('school.name')
-                        ->label('Cabang')
-                        ->placeholder('Platform (lintas cabang)'),
+                        ->label(__('Cabang'))
+                        ->placeholder(__('Platform (lintas cabang)')),
 
                     Infolists\Components\TextEntry::make('auditable_type')
-                        ->label('Tabel')
+                        ->label(__('Tabel'))
                         ->formatStateUsing(fn (AuditLog $record) => $record->tableName()),
 
                     Infolists\Components\TextEntry::make('auditable_id')
-                        ->label('ID Record'),
+                        ->label(__('ID Record')),
 
                     Infolists\Components\TextEntry::make('ip_address')
-                        ->label('Alamat IP')
-                        ->placeholder('— (bukan request HTTP)'),
+                        ->label(__('Alamat IP'))
+                        ->placeholder(__('— (bukan request HTTP)')),
                 ]),
         ]);
     }
@@ -157,5 +157,25 @@ class AuditLogResource extends Resource
             'index' => Pages\ListAuditLogs::route('/'),
             'view' => Pages\ViewAuditLog::route('/{record}'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

@@ -32,6 +32,6 @@ class StudentProfile extends Component
             'student' => $student,
             'currentClass' => $student === null ? null : $service->currentClass($student),
             'academicYear' => $student === null ? null : $service->activeAcademicYear($student),
-        ])->layout('layouts.portal', ['title' => 'Profil']);
+        ])->layout('layouts.portal', ['title' => __('Profil')]);
     }
 }

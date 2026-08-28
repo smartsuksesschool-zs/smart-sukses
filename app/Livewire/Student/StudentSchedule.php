@@ -27,6 +27,6 @@ class StudentSchedule extends Component
             'data' => $data,
             'today' => $lessons->where('day_of_week', $data['today'] ?? null)->values(),
             'week' => $lessons->groupBy('day_of_week'),
-        ])->layout('layouts.portal', ['title' => 'Jadwal']);
+        ])->layout('layouts.portal', ['title' => __('Jadwal')]);
     }
 }

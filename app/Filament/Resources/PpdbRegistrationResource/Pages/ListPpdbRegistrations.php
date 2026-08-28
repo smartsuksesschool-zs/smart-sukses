@@ -28,7 +28,7 @@ class ListPpdbRegistrations extends ListRecords
      */
     public function getTabs(): array
     {
-        $tabs = ['all' => Tab::make('Semua')];
+        $tabs = ['all' => Tab::make(__('Semua'))];
 
         foreach (PpdbStatus::cases() as $status) {
             $tabs[$status->value] = Tab::make($status->label())

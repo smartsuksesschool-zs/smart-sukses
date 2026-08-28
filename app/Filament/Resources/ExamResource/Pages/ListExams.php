@@ -12,6 +12,6 @@ class ListExams extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [Actions\CreateAction::make()->label('Ujian Baru')];
+        return [Actions\CreateAction::make()->label(__('Ujian Baru'))];
     }
 }

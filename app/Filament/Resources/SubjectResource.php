@@ -33,29 +33,29 @@ class SubjectResource extends Resource
     {
         return $form->schema([
             Forms\Components\TextInput::make('name')
-                ->label('Nama Mata Pelajaran')
+                ->label(__('Nama Mata Pelajaran'))
                 ->required()
                 ->maxLength(100)
-                ->placeholder('Matematika'),
+                ->placeholder(__('Matematika')),
 
             Forms\Components\TextInput::make('code')
-                ->label('Kode')
+                ->label(__('Kode'))
                 ->required()
                 ->maxLength(20)
                 ->placeholder('MTK'),
 
             Forms\Components\TextInput::make('credit_hours')
-                ->label('Jam Pelajaran / Minggu')
+                ->label(__('Jam Pelajaran / Minggu'))
                 ->numeric()
                 ->minValue(0)
                 ->maxValue(127),
 
             Forms\Components\Toggle::make('is_active')
-                ->label('Aktif')
+                ->label(__('Aktif'))
                 ->default(true),
 
             Forms\Components\Textarea::make('description')
-                ->label('Deskripsi')
+                ->label(__('Deskripsi'))
                 ->rows(3)
                 ->columnSpanFull(),
         ])->columns(2);
@@ -66,26 +66,26 @@ class SubjectResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('code')
-                    ->label('Kode')
+                    ->label(__('Kode'))
                     ->badge()
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Nama')
+                    ->label(__('Nama'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('credit_hours')
-                    ->label('JP/Minggu')
+                    ->label(__('JP/Minggu'))
                     ->placeholder('—'),
 
                 Tables\Columns\IconColumn::make('is_active')
-                    ->label('Aktif')
+                    ->label(__('Aktif'))
                     ->boolean(),
             ])
             ->filters([
-                Tables\Filters\TernaryFilter::make('is_active')->label('Status Aktif'),
+                Tables\Filters\TernaryFilter::make('is_active')->label(__('Status Aktif')),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
@@ -99,5 +99,25 @@ class SubjectResource extends Resource
         return [
             'index' => Pages\ManageSubjects::route('/'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

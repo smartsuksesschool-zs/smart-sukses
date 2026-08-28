@@ -41,7 +41,7 @@ class SchoolClassResource extends Resource
     {
         return $form->schema([
             Forms\Components\Select::make('academic_year_id')
-                ->label('Tahun Ajaran')
+                ->label(__('Tahun Ajaran'))
                 ->relationship('academicYear', 'name')
                 ->default(fn () => AcademicYear::current()?->id)
                 ->required()
@@ -49,19 +49,19 @@ class SchoolClassResource extends Resource
                 ->searchable(),
 
             Forms\Components\TextInput::make('name')
-                ->label('Nama Kelas')
+                ->label(__('Nama Kelas'))
                 ->required()
                 ->maxLength(50)
                 ->placeholder('X-A'),
 
             Forms\Components\Select::make('grade_level')
-                ->label('Tingkat')
+                ->label(__('Tingkat'))
                 // ERD 2.2: "Tingkat: 10, 11, atau 12".
                 ->options([10 => '10', 11 => '11', 12 => '12'])
                 ->required(),
 
             Forms\Components\Select::make('homeroom_teacher_id')
-                ->label('Wali Kelas')
+                ->label(__('Wali Kelas'))
                 ->options(fn () => static::homeroomTeacherOptions())
                 ->searchable()
                 // KELAS-01 poin 3: satu guru hanya boleh menjadi wali kelas
@@ -74,14 +74,14 @@ class SchoolClassResource extends Resource
                 ->validationMessages([
                     'unique' => 'Guru ini sudah menjadi wali kelas lain pada tahun ajaran tersebut.',
                 ])
-                ->helperText('Dipilih dari pengguna aktif dengan peran Wali Kelas.'),
+                ->helperText(__('Dipilih dari pengguna aktif dengan peran Wali Kelas.')),
 
             Forms\Components\TextInput::make('room')
-                ->label('Ruang')
+                ->label(__('Ruang'))
                 ->maxLength(50),
 
             Forms\Components\TextInput::make('capacity')
-                ->label('Kapasitas')
+                ->label(__('Kapasitas'))
                 ->numeric()
                 ->minValue(1)
                 ->default(35)
@@ -94,42 +94,42 @@ class SchoolClassResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Kelas')
+                    ->label(__('Kelas'))
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('grade_level')
-                    ->label('Tingkat')
+                    ->label(__('Tingkat'))
                     ->badge()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('academicYear.name')
-                    ->label('Tahun Ajaran')
+                    ->label(__('Tahun Ajaran'))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('homeroomTeacher.name')
-                    ->label('Wali Kelas')
-                    ->placeholder('Belum ditentukan'),
+                    ->label(__('Wali Kelas'))
+                    ->placeholder(__('Belum ditentukan')),
 
                 Tables\Columns\TextColumn::make('student_classes_count')
-                    ->label('Siswa')
+                    ->label(__('Siswa'))
                     ->counts([
                         'studentClasses' => fn (Builder $query) => $query->where('status', 'ACTIVE'),
                     ])
                     ->suffix(fn (SchoolClass $record) => ' / '.$record->capacity),
 
                 Tables\Columns\TextColumn::make('room')
-                    ->label('Ruang')
+                    ->label(__('Ruang'))
                     ->placeholder('—')
                     ->toggleable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('academic_year_id')
-                    ->label('Tahun Ajaran')
+                    ->label(__('Tahun Ajaran'))
                     ->relationship('academicYear', 'name'),
 
                 Tables\Filters\SelectFilter::make('grade_level')
-                    ->label('Tingkat')
+                    ->label(__('Tingkat'))
                     ->options([10 => '10', 11 => '11', 12 => '12']),
             ])
             ->actions([
@@ -169,5 +169,25 @@ class SchoolClassResource extends Resource
             'create' => Pages\CreateSchoolClass::route('/create'),
             'edit' => Pages\EditSchoolClass::route('/{record}/edit'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }

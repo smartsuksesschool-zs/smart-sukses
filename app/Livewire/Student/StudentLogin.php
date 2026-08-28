@@ -102,7 +102,7 @@ class StudentLogin extends Component
     {
         return view('livewire.student.login')
             ->layout('layouts.portal', [
-                'title' => 'Masuk Portal Siswa',
+                'title' => __('Masuk Portal Siswa'),
                 'bare' => true,
             ]);
     }

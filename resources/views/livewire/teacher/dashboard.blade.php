@@ -1,16 +1,16 @@
 <div>
     <div class="portal-card" style="margin-bottom:1rem;">
-        <div class="portal-label">Dasbor Kerja</div>
+        <div class="portal-label">{{ __('Dasbor Kerja') }}</div>
         <div style="font-size:1.25rem;font-weight:700;">{{ $data['teacher']->name }}</div>
         <div class="portal-muted">
             {{ $data['teacher']->primaryRole()?->label() }}
             @if ($data['academic_year'])
-                — Tahun ajaran {{ $data['academic_year']->name }}
+                — {{ __('Tahun Ajaran') }} {{ $data['academic_year']->name }}
             @else
-                — belum ada tahun ajaran aktif
+                — {{ __('belum ada tahun ajaran aktif') }}
             @endif
             @if ($data['homeroom_class'])
-                · Wali kelas {{ $data['homeroom_class']->name }}
+                · {{ __('Wali Kelas') }} {{ $data['homeroom_class']->name }}
             @endif
         </div>
     </div>
@@ -18,11 +18,11 @@
     {{-- PORTAL-02 poin 1 — jadwal hari ini tampil di halaman utama. --}}
     <div class="portal-card" style="margin-bottom:1rem;">
         <div class="portal-label" style="margin-bottom:.5rem;">
-            Jadwal Hari Ini — {{ $data['today']['day_label'] }}
+            {{ __('Jadwal Hari Ini') }} — {{ $data['today']['day_label'] }}
         </div>
 
         @if (empty($data['today_schedule']))
-            <p class="portal-muted" style="margin:0;">Tidak ada jadwal mengajar hari ini.</p>
+            <p class="portal-muted" style="margin:0;">{{ __('Tidak ada jadwal mengajar hari ini.') }}</p>
         @else
             <ul class="portal-list">
                 @foreach ($data['today_schedule'] as $lesson)
@@ -31,7 +31,7 @@
                             <strong>{{ $lesson['start_time'] }}–{{ $lesson['end_time'] }}</strong>
                             {{ $lesson['subject_name'] }}
                             <div class="portal-muted">
-                                Kelas {{ $lesson['class_name'] }}
+                                {{ __('Kelas') }} {{ $lesson['class_name'] }}
                                 @if ($lesson['room'])
                                     — {{ $lesson['room'] }}
                                 @endif
@@ -45,14 +45,14 @@
 
     {{-- PORTAL-02 — kelas yang aktif. --}}
     <div class="portal-card" style="margin-bottom:1rem;">
-        <div class="portal-label" style="margin-bottom:.5rem;">Kelas Aktif</div>
+        <div class="portal-label" style="margin-bottom:.5rem;">{{ __('Kelas Aktif') }}</div>
 
         @if (empty($data['active_classes']))
             <p class="portal-muted" style="margin:0;">
                 @if ($data['academic_year'] === null)
-                    Belum ada tahun ajaran aktif di sekolah ini.
+                    {{ __('Belum ada tahun ajaran aktif di sekolah ini.') }}
                 @else
-                    Belum ada kelas yang Anda ampu pada tahun ajaran ini.
+                    {{ __('Belum ada kelas yang Anda ampu pada tahun ajaran ini.') }}
                 @endif
             </p>
         @else
@@ -67,7 +67,7 @@
                                 {{ collect($row['subjects'])->pluck('name')->join(', ') }}
                             </div>
                         </span>
-                        <span class="portal-muted">{{ $row['student_count'] }} siswa</span>
+                        <span class="portal-muted">{{ __(':count siswa', ['count' => $row['student_count']]) }}</span>
                     </li>
                 @endforeach
             </ul>
@@ -77,13 +77,13 @@
     {{-- PORTAL-02 poin 2 — tiga pintasan. --}}
     <div class="portal-grid portal-grid--3" style="margin-bottom:1rem;">
         <a href="{{ \App\Filament\Pages\InputNilai::getUrl() }}" class="portal-card" style="text-decoration:none;color:inherit;">
-            <div style="font-weight:700;">Input Nilai</div>
-            <div class="portal-muted">Masukkan nilai kelas yang Anda ampu.</div>
+            <div style="font-weight:700;">{{ __('Input Nilai') }}</div>
+            <div class="portal-muted">{{ __('Masukkan nilai kelas yang Anda ampu.') }}</div>
         </a>
 
         <a href="{{ route('teacher.classes') }}" class="portal-card" style="text-decoration:none;color:inherit;">
-            <div style="font-weight:700;">Daftar Siswa Kelas</div>
-            <div class="portal-muted">Lihat siswa aktif per kelas ajar.</div>
+            <div style="font-weight:700;">{{ __('Daftar Siswa Kelas') }}</div>
+            <div class="portal-muted">{{ __('Lihat siswa aktif per kelas ajar.') }}</div>
         </a>
 
         {{--
@@ -94,9 +94,9 @@
             ke halaman yang memang tidak boleh dibukanya (butir 175).
         --}}
         <div class="portal-card" aria-disabled="true" style="opacity:.6;">
-            <div style="font-weight:700;">Buat Pengumuman</div>
+            <div style="font-weight:700;">{{ __('Buat Pengumuman') }}</div>
             <div class="portal-muted">
-                Belum tersedia — pembuatan pengumuman adalah kewenangan Admin Sekolah.
+                {{ __('Belum tersedia — pembuatan pengumuman adalah kewenangan Admin Sekolah.') }}
             </div>
         </div>
     </div>
@@ -108,6 +108,6 @@
     <x-portal.notification-summary
         :notifications="$data['notifications']"
         :route="route('teacher.notifications')"
-        label="Notifikasi Masuk"
+        :label="__('Notifikasi Masuk')"
     />
 </div>

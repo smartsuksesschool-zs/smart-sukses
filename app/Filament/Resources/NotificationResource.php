@@ -48,11 +48,11 @@ class NotificationResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Isi Pengumuman')->schema([
+            Forms\Components\Section::make(__('Isi Pengumuman'))->schema([
                 // Super Admin tidak punya cabang, jadi ia wajib memilihnya;
                 // peran cabang tidak pernah melihat pilihan ini (butir 202).
                 Forms\Components\Select::make('school_id')
-                    ->label('Cabang')
+                    ->label(__('Cabang'))
                     ->options(fn (): array => School::query()
                         ->withoutGlobalScope(SchoolScope::class)
                         ->orderBy('name')
@@ -64,17 +64,17 @@ class NotificationResource extends Resource
                     ->visible(fn (): bool => Auth::user()?->isSuperAdmin() ?? false),
 
                 Forms\Components\TextInput::make('title')
-                    ->label('Judul')
+                    ->label(__('Judul'))
                     ->required()
                     ->maxLength(200),
 
                 Forms\Components\Textarea::make('message')
-                    ->label('Isi Pesan')
+                    ->label(__('Isi Pesan'))
                     ->required()
                     ->rows(6),
 
                 Forms\Components\Select::make('type')
-                    ->label('Kategori')
+                    ->label(__('Kategori'))
                     // SYSTEM tidak ditawarkan: itu milik notifikasi otomatis
                     // (NOTIF-03), dan memilihnya manual akan membuat pengumuman
                     // manusia menyamar sebagai notifikasi sistem (butir 191).
@@ -83,9 +83,9 @@ class NotificationResource extends Resource
                     ->required(),
             ])->columns(1),
 
-            Forms\Components\Section::make('Penerima')->schema([
+            Forms\Components\Section::make(__('Penerima'))->schema([
                 Forms\Components\Select::make('target_type')
-                    ->label('Target')
+                    ->label(__('Target'))
                     ->options(NotificationTargetType::options())
                     ->default(NotificationTargetType::All->value)
                     ->required()
@@ -93,14 +93,14 @@ class NotificationResource extends Resource
                     ->afterStateUpdated(fn (Forms\Set $set) => $set('target_id', null)),
 
                 Forms\Components\Select::make('target_id')
-                    ->label('Kelas')
+                    ->label(__('Kelas'))
                     ->options(fn (Forms\Get $get): array => static::classOptions($get('school_id')))
                     ->searchable()
                     ->required()
                     ->visible(fn (Forms\Get $get): bool => $get('target_type') === NotificationTargetType::SchoolClass->value),
 
                 Forms\Components\Select::make('target_id')
-                    ->label('Pengguna')
+                    ->label(__('Pengguna'))
                     ->options(fn (Forms\Get $get): array => static::userOptions($get('school_id')))
                     ->searchable()
                     ->required()
@@ -170,40 +170,40 @@ class NotificationResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('title')
-                    ->label('Judul')
+                    ->label(__('Judul'))
                     ->searchable()
                     ->limit(40),
 
                 Tables\Columns\TextColumn::make('type')
-                    ->label('Kategori')
+                    ->label(__('Kategori'))
                     ->badge()
                     ->formatStateUsing(fn (NotificationType $state): string => $state->label()),
 
                 Tables\Columns\TextColumn::make('target_type')
-                    ->label('Target')
+                    ->label(__('Target'))
                     ->formatStateUsing(fn (NotificationTargetType $state): string => $state->label()),
 
                 Tables\Columns\IconColumn::make('is_draft')
-                    ->label('Draf')
+                    ->label(__('Draf'))
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('sent_at')
-                    ->label('Dikirim')
+                    ->label(__('Dikirim'))
                     ->dateTime('d M Y H:i')
                     ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('sender.name')
-                    ->label('Pembuat')
-                    ->placeholder('Sistem'),
+                    ->label(__('Pembuat'))
+                    ->placeholder(__('Sistem')),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('type')
-                    ->label('Kategori')
+                    ->label(__('Kategori'))
                     ->options(NotificationType::manualOptions()),
 
                 Tables\Filters\TernaryFilter::make('is_draft')
-                    ->label('Status')
-                    ->placeholder('Semua')
+                    ->label(__('Status'))
+                    ->placeholder(__('Semua'))
                     ->trueLabel('Draf saja')
                     ->falseLabel('Terkirim saja'),
             ])
@@ -227,12 +227,12 @@ class NotificationResource extends Resource
     protected static function sendAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('send')
-            ->label('Kirim')
+            ->label(__('Kirim'))
             ->icon('heroicon-m-paper-airplane')
             ->color('success')
             ->requiresConfirmation()
-            ->modalHeading('Kirim pengumuman')
-            ->modalDescription('Setelah terkirim, isi dan target pengumuman tidak dapat diubah lagi.')
+            ->modalHeading(__('Kirim pengumuman'))
+            ->modalDescription(__('Setelah terkirim, isi dan target pengumuman tidak dapat diubah lagi.'))
             ->visible(fn (Notification $record): bool => ! $record->isSent()
                 && (Auth::user()?->can('update', $record) ?? false))
             ->action(function (Notification $record): void {
@@ -240,7 +240,7 @@ class NotificationResource extends Resource
                     app(AnnouncementPublisher::class)->send($record, Auth::user());
                 } catch (AuthorizationException|ValidationException $e) {
                     FilamentNotification::make()
-                        ->title('Pengumuman tidak dapat dikirim')
+                        ->title(__('Pengumuman tidak dapat dikirim'))
                         ->body($e->getMessage())
                         ->danger()
                         ->send();
@@ -262,7 +262,7 @@ class NotificationResource extends Resource
     protected static function waLinksAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('waLinks')
-            ->label('Link WhatsApp')
+            ->label(__('Link WhatsApp'))
             ->icon('heroicon-o-chat-bubble-left-right')
             ->color('success')
             // Draf belum punya tautan siap kirim (butir 224).
@@ -274,20 +274,20 @@ class NotificationResource extends Resource
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist->schema([
-            Infolists\Components\Section::make('Pengumuman')->schema([
-                Infolists\Components\TextEntry::make('title')->label('Judul'),
-                Infolists\Components\TextEntry::make('message')->label('Isi Pesan')->columnSpanFull(),
+            Infolists\Components\Section::make(__('Pengumuman'))->schema([
+                Infolists\Components\TextEntry::make('title')->label(__('Judul')),
+                Infolists\Components\TextEntry::make('message')->label(__('Isi Pesan'))->columnSpanFull(),
                 Infolists\Components\TextEntry::make('type')
-                    ->label('Kategori')
+                    ->label(__('Kategori'))
                     ->formatStateUsing(fn (NotificationType $state): string => $state->label()),
                 Infolists\Components\TextEntry::make('target_type')
-                    ->label('Target')
+                    ->label(__('Target'))
                     ->formatStateUsing(fn (NotificationTargetType $state): string => $state->label()),
-                Infolists\Components\TextEntry::make('sender.name')->label('Pembuat')->placeholder('Sistem'),
+                Infolists\Components\TextEntry::make('sender.name')->label(__('Pembuat'))->placeholder('Sistem'),
                 Infolists\Components\TextEntry::make('sent_at')
-                    ->label('Dikirim')
+                    ->label(__('Dikirim'))
                     ->dateTime('d M Y H:i')
-                    ->placeholder('Belum dikirim'),
+                    ->placeholder(__('Belum dikirim')),
             ])->columns(2),
         ]);
     }
@@ -301,5 +301,25 @@ class NotificationResource extends Resource
             'edit' => Pages\EditNotification::route('/{record}/edit'),
             'wa-links' => Pages\NotificationWaLinks::route('/{record}/wa-links'),
         ];
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __(static::$modelLabel);
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __(static::$navigationGroup);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __(static::$navigationLabel);
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __(static::$pluralModelLabel);
     }
 }
