@@ -10,6 +10,12 @@ use Illuminate\Http\Request;
 /**
  * AUTH-05 — pemilih bahasa ID/EN.
  *
+ * **Hanya dapat dicapai lewat POST.** Aksi ini menulis, dan penulisan tidak
+ * boleh berada di balik GET: GET dilewati `ValidateCsrfToken`, dipicu prefetch
+ * peramban, dan diikuti crawler — sehingga sebuah `<img src>` di situs lain
+ * cukup untuk mengganti bahasa akun korban. Tidak ada rute GET yang tersisa
+ * untuk URI ini (butir 388).
+ *
  * Satu rute untuk tamu maupun pengguna yang login, karena tombolnya sama dan
  * memisahkannya hanya akan melahirkan dua jalur yang perlahan berbeda:
  *

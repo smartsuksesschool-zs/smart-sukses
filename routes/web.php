@@ -43,18 +43,25 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', LandingController::class)->name('landing');
 
 /*
- * NFR 1.4 — pemilih bahasa untuk tamu.
+ * NFR 1.4 — pemilih bahasa ID/EN, untuk tamu maupun pengguna yang login.
  *
- * Publik dan tanpa sesi login: halaman muka dan PPDB dapat dibaca siapa saja,
- * dan calon siswa yang tidak berbahasa Indonesia tidak punya akun untuk
- * menyimpan preferensinya. Pengguna yang login memakai halaman profilnya
- * (butir 379).
+ * **POST, bukan GET.** Rute ini menulis: sesi bagi tamu, dan kolom
+ * `users.locale` bagi pengguna yang login. Menyembunyikan tulisan di balik GET
+ * berarti setiap pemuatan awal halaman, prefetch peramban, crawler, dan
+ * pemindai tautan dapat mengubah preferensi seseorang tanpa ia menekan apa pun
+ * — dan GET tidak dilindungi CSRF, sehingga sebuah `<img src>` di situs lain
+ * cukup untuk mengganti bahasa akun korban. Satu-satunya jalur penulisan
+ * karena itu POST, yang otomatis melewati `VerifyCsrfToken` milik grup `web`
+ * (butir 388).
+ *
+ * Tidak ada rute GET yang tersisa untuk URI ini: `GET /bahasa/en` menjawab 405,
+ * bukan diam-diam menyimpan.
  *
  * Kode bahasa yang tidak dikenal jatuh ke Indonesia tanpa galat — nilai locale
  * ikut menentukan berkas terjemahan yang dimuat, jadi nilai sembarang dari URL
  * tidak boleh sampai ke sana (butir 377).
  */
-Route::get('/bahasa/{locale}', LocaleController::class)
+Route::post('/bahasa/{locale}', LocaleController::class)
     ->whereAlpha('locale')
     ->name('locale.switch');
 

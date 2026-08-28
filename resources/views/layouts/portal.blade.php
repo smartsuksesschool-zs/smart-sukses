@@ -327,6 +327,7 @@
             display: inline-flex;
             align-items: center;
             gap: .125rem;
+            margin: 0;
         }
 
         .locale-switch__item {
@@ -340,18 +341,26 @@
             border-radius: .5rem;
             font-size: .8125rem;
             font-weight: 600;
+            line-height: 1;
             text-decoration: none;
             color: var(--color-muted);
+            /* Tombol submit, bukan tautan: gayanya harus disetel ulang.
+               `font-family`, bukan `font` — shorthand-nya akan menimpa
+               `font-size` dan `font-weight` di atas. */
+            font-family: inherit;
+            background: none;
+            border: 0;
+            cursor: pointer;
         }
 
         .locale-switch__item--active { background: #eef0f4; color: #1b2130; }
 
-        a.locale-switch__item:hover { background: #eef0f4; }
+        button.locale-switch__item:hover { background: #eef0f4; }
 
         /* Di dalam header berwarna cabang, teksnya putih. */
         .locale-switch--onbrand .locale-switch__item { color: #fff; }
         .locale-switch--onbrand .locale-switch__item--active { background: rgba(255, 255, 255, .28); }
-        .locale-switch--onbrand a.locale-switch__item:hover { background: rgba(255, 255, 255, .18); }
+        .locale-switch--onbrand button.locale-switch__item:hover { background: rgba(255, 255, 255, .18); }
 
         /* Halaman masuk tidak punya header, jadi pemilihnya berdiri sendiri. */
         .locale-switch-bar {

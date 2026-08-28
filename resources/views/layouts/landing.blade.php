@@ -172,7 +172,7 @@
             display: inline-flex;
             align-items: center;
             gap: .125rem;
-            margin-left: .35rem;
+            margin: 0 0 0 .35rem;
             padding-left: .35rem;
             border-left: 1px solid var(--line);
         }
@@ -189,12 +189,20 @@
             color: var(--muted);
             font-size: .8125rem;
             font-weight: 600;
+            line-height: 1;
             text-decoration: none;
+            /* Tombol submit, bukan tautan: gayanya harus disetel ulang.
+               `font-family`, bukan `font` — shorthand-nya akan menimpa
+               `font-size` dan `font-weight` di atas. */
+            font-family: inherit;
+            background: none;
+            border: 0;
+            cursor: pointer;
         }
 
         .locale-switch__item--active { background: var(--soft); color: var(--brand); }
 
-        a.locale-switch__item:hover { color: var(--brand); background: var(--soft); }
+        button.locale-switch__item:hover { color: var(--brand); background: var(--soft); }
 
         .btn {
             display: inline-flex;
