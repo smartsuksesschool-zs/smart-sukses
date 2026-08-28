@@ -74,7 +74,11 @@
                 </span>
             </div>
 
-            <table class="mt-4 w-full text-sm">
+            {{-- Tiga kolom rupiah pada 360px. Dibungkus penggulung sendiri
+                 supaya tabelnya yang menggulung, bukan halamannya — pola yang
+                 sama dengan laporan-keuangan-cabang (butir 395). --}}
+            <div class="mt-4 overflow-x-auto">
+            <table class="w-full text-sm">
                 <thead>
                     <tr class="text-left text-gray-500 dark:text-gray-400">
                         <th class="py-1 font-medium">{{ __('Bulan') }}</th>
@@ -92,6 +96,7 @@
                     @endforeach
                 </tbody>
             </table>
+            </div>
         </x-filament::section>
     @else
         <x-filament::section class="mt-6">

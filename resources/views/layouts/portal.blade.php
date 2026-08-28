@@ -112,10 +112,18 @@
 
         .portal-user {
             display: flex;
+            /* Sejak pemilih bahasa ikut duduk di baris ini (S9.3), isinya
+               bertambah 5,5rem. Pada 360px baris ini dapat melebihi lebar
+               layar, dan nama pengguna panjangnya tidak terbatas — ia data,
+               bukan label (butir 391). */
+            flex-wrap: wrap;
             align-items: center;
             gap: .75rem;
+            min-width: 0;
             font-size: .875rem;
         }
+
+        .portal-user__name { min-width: 0; overflow-wrap: anywhere; }
 
         .portal-logout {
             background: rgba(255, 255, 255, .18);
@@ -543,7 +551,7 @@
                             @endif
                         </a>
 
-                        <span>{{ auth()->user()->name }}</span>
+                        <span class="portal-user__name">{{ auth()->user()->name }}</span>
                         {{--
                             Guru berbagi sesi `web` dengan panel, jadi keluarnya
                             lewat rute keluar panel — satu login, satu keluar

@@ -157,11 +157,18 @@ class ReportCardResource extends Resource
                     ->label(__('Kelas'))
                     ->options(fn () => SchoolClass::query()->orderBy('name')->pluck('name', 'id')),
             ])
+            // Empat aksi baris berdampingan mendorong kolom aksi jauh ke kanan
+            // pada tabel selebar ini. Di layar 360px "Terbitkan" — aksi paling
+            // menentukan di halaman ini — baru terlihat setelah menggulung
+            // sampai ujung. `ActionGroup` adalah affordance Filament sendiri
+            // untuk itu: satu tombol, nama aksinya tidak berubah (butir 396).
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                static::publishAction(),
-                static::pdfAction(),
-                static::pdfFromStorageAction(),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make(),
+                    static::publishAction(),
+                    static::pdfAction(),
+                    static::pdfFromStorageAction(),
+                ]),
             ])
             ->bulkActions([])
             ->defaultSort('id', 'desc');

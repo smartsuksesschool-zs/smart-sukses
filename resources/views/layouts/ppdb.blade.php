@@ -24,13 +24,22 @@
 
         * { box-sizing: border-box; }
 
+        html { -webkit-text-size-adjust: 100%; }
+
         body {
             margin: 0;
             font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
             background: var(--color-canvas);
             color: #1b2130;
             line-height: 1.55;
+            /* Tidak ada elemen yang boleh mendorong halaman melebar — aturan
+               yang sudah dipakai portal dan halaman muka, tetapi belum pernah
+               ada di sini. PPDB justru permukaan yang paling banyak dibuka dari
+               ponsel (butir 392). */
+            overflow-x: hidden;
         }
+
+        img { max-width: 100%; height: auto; }
 
         .ppdb-header {
             background: var(--color-primary);
@@ -64,6 +73,9 @@
 
         .field input, .field select, .field textarea {
             width: 100%;
+            /* Sasaran sentuh yang sama dengan seluruh sistem: 2,75rem.
+               Sebelumnya hanya setinggi padding, sekitar 2,3rem (butir 393). */
+            min-height: 2.75rem;
             padding: .55rem .7rem;
             border: 1px solid var(--color-border);
             border-radius: .5rem;
@@ -81,11 +93,16 @@
         .error { color: #b42318; font-size: .8rem; margin-top: .3rem; }
 
         .btn {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             background: var(--color-primary);
             color: #fff;
             border: 0;
             border-radius: .5rem;
+            /* Sasaran sentuh 2,75rem, sama dengan tombol portal dan halaman
+               muka. Formulir PPDB dikirim dari ponsel (butir 393). */
+            min-height: 2.75rem;
             padding: .65rem 1.2rem;
             font: inherit;
             font-weight: 600;
@@ -126,11 +143,14 @@
 
         dl.detail { margin: 0; }
 
-        dl.detail div { display: flex; justify-content: space-between; gap: 1rem; padding: .4rem 0; border-bottom: 1px solid var(--color-border); }
+        /* Nilainya data — nama sekolah, nama calon siswa — dan panjangnya
+           tidak terbatas. Tanpa `flex-wrap` pasangan label/nilai ini tidak
+           dapat menyusut di bawah min-content-nya (butir 394). */
+        dl.detail div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem 1rem; padding: .4rem 0; border-bottom: 1px solid var(--color-border); }
 
         dl.detail dt { color: var(--color-muted); font-size: .875rem; }
 
-        dl.detail dd { margin: 0; font-weight: 600; text-align: right; }
+        dl.detail dd { margin: 0; min-width: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
 
         .nav-links { margin-top: 1rem; font-size: .875rem; }
 

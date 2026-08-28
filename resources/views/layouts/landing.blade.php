@@ -146,6 +146,16 @@
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
+            /*
+               Wajib. `.nav__links` adalah flex item, dan flex item punya
+               `min-width: auto` — ia menolak menyusut di bawah lebar
+               min-content-nya. Tanpa baris ini `overflow-x: auto` di atas tidak
+               pernah aktif: isinya meluber keluar `.nav__inner`, lalu
+               `body { overflow-x: hidden }` memotongnya. Tombol Masuk dan
+               pemilih bahasa duduk paling kanan, jadi justru keduanya yang
+               hilang dan tidak dapat dicapai pada layar ponsel (butir 390).
+            */
+            min-width: 0;
         }
 
         .nav__links::-webkit-scrollbar { display: none; }

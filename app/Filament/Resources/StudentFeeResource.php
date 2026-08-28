@@ -141,10 +141,15 @@ class StudentFeeResource extends Resource
                     ->searchable()
                     ->preload(),
             ])
+            // "Catat Pembayaran" adalah aksi harian Bendahara, dan tabel ini
+            // lebar. Dikelompokkan supaya aksinya tetap satu ketukan pada
+            // ponsel, bukan hasil menggulung ke kanan (butir 396).
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                static::recordPaymentAction(),
-                static::waiveAction(),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\ViewAction::make(),
+                    static::recordPaymentAction(),
+                    static::waiveAction(),
+                ]),
             ])
             // Tagihan tidak dihapus dan tidak diubah massal.
             ->bulkActions([])
