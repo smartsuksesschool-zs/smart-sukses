@@ -287,6 +287,43 @@ class StudentExamKeyLeakTest extends TestCase
         $this->assertStringNotContainsString('is_correct', $html);
     }
 
+    /**
+     * Batch S9.3 menambahkan bahasa Inggris ke halaman ini. Bahasa hanya
+     * mengganti label; ia tidak boleh menambah satu pun kolom pada muatan yang
+     * dikirim ke peramban. Karena itu keempat pemeriksaan kebocoran diulang
+     * dalam bahasa Inggris — kalau tidak, cukup satu terjemahan yang kelewat
+     * teliti untuk membocorkan kunci pada bahasa yang tidak pernah diuji.
+     */
+    public function test_the_answer_key_stays_hidden_when_the_page_is_in_english(): void
+    {
+        [$exam, $question] = $this->markedExam();
+
+        $this->studentUserA->forceFill(['locale' => 'en'])->save();
+        $this->actingAs($this->studentUserA->fresh());
+
+        $html = $this->get(route('student.exam', ['examId' => $exam->getKey()]))->assertOk()->getContent();
+
+        // Halamannya memang berbahasa Inggris.
+        $this->assertStringContainsString('Submit Exam', $html);
+
+        // Teks kuncinya terlihat, penandanya tidak.
+        $this->assertStringContainsString(self::CORRECT_MARKER, $html);
+        $this->assertStringNotContainsString('is_correct', $html);
+        $this->assertStringNotContainsString('correct":true', $html);
+
+        // Dan pilihan yang benar tetap tidak dapat dibedakan dari yang salah.
+        $buttons = $this->optionButtons($html, $question->getKey());
+
+        $this->assertCount(4, $buttons);
+
+        $normalised = array_map(
+            fn (array $button) => $this->normalise($button[1], $question->getKey(), $button[0]),
+            $buttons,
+        );
+
+        $this->assertCount(1, array_unique($normalised), 'options must render identically in English too');
+    }
+
     // ------------------------------------------------------------- penunjang
 
     /**
