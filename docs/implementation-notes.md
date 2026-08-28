@@ -6599,6 +6599,142 @@ Ini bentuk yang sama dengan butir 323 (`assertDontSee('Rp')` yang mencocoki toke
 acak): assertion yang menjaring lebih luas daripada maksudnya akan gagal karena sesuatu
 yang lain, pada waktu yang tidak dapat ditebak.
 
+## Sprint 9 — Batch S9.2 (backup, pemulihan, penjadwal, worker)
+
+Artefak operasional sisi repository. Tidak ada deployment, tidak ada layanan berbayar,
+dan tidak ada klaim verifikasi server.
+
+Runbook: [`backup-restore.md`](backup-restore.md).
+
+### 367. Backup basis data saja bukan backup sistem
+
+`payments.proof_path` dan `report_cards.pdf_path` menunjuk berkas di disk, bukan blob di
+tabel. Basis data yang dipulihkan tanpa berkasnya menghasilkan sistem yang **tampak
+utuh** — daftar pembayaran lengkap, rapor terdaftar — sampai seseorang menekan "Unduh
+Bukti".
+
+Skrip yang dibuat batch ini hanya mencadangkan basis data. `storage/app/public` dan
+`storage/app/private` **belum** otomatis, dan itu dinyatakan terpisah di runbook alih-alih
+disembunyikan di balik kata "backup".
+
+### 368. Batas waktu worker harus lebih kecil daripada `retry_after`
+
+Ditemukan saat mengaudit job sebelum menulis konfigurasi Supervisor, dan ini jenis
+kekeliruan yang tidak menghasilkan galat apa pun.
+
+`config/queue.php` menetapkan `retry_after` 90 detik untuk antrean database. Bila
+`--timeout` worker melampaui angka itu, Laravel akan menganggap job yang **masih
+berjalan** sebagai job yang mati, lalu mengantrekannya ulang — dan job itu dikerjakan dua
+kali. Pada `GenerateStudentFees` artinya tagihan ganda untuk sekelas siswa, tanpa satu
+pun pesan galat.
+
+Nilai yang dipakai: `--timeout=60` < `retry_after=90`. Urutannya, bukan angkanya, yang
+penting: menaikkan timeout tanpa menaikkan `retry_after` lebih dulu membalik hubungan itu.
+
+Kedua job sengaja tidak menyebut `$timeout` sendiri, dan Supervisor sengaja tidak menyebut
+`--tries` maupun `--backoff`: keduanya sudah properti job (`tries=3`, `backoff=10`), dan
+menyebutnya di dua tempat menciptakan dua sumber kebenaran yang dapat berbeda.
+
+Ada test yang membaca `--timeout` dari berkas Supervisor dan membandingkannya dengan
+`retry_after` yang berlaku, sehingga hubungan itu tidak dapat terbalik diam-diam.
+`app:production-check` juga memeriksanya.
+
+### 369. `APP_TIMEZONE` bukan zona waktu cron
+
+Blueprint menuntut backup pukul 02:00 WIB. Yang menjalankannya cron, dan cron memakai zona
+waktu **sistem** — bukan `APP_TIMEZONE`, yang hanya mengubah zona waktu PHP.
+
+Banyak penyedia VPS memasang Ubuntu ber-zona UTC. Pada server seperti itu, `0 2 * * *`
+berjalan pukul **09:00 WIB**, bukan 02:00 — di tengah jam sibuk sekolah.
+
+Template cron karena itu memuat perintah `timedatectl` beserta penjelasannya, dan runbook
+menuntut pemeriksaan itu sebelum memasang. Tidak ada asumsi yang dibuat diam-diam.
+
+### 370. Test artefak menguji kontraknya, bukan isinya
+
+Test yang menuntut isi skrip baris demi baris akan jatuh setiap kali komentarnya
+diperbaiki. Yang terjadi kemudian dapat diramalkan: test-nya diperbarui tanpa dibaca,
+dan sejak saat itu ia tidak menjaga apa pun.
+
+Yang dijaga karena itu hanya sifat yang bila hilang berarti bahaya:
+
+- tidak ada kredensial ter-commit, dan tidak ada kata sandi di baris perintah;
+- berkas opsi sementara ber-mode 600 dan selalu terhapus lewat `trap ... EXIT`;
+- `set -euo pipefail` pada kedua skrip;
+- retensi 30 hari, dan penghapusannya tidak dapat menyentuh apa pun di luar direktori
+  backup;
+- pemulihan menolak sasaran produksi;
+- `--timeout` worker < `retry_after`;
+- cron memanggil penjadwal, bukan menyebut tugas satu per satu.
+
+### 371. Kata sandi tidak pernah menjadi argumen baris perintah
+
+`mysqldump -p<sandi>` menaruh kata sandi di daftar proses, dan `ps` dapat dibaca seluruh
+pengguna server. Backup yang berjalan tiap malam berarti kata sandi basis data terpampang
+setiap malam.
+
+Kedua skrip memakai `--defaults-extra-file` yang menunjuk berkas sementara ber-mode 600,
+dihapus lewat `trap ... EXIT` — termasuk ketika skripnya gagal di tengah jalan.
+
+### 372. Pemulihan menolak sasaran produksi secara bawaan
+
+`ops/restore-database.sh` menghapus lalu membuat ulang basis data tujuannya. Satu salah
+ketik pada argumen kedua karena itu dapat menghapus basis data yang sedang dipakai.
+
+Yang lolos tanpa persetujuan hanya nama berakhiran `_test`, `_testing`, `_restore`, atau
+`_drill`. Selain itu menuntut `ALLOW_PRODUCTION_RESTORE=yes` yang harus diketik sendiri.
+
+Pagar ini diuji sungguhan pada uji pemulihan: menjalankannya terhadap `smartsukses`
+ditolak dengan kode keluar 77, dan basis data pengembangan tetap utuh 39 tabel.
+
+### 373. Assertion yang menjaring lebih luas daripada maksudnya — untuk ketiga kalinya
+
+Dua test yang ditulis batch ini gagal karena alasan yang sama dengan butir 323 dan 366:
+
+- `/\s-p\S/` yang dimaksudkan menangkap `-p<sandi>` juga cocok dengan `find -print`;
+- `assertStringNotContainsString('notifications:prune', $cron)` juga cocok dengan
+  **komentar** di berkas cron yang justru berguna dibaca.
+
+Keduanya diperbaiki dengan mempersempit maksudnya: pola pertama kini hanya cocok pada
+baris yang memanggil `mysql`/`mysqldump`, dan pemeriksaan kedua membuang komentar lebih
+dulu.
+
+Polanya sudah muncul tiga kali di project ini, dan ketiganya berbentuk sama: assertion
+yang menangkap lebih banyak daripada yang dimaksud akan gagal karena sesuatu yang lain,
+pada waktu yang tidak dapat ditebak. Ia layak diingat sebagai kebiasaan, bukan sebagai
+tiga kejadian terpisah.
+
+### 374. Uji pemulihan sungguhan — dan batas yang tidak boleh diklaim
+
+Dijalankan sungguhan terhadap `smartsukses_test`: diisi data dua cabang, di-dump,
+**benar-benar dihancurkan** (`DROP DATABASE`, terverifikasi 0 tabel), lalu dipulihkan.
+Hasilnya identik — 39 tabel, 34 migrasi / 0 pending, nilai 87,50 dan 65,25 utuh sampai
+desimalnya, keterkaitan nilai → siswa → cabang tetap benar, bobot soal dan penanda kunci
+jawaban CBT bertahan.
+
+Basis data pengembangan `smartsukses` tidak disentuh sama sekali, dan itu ikut
+diverifikasi.
+
+Yang uji ini **tidak** buktikan, dan karena itu checklist butir 7 tetap PARTIAL:
+
+- backup terjadwal benar-benar berjalan di server — cron belum terpasang;
+- pemulihan berkas `storage/app/*` — belum diuji sama sekali;
+- pemulihan basis data berukuran produksi;
+- perilaku pada MySQL 8 di Ubuntu — uji ini berjalan di MySQL 8.4.3 Windows.
+
+Membedakan "pemulihan basis data terbukti" dari "backup terbukti" penting: yang pertama
+sudah, yang kedua belum.
+
+### 375. Yang **tidak** dikerjakan Batch S9.2
+
+- deployment, penyediaan server, atau layanan berbayar apa pun;
+- pemasangan Supervisor/cron di mesin lokal (Windows);
+- unggahan backup ke penyimpanan luar (Backblaze B2 tetap Phase 2);
+- backup otomatis berkas `storage/app/*`;
+- kredensial SMTP;
+- bilingual, uji beban, perubahan responsif — S9.3/S9.4;
+- seluruh implementasi penilaian tidak tersentuh.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

@@ -173,35 +173,60 @@ pernah terkirim.
 worker keduanya menggantung **tanpa pesan galat** — rapor sekelas akan berstatus
 QUEUED selamanya.
 
-Artefak Supervisor dibuat pada batch berikutnya (S9.2) bersama backup dan cron
-penjadwal. Sampai itu ada, worker harus dijalankan manual dan status ini tetap
-**belum selesai**.
+Template Supervisor: **`ops/smartsukses-worker.conf`**.
+
+```sh
+sudo cp ops/smartsukses-worker.conf /etc/supervisor/conf.d/
+sudo supervisorctl reread && sudo supervisorctl update
+sudo supervisorctl status smartsukses-worker:*
+```
+
+Setelah setiap deploy: `php artisan queue:restart`.
+
+`--timeout` worker (60) wajib lebih kecil daripada `retry_after` antrean (90),
+kalau tidak job yang masih berjalan dikerjakan dua kali. Rinciannya di
+[`backup-restore.md`](backup-restore.md) bagian 5.
+
+Template ada; **berjalannya di server belum diverifikasi.**
 
 ---
 
 ## 7. Penjadwal
 
 `notifications:prune` (retensi 90 hari, NOTIF-04) berjalan lewat penjadwal
-Laravel dan membutuhkan satu entri cron:
+Laravel dan membutuhkan satu entri cron.
 
-```
-* * * * * cd /var/www/smartsukses && php artisan schedule:run >> /dev/null 2>&1
+Template: **`ops/smartsukses-cron`** — memuat entri penjadwal **dan** entri
+backup harian.
+
+```sh
+sudo crontab -u www-data -e
 ```
 
-Belum dikonfigurasi. Termasuk lingkup S9.2.
+**Periksa `timedatectl` lebih dulu.** Jam pada template ditulis untuk server
+ber-zona Asia/Jakarta; server ber-zona UTC menuntut penerjemahan.
+`APP_TIMEZONE` tidak mengubah zona waktu cron.
+
+Template ada; **terpasangnya di server belum diverifikasi.**
 
 ---
 
 ## 8. Backup
 
-**Belum ada sama sekali.** Arsitektur 3.4 menuntut mysqldump harian pukul 02:00
-WIB dengan retensi 30 hari, dan checklist menuntut restore yang **terbukti**.
+Skrip: **`ops/backup-database.sh`** — mysqldump, gzip, retensi 30 hari, tanpa
+kata sandi di baris perintah. Dijadwalkan 02:00 lewat `ops/smartsukses-cron`.
 
-Yang harus ikut terbackup, dan sering terlewat: `storage/app/public` (logo
-cabang, bukti pembayaran) dan `storage/app/private` (PDF rapor). Backup basis
-data saja akan memulihkan baris yang menunjuk berkas yang sudah tidak ada.
+Pemulihan: **`ops/restore-database.sh`**, dengan pagar yang menolak menimpa
+basis data sungguhan kecuali diminta eksplisit.
 
-Termasuk lingkup S9.2.
+**Uji pemulihan sungguhan sudah dijalankan** terhadap `smartsukses_test`:
+dihancurkan lalu dipulihkan, dan seluruh data kembali utuh. Buktinya di
+[`backup-restore.md`](backup-restore.md) bagian 4.
+
+Yang **belum** terbukti, dan karena itu checklist butir 7 tetap PARTIAL: backup
+terjadwal berjalan di server, dan pemulihan berkas `storage/app/*` — yang belum
+diuji sama sekali. Backup basis data saja akan memulihkan baris yang menunjuk
+berkas yang sudah tidak ada.
 
 ---
 
@@ -224,12 +249,15 @@ Diperbarui setelah S9.1. **Jangan menandai PASS sebelum diverifikasi di server.*
 | 4 | Encoding tautan wa.me | **PASS** — regresi encoding pada PPDB & notifikasi |
 | 5 | Format & data PDF rapor | PARTIAL — otomatis lulus; tinjauan format oleh manusia belum |
 | 6 | SSL aktif + redirect HTTP→HTTPS | **PARTIAL** — sisi aplikasi siap (APP_URL, cookie Secure, proxy); TLS server belum |
-| 7 | Backup otomatis **dan** dapat di-restore | NOT DONE |
+| 7 | Backup otomatis **dan** dapat di-restore | **PARTIAL** — skrip ada, uji pemulihan lokal lolos; backup terjadwal di server & pemulihan berkas belum |
 | 8 | Seluruh kata sandi bawaan diganti | PARTIAL — pagar seeding produksi ada; root MySQL urusan server |
 | 9 | CORS dibatasi ke domain | **PARTIAL** — `config/cors.php` ada dan tidak wildcard; verifikasi di server belum |
 | 10 | Pemantauan uptime | NOT DONE |
 
-**2 PASS · 4 PARTIAL · 4 NOT DONE.**
+**2 PASS · 5 PARTIAL · 3 NOT DONE.**
+
+Yang berpindah pada S9.2: butir 7 dari NOT DONE menjadi PARTIAL. Tidak ada yang
+naik menjadi PASS — seluruh sisanya menuntut server.
 
 Aplikasinya **selesai secara fungsional**; deployment produksinya **belum siap
 go-live**. Keduanya hal yang berbeda, dan dokumen ini tidak menyatukannya.
