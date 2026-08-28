@@ -122,6 +122,17 @@ class ProductionCheck extends Command
                 'Setel MAIL_MAILER ke transport sungguhan; tautan lupa kata sandi tidak akan terkirim.',
             ),
             $this->check(
+                'Skrip backup tersedia',
+                is_file(base_path('ops/backup-database.sh')),
+                'Berkas ops/backup-database.sh hilang; backup harian tidak dapat berjalan.',
+            ),
+            $this->check(
+                'Batas waktu worker lebih kecil daripada retry_after',
+                (int) config('queue.connections.database.retry_after') > 60,
+                'retry_after antrean harus lebih besar daripada --timeout worker (60), '
+                    .'kalau tidak job yang masih berjalan dikerjakan dua kali.',
+            ),
+            $this->check(
                 'Kata sandi seeder disetel',
                 filled(env('SEED_ADMIN_PASSWORD')),
                 'Setel SEED_ADMIN_PASSWORD sebelum menjalankan db:seed.',

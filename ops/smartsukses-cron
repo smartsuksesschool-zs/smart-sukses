@@ -1,0 +1,24 @@
+# Cron Smart Sukses School
+#
+# Pasang untuk pengguna yang memiliki berkas aplikasi (mis. www-data):
+#   sudo crontab -u www-data -e
+#
+# PERIKSA ZONA WAKTU SERVER LEBIH DULU:
+#
+#   timedatectl
+#
+# Jam di bawah ini ditulis dengan asumsi server ber-zona Asia/Jakarta. Bila
+# server memakai UTC — bawaan banyak penyedia VPS — 02:00 WIB adalah 19:00 UTC
+# hari sebelumnya, dan jamnya harus diterjemahkan. Jangan menganggap
+# APP_TIMEZONE=Asia/Jakarta mengubah zona waktu cron: ia hanya mengubah zona
+# waktu PHP (butir 369).
+
+# Penjadwal Laravel — setiap menit. Ia sendiri yang memutuskan tugas mana yang
+# jatuh tempo. Saat ini: notifications:prune pukul 03:10 (retensi 90 hari,
+# NOTIF-04).
+* * * * * cd /var/www/smartsukses && php artisan schedule:run >> /dev/null 2>&1
+
+# Backup basis data harian pukul 02:00 (Arsitektur 3.4).
+# Keluarannya disimpan supaya kegagalan backup dapat ditemukan; tanpa log,
+# backup yang berhenti bekerja tidak terlihat sampai ada yang membutuhkannya.
+0 2 * * * cd /var/www/smartsukses && ops/backup-database.sh >> storage/logs/backup.log 2>&1
