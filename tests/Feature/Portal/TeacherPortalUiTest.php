@@ -243,8 +243,35 @@ class TeacherPortalUiTest extends TestCase
         $response->assertSee('Kelas Aktif');
         $response->assertSee('7A');
         $response->assertSee('Matematika');
-        // Kelas guru lain tidak muncul.
-        $response->assertDontSee('7B');
+
+        /*
+         * Kelas guru lain tidak muncul.
+         *
+         * Yang diperiksa **teks yang terlihat**, bukan seluruh dokumen. Nama
+         * kelas sependek "7B" dapat muncul kebetulan di dalam token acak:
+         * kegagalan yang memunculkan uji ini adalah `data-csrf` bernilai
+         * "5IKc47BKVNpudAkF3XFCBvW5IViRETAX0kdvlFAx" — mengandung "7B", dan
+         * tidak ada hubungannya dengan kelas mana pun.
+         *
+         * Ini kejadian keempat dengan pola yang sama (butir 284, 323, 373),
+         * dan seluruhnya berakar pada satu kebiasaan: mencari string pendek di
+         * dalam dokumen yang juga memuat nilai acak (butir 401).
+         */
+        $this->assertStringNotContainsString('7B', static::visibleText($response->getContent()));
+    }
+
+    /**
+     * Teks yang benar-benar dibaca pengguna: tanpa `<script>`, `<style>`,
+     * komentar, maupun nilai atribut — dan token acak hidup di dalam atribut.
+     */
+    protected static function visibleText(string $html): string
+    {
+        $html = (string) preg_replace('#<script\b[^>]*>.*?</script>#si', ' ', $html);
+        $html = (string) preg_replace('#<style\b[^>]*>.*?</style>#si', ' ', $html);
+        $html = (string) preg_replace('#<!--.*?-->#s', ' ', $html);
+        $html = (string) preg_replace('#<[^>]+>#s', ' ', $html);
+
+        return $html;
     }
 
     /**
