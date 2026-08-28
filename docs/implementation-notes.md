@@ -6921,6 +6921,151 @@ Disengaja, dan tercatat di `docs/bilingual-coverage.md`:
 - string vendor Filament, yang sudah punya berkas locale `id` sendiri;
 - contoh isian seperti `MTK`, `X-A`, `2024/2025 Semester 1` — kode, bukan kalimat.
 
+## Batch S9.4 — QA responsif & kesiapan uji beban
+
+### 390. Flex item dengan `overflow-x: auto` menuntut `min-width: 0`
+
+Cacat responsif paling serius yang ditemukan audit S9.4, dan bentuknya halus:
+CSS-nya terbaca benar.
+
+`.nav__links` pada halaman muka punya `overflow-x: auto` — niatnya jelas, dan
+tercatat sejak butir 346: pada layar sempit tautannya menggulung ke samping,
+tanpa menu hamburger dan tanpa JavaScript. Tetapi `.nav__links` juga **flex
+item** dari `.nav__inner`, dan flex item punya `min-width: auto`: menurut
+spesifikasi Flexbox ia menolak menyusut di bawah lebar min-content-nya.
+
+Akibatnya penggulungnya tidak pernah aktif. Isinya meluber keluar induknya, lalu
+`body { overflow-x: hidden }` — yang dipasang justru untuk melindungi halaman —
+**memotongnya**. Tidak ada gulir, tidak ada indikator, tidak ada apa pun: isinya
+hilang begitu saja.
+
+Diukur dari HTML terender, isi navbar sekitar 30rem sedangkan layar 360px hanya
+menyediakan sekitar 10rem setelah merek dan padding. Yang hilang adalah dua
+kendali paling penting, karena keduanya paling kanan: tombol Masuk dan pemilih
+bahasa yang baru ditambahkan S9.3.
+
+`overflow-x: auto` pada flex item tanpa `min-width: 0` adalah niat yang
+dibatalkan diam-diam oleh aturan lain.
+
+### 391. Nama pengguna adalah data, bukan label
+
+`.portal-user` memuat pemilih bahasa, lonceng, nama pengguna, dan tombol keluar
+dalam satu baris flex tanpa `flex-wrap`. Selama isinya hanya ikon dan label
+pendek, itu tidak pernah menjadi masalah.
+
+S9.3 menambahkan 5,5rem ke baris itu, dan nama penggunanya sendiri tidak punya
+batas panjang — ia berasal dari `users.name`, yang diisi manusia. "Dra. Siti
+Nurhaliza Wulandari, M.Pd." bukan kasus yang dibuat-buat.
+
+Perbedaan antara label dan data inilah yang menentukan: label dapat diukur
+sekali dan dipercayai; data tidak pernah bisa.
+
+### 392. Tata letak ketiga tidak ikut mendapat pagarnya
+
+Portal dan halaman muka sama-sama memasang `body { overflow-x: hidden }`,
+`img { max-width: 100% }`, dan `-webkit-text-size-adjust: 100%`. Tata letak PPDB
+tidak punya satu pun — bukan karena diputuskan, melainkan karena ia ditulis
+lebih dulu dan tidak pernah ikut disamakan.
+
+Yang membuatnya penting: PPDB justru permukaan yang paling banyak dibuka dari
+ponsel. Orang tua mendaftarkan anaknya dari telepon, bukan dari komputer.
+
+Ketika sebuah pola pengerasan dipasang, ia harus dipasang di **semua** tata
+letak sejenis pada saat yang sama. Yang tertinggal biasanya justru yang paling
+terpapar.
+
+### 393. Angka sasaran sentuh hanya berguna bila satu
+
+2,75rem (44px) dipakai konsisten di portal, halaman muka, dan seluruh tombol
+CBT. PPDB memakai padding saja — sekitar 2,3rem — pada tombol kirim dan setiap
+kolom isian.
+
+Selisihnya kecil di layar, dan besar di jari.
+
+### 394. Pasangan label/nilai perlu boleh membungkus
+
+`dl.detail div` pada halaman status PPDB memakai `display: flex;
+justify-content: space-between` tanpa `flex-wrap`. Pola yang rapi selama
+nilainya pendek, dan nilainya di sini nama sekolah serta nama calon siswa.
+
+Sama seperti butir 391: begitu salah satu sisi berisi data, asumsi lebarnya
+tidak lagi berlaku.
+
+### 395. Yang menggulung seharusnya tabelnya, bukan halamannya
+
+`laporan-keuangan.blade.php` merender tabel tiga kolom rupiah tanpa pembungkus
+`overflow-x-auto`, padahal halaman saudaranya `laporan-keuangan-cabang` memakai
+pembungkus itu. Dua halaman yang menampilkan hal serupa, dengan dua perilaku
+berbeda — dan yang berbeda ini menyeret seluruh halaman melebar.
+
+### 396. `ActionGroup` adalah affordance Filament, bukan kartu mobile buatan sendiri
+
+`ReportCardResource` punya empat aksi baris berdampingan dan `StudentFeeResource`
+tiga. Pada 360px kolom aksi berada jauh di kanan tabel yang sudah lebar, sehingga
+"Terbitkan" dan "Catat Pembayaran" — dua aksi paling sering dipakai di
+halamannya masing-masing — baru terlihat setelah menggulung sampai ujung.
+
+Godaannya menulis tampilan kartu khusus mobile. Itu berarti dua tampilan untuk
+satu tabel, yang perlahan berbeda. `Tables\Actions\ActionGroup` menyelesaikannya
+dengan satu pembungkus: nama aksinya tidak berubah, otorisasinya tidak berubah,
+dan 748 uji grading serta keuangan tetap hijau tanpa satu pun disesuaikan.
+
+### 397. Komentar yang menjelaskan sebuah uji sempat mematahkan uji itu
+
+`ResponsiveMarkupTest` mencari blok aturan CSS dengan mencari kurung tutup
+pertama setelah selektornya. Komentar penjelas yang baru ditulis di dalam blok
+itu memuat contoh `body { overflow-x: hidden }` — dan kurung tutup di dalam
+komentar itulah yang ditemukan lebih dulu, sehingga blok aturannya terpotong
+tepat sebelum baris yang sedang diperiksa.
+
+Uji gagal karena komentar yang menjelaskannya. Perbaikannya membuang komentar
+CSS lebih dulu, bukan memendekkan penjelasannya.
+
+### 398. Beban tulis CBT tidak boleh punya jalan ke produksi
+
+`05-cbt-autosave.js` membuat percobaan ujian dan menyimpan jawaban. Dijalankan
+ke data sungguhan, ia menulis jawaban atas nama siswa sungguhan pada ujian yang
+sedang berlangsung, dan tidak ada cara membatalkannya.
+
+Pagarnya sengaja dua lapis, dan lapis kedua **tidak dapat dibuka lewat
+environment**. Variabel environment dapat tersetel tidak sengaja di terminal
+seseorang, tertinggal di `.env`, atau tersalin dari catatan lama. Daftar host
+produksi karena itu ditulis di dalam kode: mengubahnya menuntut sunting yang
+terlihat di review.
+
+Hal kedua yang mudah salah: setiap VU harus memakai siswa yang berbeda. Modelnya
+satu percobaan per siswa, jadi bila 200 VU memakai satu akun, yang terukur adalah
+pertengkaran kunci baris di MySQL — angkanya akan terlihat jauh lebih buruk
+daripada kenyataannya, dan kesimpulannya akan salah arah.
+
+### 399. Snapshot Livewire tidak dapat dikarang, dan itu justru bagus
+
+Skenario tulis harus memanggil metode Livewire, dan snapshot Livewire dilindungi
+checksum yang ditandatangani server. Satu-satunya cara yang benar adalah memuat
+halamannya lebih dulu lalu mengirimkan kembali snapshot yang baru diterima —
+persis seperti peramban.
+
+Itu membuat skripnya jujur: bila kontraknya berubah, ia gagal terang-terangan
+lewat `check` yang merah, bukan diam-diam mengukur endpoint yang menolak setiap
+permintaan dan karena itu tampak sangat cepat.
+
+Alasan serupa membuat skenario berbasis sesi menuntut cookie dari luar alih-alih
+menirukan alur masuk Livewire: yang ditirukan akan mengukur tiruan.
+
+### 400. Yang **tidak** dikerjakan Batch S9.4
+
+- verifikasi visual apa pun — ekstensi peramban tidak terhubung, sehingga tidak
+  ada tangkapan layar dan tidak ada permukaan yang dinyatakan lolos secara
+  tampilan;
+- eksekusi uji beban — k6 tidak terpasang, dan tidak ada staging/VPS;
+- tolok ukur 200 pengguna bersamaan, bukti CPU/RAM produksi, saturasi PHP-FPM,
+  latensi Cloudflare, overhead TLS, perilaku Nginx di bawah beban — seluruhnya
+  **PREPARED / NOT YET EXECUTED**, bukan PASS;
+- audit internal Filament; yang diaudit hanya konfigurasi dan tampilan sendiri;
+- pengujian peramban sungguhan (Safari iOS, Chrome Android), zoom 200%, dan
+  orientasi landscape;
+- perubahan pada logika penilaian, percobaan ujian, timer, maupun kunci jawaban.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
