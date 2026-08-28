@@ -26,7 +26,8 @@ Klaim yang **tidak** dibuat: bukan "100% setiap string sudah diterjemahkan".
 | Pilihan tamu | sesi (`session('locale')`) — tanpa akun, tanpa baris database |
 | Pilihan pengguna | kolom `users.locale`, ditulis hanya untuk `$request->user()` |
 | Urutan | preferensi akun menang atas sesi |
-| Rute pemilih | `GET /bahasa/{locale}` → `locale.switch`, `->whereAlpha('locale')` |
+| Rute pemilih | `POST /bahasa/{locale}` → `locale.switch`, `->whereAlpha('locale')` |
+| Metode | **POST saja.** Rutenya menulis, jadi ia dilindungi CSRF grup `web`. `GET /bahasa/en` menjawab 405 (butir 388) |
 | Nilai tidak dikenal | jatuh ke `id`, tanpa galat; jalur/berkas tidak pernah mencapai controller |
 
 Kunci terjemahannya adalah kalimat Indonesianya sendiri. `lang/id.json` tetap ada
@@ -44,10 +45,15 @@ dirender dalam bahasa Inggris di halaman berbahasa Indonesia).
 | Portal siswa / guru / orang tua | header portal, di sebelah lonceng notifikasi |
 | Panel Filament | topbar, sebelum menu pengguna |
 
-Bentuknya dua tautan `ID` / `EN` — bukan `<select>` dan bukan JavaScript. Bahasa
-yang sedang aktif dirender `<span aria-current="true">`, bukan tautan ke dirinya
-sendiri. Sasaran sentuhnya 2.75rem pada ketiga tata letak publik, sama dengan
-tombol portal lain.
+Bentuknya satu `<form method="POST">` dengan dua tombol submit `ID` / `EN`,
+masing-masing membawa `formaction` sendiri — bukan `<select>` dan tanpa satu
+baris JavaScript pun. Satu token CSRF untuk keduanya. Bahasa yang sedang aktif
+dirender `<span aria-current="true">`, bukan tombol ke dirinya sendiri. Sasaran
+sentuhnya 2.75rem pada ketiga tata letak publik, sama dengan tombol portal lain.
+
+Rutenya menulis — sesi bagi tamu, `users.locale` bagi pengguna yang login —
+sehingga ia POST, bukan GET. GET tidak dilindungi CSRF dan dapat dipicu prefetch
+peramban maupun `<img src>` di situs lain; alasannya lengkap di butir 388.
 
 ## 3. Cakupan per permukaan yang diminta
 
@@ -65,6 +71,12 @@ tombol portal lain.
 | J | Label penilaian & rapor | ✅ | `test_enum_labels_translate_but_stored_values_never_change`, `test_the_formative_value_stays_formative_in_english` |
 | K | Label keuangan | ✅ | `test_financial_figures_are_identical_in_both_languages` |
 | L | Label notifikasi | ✅ | `test_the_notification_inbox_reads_in_both_languages` |
+
+Semantik HTTP pemilih bahasa diuji tersendiri di `LocaleSwitchTest`:
+`test_no_get_route_performs_the_locale_persistence`,
+`test_the_switch_route_is_csrf_protected`,
+`test_the_switch_posts_with_a_csrf_token_on_every_surface`,
+`test_the_switch_form_is_never_nested_inside_another_form`.
 
 Peran yang dapat menjalankan alur utamanya dalam bahasa Inggris: Admin Sekolah,
 Kepala Sekolah, Guru, Wali Kelas, Bendahara (lewat panel), Siswa dan Orang Tua
@@ -159,8 +171,12 @@ php artisan test tests/Feature/Cbt/StudentExamKeyLeakTest.php
 Untuk melihat bahasa berganti tanpa akun:
 
 ```
-GET /            → Bahasa Indonesia
-GET /bahasa/en   → beralih, kembali ke halaman asal
-GET /            → English
-GET /bahasa/fr   → jatuh ke Bahasa Indonesia, tanpa galat
+GET  /             → Bahasa Indonesia
+POST /bahasa/en    → beralih, redirect kembali ke halaman asal
+GET  /             → English
+POST /bahasa/fr    → jatuh ke Bahasa Indonesia, tanpa galat
+GET  /bahasa/en    → 405 Method Not Allowed, tidak menyimpan apa pun
 ```
+
+Pemilihnya di halaman adalah form; menekannya dari peramban sudah membawa token
+CSRF-nya sendiri.

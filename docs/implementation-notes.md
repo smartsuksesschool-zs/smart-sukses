@@ -6856,6 +6856,59 @@ getter `__(static::$navigationLabel)`. Ke-27 label itu diuji tersendiri dengan
 membandingkan keluaran `getNavigationLabel()` / `getNavigationGroup()` pada kedua
 locale.
 
+### 388. Pemilih bahasa itu POST, bukan GET
+
+Versi pertama batch ini memakai `GET /bahasa/{locale}`. Untuk tamu itu hampir
+tidak berbahaya — yang ditulis hanya sebuah kunci sesi. Untuk pengguna yang
+login, GET itu menulis baris database.
+
+Tiga akibatnya, dan ketiganya nyata:
+
+- **Tanpa CSRF.** Laravel melewati `ValidateCsrfToken` untuk metode yang
+  dianggap "membaca" (`isReading()`), dan GET termasuk di dalamnya. Sebuah
+  `<img src="https://apps.smartsukses.sch.id/bahasa/en">` di situs mana pun
+  karena itu cukup untuk mengubah bahasa akun siapa pun yang membuka halaman
+  itu sambil login.
+- **Prefetch dan crawler.** Peramban melakukan prefetch tautan, dan pemindai
+  tautan mengikutinya. Preferensi pengguna dapat berubah tanpa seorang pun
+  menekan apa pun.
+- **Semantik HTTP.** GET dijanjikan aman dan idempoten. Menulis di baliknya
+  membuat setiap perantara — cache, proxy, tombol "muat ulang" — berperilaku
+  atas asumsi yang tidak lagi benar.
+
+Perbaikannya: satu-satunya jalur penulisan sekarang `POST /bahasa/{locale}`,
+dan **tidak ada rute GET yang tersisa** untuk URI itu — `GET /bahasa/en`
+menjawab 405, bukan diam-diam menyimpan. Ada uji yang memeriksa bahwa tidak ada
+rute GET mana pun yang menunjuk ke `LocaleController`.
+
+Mekanismenya tetap satu untuk keduanya: tamu ke sesi, pengguna login ke
+`users.locale`. Yang berubah hanya metodenya.
+
+### 389. Form POST tanpa satu baris JavaScript pun
+
+Mengubah tautan menjadi tulisan biasanya berarti tombol, dan tombol biasanya
+berarti skrip. Di sini tidak: satu `<form method="POST">` dengan dua tombol
+submit yang masing-masing membawa `formaction` sendiri. HTML biasa, satu token
+CSRF untuk keduanya, tetap dapat dicapai papan ketik dan dibaca pembaca layar.
+Halaman muka dan PPDB tetap tidak menuntut skrip apa pun (butir 345).
+
+Dua hal yang harus ikut disesuaikan, dan keduanya sempat salah:
+
+- **`font: inherit` menimpa `font-size`.** Tombol perlu setelan ulang gaya,
+  tetapi shorthand `font` menghapus `font-size` dan `font-weight` yang
+  ditulis di atasnya. Yang dipakai `font-family: inherit`.
+- **`<form>` di dalam `<form>`.** HTML tidak sah, dan peramban membuangnya
+  diam-diam — tombolnya masih terlihat, tetapi berhenti mengirim apa pun.
+  Karena pemilihnya kini form, ada uji yang menghitung kedalaman `<form>` pada
+  keenam permukaan dan menuntutnya tepat 1.
+
+Yang **tidak** dapat diuji dari dalam suite: penolakan token CSRF yang salah.
+`ValidateCsrfToken` sengaja melewati dirinya sendiri selama `runningUnitTests()`,
+sehingga uji semacam itu hanya akan menguji tiruan. Yang dibuktikan sebagai
+gantinya: middleware-nya benar-benar terpasang pada grup `web` yang memuat rute
+ini, metodenya POST sehingga jalan pintas `isReading()` tidak berlaku, dan
+formulirnya benar-benar merender `name="_token"` pada keenam permukaan.
+
 ### 387. Yang **tidak** diterjemahkan Batch S9.3
 
 Disengaja, dan tercatat di `docs/bilingual-coverage.md`:
