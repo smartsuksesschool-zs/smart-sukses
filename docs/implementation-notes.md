@@ -6735,6 +6735,139 @@ sudah, yang kedua belum.
 - bilingual, uji beban, perubahan responsif — S9.3/S9.4;
 - seluruh implementasi penilaian tidak tersentuh.
 
+## Batch S9.3 — bilingual ID/EN
+
+### 376. Daftar bahasa hidup di satu tempat
+
+`App\Support\Locale` adalah satu-satunya tempat daftar bahasa yang didukung
+ditulis. Sebelumnya daftar itu berupa properti privat di dalam `SetUserLocale`,
+sehingga halaman pemilih bahasa dan validasi profil tidak punya cara menanyakannya
+tanpa menyalinnya. Dua salinan daftar bahasa adalah dua daftar yang perlahan
+berbeda — dan yang tertinggal biasanya justru yang dipakai untuk validasi.
+
+### 377. Nilai locale tidak pernah sampai mentah ke `App::setLocale()`
+
+Kode bahasa ikut menentukan berkas terjemahan yang dimuat Laravel. Nilai sembarang
+dari URL karena itu diperlakukan seperti input tidak dipercaya lainnya:
+
+- rutenya `->whereAlpha('locale')`, sehingga titik, garis miring, dan byte nol
+  tidak pernah mencapai controller (permintaannya 404, bukan 500);
+- `Locale::sanitize()` menjatuhkan apa pun di luar `id`/`en` ke Indonesia, tanpa
+  galat;
+- baris `users.locale` yang entah bagaimana berisi nilai di luar daftar juga
+  disaring pada saat dibaca, bukan hanya pada saat ditulis.
+
+Yang terakhir itu penting: kolomnya sudah ada sejak Sprint 1 dan tidak pernah
+punya constraint.
+
+### 378. Preferensi akun menang atas sesi
+
+Urutan di `Locale::forRequest()` disengaja. Pengguna yang sudah memilih bahasa
+untuk akunnya tidak boleh mendapati pilihan itu tertimpa oleh tombol yang pernah
+ia tekan sebagai tamu di peramban yang sama — misalnya ketika mencoba halaman
+PPDB sebelum masuk. Sesi hanya berlaku selama tidak ada preferensi akun.
+
+### 379. Tamu memakai sesi, bukan baris database
+
+Halaman muka dan PPDB terbuka bagi siapa saja, dan calon siswa yang tidak
+berbahasa Indonesia tidak punya akun untuk menyimpan preferensinya. Membuat baris
+pengguna hanya untuk menyimpan pilihan bahasa akan berarti tabel `users` menerima
+baris dari pengunjung anonim — harga yang jauh lebih mahal daripada satu kunci
+sesi.
+
+### 380. Rute bahasa tidak menerima id pengguna dari mana pun
+
+`LocaleController` menulis `$request->user()`, dan tidak ada parameter lain yang
+dibacanya. Tidak ada id pengguna di URL, tidak ada di badan permintaan, dan
+rutenya hanya menerima `GET` dengan satu segmen huruf. Karena itu tidak ada
+bentuk permintaan apa pun yang dapat mengubah bahasa akun orang lain — bukan
+karena ada pemeriksaan izin yang menolaknya, melainkan karena tidak ada jalan
+masuk untuk menyebut akun lain.
+
+### 381. Satu komponen pemilih bahasa untuk empat tata letak
+
+`<x-locale-switch />` dipakai halaman muka, PPDB, dan ketiga portal. Menyalinnya
+per tata letak akan melahirkan tombol-tombol yang perlahan berbeda perilakunya —
+pola yang sudah terbukti pada lencana notifikasi (butir 211).
+
+Bentuknya tautan biasa, bukan `<select>` dengan JavaScript. Halaman muka dan PPDB
+sengaja tidak menuntut satu baris skrip pun (butir 345), dan tautan tetap
+berfungsi bagi pembaca layar maupun navigasi papan ketik tanpa penanganan
+tambahan. Bahasa yang sedang aktif dirender sebagai `<span aria-current="true">`,
+bukan tautan ke dirinya sendiri.
+
+### 382. Keterangan pembaca layar memakai gaya inline
+
+Keempat tata letak yang memuat komponen ini menamai kelas "hanya untuk pembaca
+layar" dengan nama berbeda — `.portal-sr-only` di portal, `.sr-only` di halaman
+muka — dan panel Filament tidak memuat satu pun di antaranya. Gaya inline pada
+komponennya menghindari pilihan antara menambah kelas ke empat tempat atau
+membiarkan namanya salah di sebagian tempat.
+
+Sasaran sentuhnya 2.75rem, angka yang sama dengan tombol portal lain, sehingga
+pemilihnya tetap dapat ditekan jari pada ponsel. Ini satu-satunya penyesuaian
+responsif dalam batch ini; sisanya milik S9.4.
+
+### 383. Panel Filament mendapat tampilannya sendiri
+
+`resources/views/filament/locale-switch.blade.php` ditulis terpisah karena panel
+tidak memuat CSS ketiga tata letak publik, dan menambahkan lembar gaya baru hanya
+untuk dua tautan berarti menambah langkah build yang belum pernah dijalankan
+siapa pun menjelang go-live. Perilakunya sama persis; hanya gayanya yang inline.
+
+Tanpa tombol ini, lima peran yang bekerja di panel — Admin Sekolah, Kepala
+Sekolah, Guru, Wali Kelas, Bendahara — tidak punya cara mengganti bahasa sama
+sekali.
+
+### 384. Bawaan Indonesia dipindahkan ke berkas config
+
+`config/app.php` sebelumnya berbunyi `env('APP_LOCALE', 'en')`. Nilai `.env`
+memang sudah `id` di ketiga contoh berkas, tetapi bawaan yang tertulis di
+config-lah yang berlaku ketika sebuah deployment kehilangan barisnya. NFR 1.4
+menyebut Indonesia sebagai bawaan, jadi bawaannya sekarang benar-benar `id`.
+
+### 385. `lang/id.json` ada meskipun kuncinya sudah berbahasa Indonesia
+
+Kunci terjemahan pada proyek ini adalah kalimat Indonesianya sendiri, sehingga
+sekilas `lang/id.json` tampak mubazir: tanpa berkas itu pun `__('Kelas')` sudah
+mengembalikan "Kelas".
+
+Itu benar untuk `__()`, dan **salah** untuk `trans_choice()`. `Translator::choice()`
+memilih locale lewat `localeForChoice()`, yang jatuh ke `fallback_locale` ketika
+kuncinya tidak ditemukan untuk locale aktif. Dengan `fallback_locale=en` dan tanpa
+`lang/id.json`, setiap bentuk jamak dirender dalam bahasa Inggris di tengah
+halaman berbahasa Indonesia — `trans_choice(':count menit|:count menit', 90)`
+menghasilkan "90 minutes". Ditemukan saat menguji, bukan saat menulis.
+
+`lang/id.json` karena itu berisi pemetaan identitas untuk seluruh kunci. Ia
+dihasilkan dari `lang/en.json` sehingga kedua berkas selalu memuat kunci yang
+sama persis — dan ada uji yang memaksanya tetap begitu.
+
+### 386. Cakupan yang dapat dihitung, bukan diklaim
+
+`BilingualCoverageTest::test_every_translation_key_in_the_code_exists_in_both_files`
+memindai `app/`, `resources/views/`, dan `routes/` untuk setiap literal `__()` dan
+`trans_choice()`, lalu membandingkannya dengan kedua berkas terjemahan. Angkanya
+karena itu bukan perkiraan.
+
+Yang **tidak** dapat dilihat pemindai itu: label statis Filament
+(`static::$navigationLabel` dan kerabatnya), yang diterjemahkan lewat override
+getter `__(static::$navigationLabel)`. Ke-27 label itu diuji tersendiri dengan
+membandingkan keluaran `getNavigationLabel()` / `getNavigationGroup()` pada kedua
+locale.
+
+### 387. Yang **tidak** diterjemahkan Batch S9.3
+
+Disengaja, dan tercatat di `docs/bilingual-coverage.md`:
+
+- isi yang ditulis pengguna — nama siswa, judul ujian, isi pengumuman, alasan
+  pembebasan tagihan. Menerjemahkannya berarti mengarang data;
+- nilai enum yang tersimpan (`FORMATIVE` tetap `FORMATIVE`), kode cabang, NIS;
+- keluaran PDF rapor — berkasnya dokumen resmi sekolah berbahasa Indonesia;
+- log, pesan pengecualian, dan komentar kode;
+- string vendor Filament, yang sudah punya berkas locale `id` sendiri;
+- contoh isian seperti `MTK`, `X-A`, `2024/2025 Semester 1` — kode, bukan kalimat.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
