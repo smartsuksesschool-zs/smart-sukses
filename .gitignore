@@ -22,3 +22,9 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Dump basis data. Bawaannya sudah jatuh di storage/app/private (yang
+# seluruhnya diabaikan), tetapi ops/backup-database.sh menerima direktori
+# tujuan sebagai argumen — termasuk akar repositori.
+smartsukses-*.sql
+smartsukses-*.sql.gz
