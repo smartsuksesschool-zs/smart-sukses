@@ -7066,6 +7066,114 @@ menirukan alur masuk Livewire: yang ditirukan akan mengukur tiruan.
   orientasi landscape;
 - perubahan pada logika penilaian, percobaan ujian, timer, maupun kunci jawaban.
 
+## Batch S9.5 — QA akhir & penutupan sebelum deployment
+
+### 401. `assertDontSee` yang mencocoki token CSRF, untuk keempat kalinya
+
+Regresi MySQL Batch S9.4 menjatuhkan `TeacherPortalUiTest`: `assertDontSee('7B')`
+cocok dengan token CSRF yang kebetulan berbunyi
+`5IKc47BKVNpudAkF3XFCBvW5IViRETAX0kdvlFAx`. Cacatnya sudah ada sebelumnya —
+tetapi `@csrf` pada form pemilih bahasa menambah satu token acak lagi di setiap
+halaman portal, dan dengan itu kira-kira melipatduakan peluangnya muncul.
+
+Perbaikannya: membandingkan **teks yang terlihat** saja — `<script>`, `<style>`,
+komentar, dan seluruh tag dibuang lebih dulu, karena token hidup di dalam
+atribut. Stabil pada lima kali jalan berturut-turut.
+
+Ini bentuk yang sama dengan butir 284, 323, dan 373. Keempat kalinya, dan itu
+sudah bukan kebetulan: `assertDontSee` dengan string pendek pada halaman ber-token
+adalah pola yang memang rapuh, bukan tes yang kebetulan sial.
+
+Catatan kejujuran: laporan akhir S9.4 menyebut temuan ini "terdokumentasi sebagai
+butir 401". Kenyataannya butirnya tidak pernah ditulis ke berkas ini. Ia ditulis
+sekarang.
+
+### 402. Pintu masuk dibaca dari tabel rute, bukan dari daftar yang ditulis tangan
+
+Seluruh pemeriksaan pintu masuk sebelum S9.5 menyebut rutenya satu per satu:
+`get(route('portal.dashboard'))`, `get(route('student.dashboard'))`, dan
+seterusnya. Cakupannya sebenarnya baik — tetapi punya satu titik buta yang tidak
+dapat ditutup dengan menambah tes sejenis: sebuah rute **baru** yang lupa
+dipagari tidak menggagalkan tes mana pun, karena tidak ada tes yang tahu rute itu
+ada.
+
+`EntryPointBoundaryTest` membacanya dari `Router::getRoutes()` saat tes berjalan.
+Menambahkan `Route::get('/siswa/rapor-baru', ...)` di luar grup middleware akan
+menjatuhkan tes tanpa siapa pun perlu ingat memperbarui daftar.
+
+Tiga hal yang dijaganya, untuk **setiap** rute portal dan bukan hanya dasbornya:
+pagar middleware-nya benar-benar menempel; tamu dialihkan ke pintu masuk yang
+tepat (tiga portal, tiga pintu berbeda — siswa tidak boleh dikirim ke halaman
+masuk panel); dan peran satu portal ditolak 403 di portal lain.
+
+Setiap tes membawa `assertGreaterThanOrEqual` atas jumlah rute yang diperiksanya.
+Tanpa itu, penyaring yang salah akan membuat perulangannya kosong dan tesnya
+hijau tanpa memeriksa apa pun — persis kegagalan yang membuat versi pertama
+`test_every_admin_panel_route_is_authenticated` dilaporkan *risky* oleh PHPUnit
+karena tidak melakukan satu assertion pun.
+
+Hasilnya: tidak ada satu pun batas akses yang salah. Nilainya bukan pada temuan
+hari ini, melainkan pada rute yang belum ditulis.
+
+### 403. CVE Laravel 11 yang diterima tidak punya permukaan di Phase 1
+
+`composer audit` tetap melaporkan tiga advisory pada `laravel/framework`, dan
+keputusan bertahan di Laravel 11 sudah diambil sadar — 11.55.0 adalah rilis 11.x
+terakhir, dan perbaikannya hanya ada di jalur 12.x.
+
+Yang baru diperiksa pada S9.5 adalah **keterjangkauannya**, bukan keberadaannya:
+
+- *Temporary Signed URL Path Confusion* — tidak ada satu pun pemanggilan
+  `temporarySignedRoute`, `signedRoute`, maupun `hasValidSignature` di dalam
+  aplikasi. Tidak ada URL bertanda tangan yang dapat dibingungkan.
+- *CRLF injection pada rule validasi `email`* — rule `email` memang dipakai
+  (login API, surel orang tua di PPDB dan impor siswa). Yang membuatnya berbahaya
+  adalah nilai tervalidasi yang kemudian **masuk ke header surel**. Aplikasi ini
+  tidak mengirim surel sama sekali: tidak ada Mailable, tidak ada `MailMessage`,
+  tidak ada pemanggilan facade `Mail`. Nilainya berhenti di basis data dan
+  dirender Blade dalam keadaan ter-escape.
+
+Karena itu risikonya hari ini nol, bukan sekadar diterima. Yang perlu diingat:
+ia berhenti nol **pada saat pengiriman surel dinyalakan**. Ketika SMTP dipakai
+sungguhan — pemulihan kata sandi lewat surel adalah calon pertamanya — rule
+`email` bawaan tidak boleh lagi dipakai pada nilai yang masuk ke header tanpa
+sanitasi CRLF.
+
+### 404. Semester rapor tidak hilang — ia ada di nama tahun ajaran
+
+Sempat tampak seperti cacat: `report_cards` tidak punya kolom `semester`, kunci
+uniknya `['student_id', 'academic_year_id']`, dan templat PDF hanya mencetak
+"Tahun Ajaran". Sumber dokumen menyebut rapor sebagai laporan **per semester**.
+
+Ternyata konsisten. `academic_years` yang membawa `semester` (1 atau 2), dan ERD
+menyebut `name` berisi contoh "2024/2025 Semester 1" — jadi satu baris
+`academic_years` **adalah** satu semester. Satu rapor per siswa per tahun ajaran
+karena itu berarti satu rapor per siswa per semester, dan nama yang dicetak PDF
+sudah memuat semesternya.
+
+Tidak ada migrasi, dan tidak ada perubahan templat. Yang ditambahkan hanya satu
+baris pada QA manusia (H-13): penguji diminta memastikan nama tahun ajaran di
+data sungguhan memang memuat semesternya. Itu soal pengisian data, bukan kode —
+dan tidak ada tes yang dapat membuktikannya dari sisi repositori.
+
+### 405. Yang **tidak** dikerjakan Batch S9.5
+
+- verifikasi visual apa pun — ekstensi peramban tetap tidak terhubung;
+- eksekusi uji beban — k6 tetap tidak terpasang, dan tetap tidak ada staging;
+- verifikasi sisi server mana pun: TLS, redirect HTTP→HTTPS, HSTS, alamat IP
+  klien di balik proxy, cron, Supervisor, backup terjadwal, pemantauan uptime;
+- uji manual lintas cabang oleh manusia — disiapkan di `docs/human-qa-handoff.md`,
+  belum dijalankan;
+- tinjauan format PDF rapor oleh manusia;
+- perubahan versi dependensi — tidak ada blocker keamanan yang terbukti
+  terjangkau (butir 403);
+- migrasi basis data, indeks baru, perubahan skema — tidak ada;
+- perubahan pada F-1/F-3/F-4/F-5, semantik Grade Config, maupun
+  FinalScoreCalculator;
+- keputusan pemilik yang masih terbuka: NOTIF-03, konflik "Buat Pengumuman"
+  guru, pembuatan nilai manual global setelah rapor terbit, serta materi
+  pemasaran dan kontak final halaman muka.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

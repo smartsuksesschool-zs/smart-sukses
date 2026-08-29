@@ -239,25 +239,31 @@ Stack ke sana. Belum dikonfigurasi.
 
 ## Status checklist
 
-Diperbarui setelah S9.1. **Jangan menandai PASS sebelum diverifikasi di server.**
+Diperbarui setelah S9.5. **Jangan menandai PASS sebelum diverifikasi di server.**
+
+Matriks lengkap berikut buktinya ada di `docs/sprint-9-closure.md` §4; yang di
+bawah ini ringkasannya.
 
 | # | Checklist A.3 | Status |
 | --- | --- | --- |
-| 1 | Unit test isolasi tenant lulus 100% | **PASS** — 2291 test hijau di kedua mesin |
-| 2 | Uji manual lintas cabang | NOT DONE |
-| 3 | Uji beban 200 pengguna konkuren | NOT DONE |
+| 1 | Unit test isolasi tenant lulus 100% | **PASS** — 107 test isolasi lintas cabang hijau di kedua mesin, plus pagar pintu masuk yang dibaca dari tabel rute |
+| 2 | Uji manual lintas cabang | NOT DONE — matriksnya siap sebagai H-05…H-07 & H-09 di `docs/human-qa-handoff.md` |
+| 3 | Uji beban 200 pengguna konkuren | NOT DONE / **PREPARED** — skrip k6, ambang, dan rencana bertahap siap; belum pernah dieksekusi |
 | 4 | Encoding tautan wa.me | **PASS** — regresi encoding pada PPDB & notifikasi |
-| 5 | Format & data PDF rapor | PARTIAL — otomatis lulus; tinjauan format oleh manusia belum |
+| 5 | Format & data PDF rapor | PARTIAL — otomatis lulus; tinjauan format oleh manusia belum (H-13/H-14) |
 | 6 | SSL aktif + redirect HTTP→HTTPS | **PARTIAL** — sisi aplikasi siap (APP_URL, cookie Secure, proxy); TLS server belum |
-| 7 | Backup otomatis **dan** dapat di-restore | **PARTIAL** — skrip ada, uji pemulihan lokal lolos; backup terjadwal di server & pemulihan berkas belum |
+| 7 | Backup otomatis **dan** dapat di-restore | **PARTIAL** — skrip ada, uji pemulihan lokal lolos; backup terjadwal di server & cadangan berkas `storage/app/*` belum |
 | 8 | Seluruh kata sandi bawaan diganti | PARTIAL — pagar seeding produksi ada; root MySQL urusan server |
 | 9 | CORS dibatasi ke domain | **PARTIAL** — `config/cors.php` ada dan tidak wildcard; verifikasi di server belum |
 | 10 | Pemantauan uptime | NOT DONE |
 
 **2 PASS · 5 PARTIAL · 3 NOT DONE.**
 
-Yang berpindah pada S9.2: butir 7 dari NOT DONE menjadi PARTIAL. Tidak ada yang
-naik menjadi PASS — seluruh sisanya menuntut server.
+Yang berpindah pada S9.2: butir 7 dari NOT DONE menjadi PARTIAL. Yang berpindah
+pada S9.4: butir 3 memperoleh keterangan PREPARED — perkakasnya ada, tetapi
+statusnya **tetap** NOT DONE sampai dijalankan di server yang menyerupai
+produksi. S9.5 tidak memindahkan satu butir pun: seluruh sisanya menuntut server
+atau manusia, bukan kode.
 
 Aplikasinya **selesai secara fungsional**; deployment produksinya **belum siap
 go-live**. Keduanya hal yang berbeda, dan dokumen ini tidak menyatukannya.
