@@ -641,6 +641,264 @@ class LandingPageTest extends TestCase
         );
     }
 
+    // ================================================ Batch L2.1 — tinjauan
+
+    /**
+     * Cacat yang ditemukan tinjauan manusia, dan alasan tes ini ada.
+     *
+     * Dalam mode EN kedelapan ringkasan fitur dan empat judulnya masih
+     * berbahasa Indonesia, sementara seluruh suite hijau. Sebabnya kunci-kunci
+     * itu dipanggil sebagai `__($name)` atas variabel, dan pemindai kunci di
+     * BilingualCoverageTest hanya melihat `__('literal')` — jadi tidak ada satu
+     * pemeriksaan pun yang pernah menengok ke sana (butir 424).
+     *
+     * Tes ini memeriksa **halaman yang benar-benar dirender**, bukan berkas
+     * terjemahannya, sehingga kelas cacat yang sama tidak dapat kembali lewat
+     * pintu lain: label apa pun yang lolos ke mode EN akan menjatuhkannya.
+     */
+    public function test_the_english_landing_renders_no_indonesian_implementation_copy(): void
+    {
+        School::factory()->create(['name' => 'SMP Madani', 'code' => 'MDN']);
+
+        $text = $this->visibleTextOf($this->inEnglish()->get('/')->assertOk()->getContent());
+
+        // Judul dan ringkasan yang benar-benar tertinggal pada tinjauan L2.
+        foreach ([
+            'Data Siswa & Kelas',
+            'Akademik & E-Rapor',
+            'Keuangan Sekolah',
+            'Notifikasi & Pengumuman',
+            'Formulir pendaftaran publik per cabang',
+            'Data induk siswa',
+            'Input nilai per komponen',
+            'Jenis tagihan',
+            'Ujian pilihan ganda',
+            'Pengumuman ke seluruh sekolah',
+            'Jadwal, nilai per mata pelajaran',
+            'Ringkasan anak',
+        ] as $indonesian) {
+            $this->assertStringNotContainsString(
+                $indonesian,
+                $text,
+                "Naskah Indonesia masih tampil di mode EN: {$indonesian}",
+            );
+        }
+
+        // Dan penggantinya memang tampil.
+        foreach ([
+            'Student & Class Records',
+            'Academics & Digital Report Cards',
+            'School Finance',
+            'Notifications & Announcements',
+        ] as $english) {
+            $this->assertStringContainsString($english, $text);
+        }
+    }
+
+    /**
+     * Jaring yang lebih lebar daripada daftar di atas: kata Indonesia yang
+     * tidak mungkin muncul dalam kalimat Inggris. Nama cabang sengaja tidak
+     * ikut diperiksa — ia data sekolah, bukan naskah antarmuka.
+     */
+    public function test_the_english_landing_carries_no_stray_indonesian_words(): void
+    {
+        $text = $this->visibleTextOf($this->inEnglish()->get('/')->assertOk()->getContent());
+
+        foreach ([' yang ', ' dan ', ' dengan ', ' untuk ', ' tidak ', ' siswa ', ' sekolah '] as $word) {
+            $this->assertStringNotContainsString(
+                $word,
+                ' '.strtolower($text).' ',
+                "Kata Indonesia lolos ke mode EN:{$word}",
+            );
+        }
+    }
+
+    // -------------------------------------------------------- menu seluler
+
+    /**
+     * Tinjauan manusia: strip yang menggulung ke samping "berjalan, tetapi
+     * tidak terlihat sebagai menu". Penggantinya `<details>`/`<summary>` —
+     * dapat dibuka papan ketik dan tanpa satu baris JavaScript (butir 425).
+     */
+    public function test_the_mobile_menu_is_a_real_disclosure_without_javascript(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('<details class="nav__disclosure">', $html);
+        $this->assertStringContainsString('<summary class="nav__toggle"', $html);
+
+        // Perilakunya tidak digerakkan skrip: tidak ada penangan peristiwa
+        // sebaris, dan tidak ada atribut kerangka kerja yang mengendalikannya.
+        //
+        // Yang **tidak** diperiksa di sini keberadaan `<script>` sama sekali:
+        // Livewire menyuntikkan asetnya sendiri ke dalam balasan HTML utuh, dan
+        // menuntut nol tag skrip berarti menguji perilaku Livewire, bukan menu
+        // ini (butir 366).
+        foreach (['onclick=', 'onchange=', 'x-data', 'wire:click'] as $scripted) {
+            $this->assertStringNotContainsString($scripted, $html);
+        }
+    }
+
+    public function test_the_mobile_menu_carries_every_destination(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $panel = $this->between($html, '<nav class="nav__panel"', '</details>');
+
+        foreach (['#konten', '#akses', '#fitur', '#tentang', '#cabang'] as $anchor) {
+            $this->assertStringContainsString('href="'.$anchor.'"', $panel, "Menu kehilangan {$anchor}.");
+        }
+
+        foreach ([route('ppdb.schools'), route('ppdb.check-status')] as $url) {
+            $this->assertStringContainsString('href="'.$url.'"', $panel, "Menu kehilangan {$url}.");
+        }
+
+        // Pemilih bahasa ikut di dalam panel.
+        $this->assertStringContainsString('locale-switch', $panel);
+    }
+
+    /**
+     * Aksi utama tidak ikut disembunyikan: tombol Masuk tetap di bar, di luar
+     * `<details>`, sehingga terlihat tanpa membuka apa pun.
+     */
+    public function test_the_sign_in_action_stays_outside_the_mobile_menu(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('class="btn btn--primary nav__cta--bar"', $html);
+
+        $afterMenu = substr($html, strpos($html, '</details>'));
+        $this->assertStringContainsString('nav__cta--bar', $afterMenu);
+    }
+
+    // ------------------------------------------------------- aksi & bentuk
+
+    /**
+     * Aksi kartu akses berbentuk pil yang terlihat dapat ditekan, dan PPDB —
+     * urutan pertama — mendapat pil terisi (butir 426).
+     */
+    public function test_the_access_actions_look_pressable_with_ppdb_first(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('.access__go {', $html);
+        $this->assertStringContainsString('border-radius: var(--radius-pill);', $html);
+        $this->assertStringContainsString('access--primary', $html);
+
+        $section = $this->between($html, 'id="akses"', 'id="fitur"');
+
+        $order = [];
+
+        foreach ([
+            route('ppdb.schools') => 'ppdb',
+            route('student.login') => 'siswa',
+            route('portal.login') => 'ortu',
+            route('filament.admin.auth.login') => 'panel',
+        ] as $url => $label) {
+            $order[strpos($section, 'href="'.$url.'"')] = $label;
+        }
+
+        ksort($order);
+
+        $this->assertSame(['ppdb', 'siswa', 'ortu', 'panel'], array_values($order));
+    }
+
+    /**
+     * Bagian Tentang berhenti menjadi baris kartu putih ketiga (butir 427).
+     */
+    public function test_the_about_section_is_not_another_card_row(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $about = $this->between($html, 'id="tentang"', '</section>');
+
+        $this->assertStringContainsString('class="about"', $about);
+        $this->assertStringContainsString('class="about__item"', $about);
+        $this->assertStringNotContainsString('class="card"', $about);
+
+        // Ketiga alasannya tetap ada, kata demi kata.
+        foreach ([
+            'Terpadu sejak pendaftaran',
+            'Mendukung banyak cabang',
+            'Diakses lewat peramban',
+        ] as $pillar) {
+            $this->assertStringContainsString($pillar, $about);
+        }
+    }
+
+    /**
+     * Kartu cabang menonjolkan identitasnya, dan alamatnya tetap hanya yang
+     * benar-benar tersimpan — tidak ada yang dikarang (butir 350).
+     */
+    public function test_the_branch_card_leads_with_its_identity(): void
+    {
+        School::factory()->create([
+            'name' => 'SMP Madani',
+            'code' => 'MDN',
+            'address' => 'Jalan Contoh No. 1',
+        ]);
+
+        $html = $this->get('/')->assertOk()->getContent();
+        $card = $this->between($html, 'id="cabang"', '</section>');
+
+        $this->assertStringContainsString('class="branch__name"', $card);
+        $this->assertStringContainsString('SMP Madani', $card);
+        $this->assertStringContainsString('MDN', $card);
+        $this->assertStringContainsString('class="branch__address"', $card);
+        $this->assertStringContainsString('Jalan Contoh No. 1', $card);
+
+        // Alamat kosong tidak menghasilkan baris kosong.
+        School::query()->update(['address' => null]);
+        $withoutAddress = $this->between($this->get('/')->getContent(), 'id="cabang"', '</section>');
+        $this->assertStringNotContainsString('class="branch__address"', $withoutAddress);
+    }
+
+    /**
+     * Label hero tetap hiasan: nama fitur yang benar-benar ada, tanpa angka.
+     */
+    public function test_the_hero_labels_name_real_features_without_numbers(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $visual = $this->between($html, 'class="hero__visual"', '</section>');
+
+        foreach (['PPDB', 'Jadwal', 'Nilai', 'Ujian', 'Portal'] as $label) {
+            $this->assertStringContainsString('>'.$label.'</span>', $visual);
+        }
+
+        $this->assertDoesNotMatchRegularExpression('/\d/', strip_tags($visual));
+    }
+
+    // ------------------------------------------------------------- bantuan
+
+    /** Beralih ke bahasa Inggris lewat jalur yang sama dengan pengunjung. */
+    protected function inEnglish(): static
+    {
+        $this->post(route('locale.switch', ['locale' => 'en']));
+
+        return $this;
+    }
+
+    /** Teks yang benar-benar terbaca pengunjung, tanpa CSS dan tanpa atribut. */
+    protected function visibleTextOf(string $html): string
+    {
+        $withoutStyles = preg_replace('#<(script|style)[^>]*>.*?</\1>#s', ' ', $html);
+
+        return preg_replace('/\s+/', ' ', html_entity_decode(strip_tags($withoutStyles)));
+    }
+
+    /** Potongan dokumen di antara dua penanda. */
+    protected function between(string $html, string $from, string $to): string
+    {
+        $start = strpos($html, $from);
+
+        $this->assertIsInt($start, "Penanda tidak ditemukan: {$from}");
+
+        $end = strpos($html, $to, $start);
+
+        return substr($html, $start, ($end === false ? strlen($html) : $end) - $start);
+    }
+
     protected function countQueries(\Closure $work): int
     {
         DB::flushQueryLog();
