@@ -7413,6 +7413,156 @@ tidak ada penghapusan-setelah-penggantian yang perlu diurutkan. Yang ditambahkan
 hanya tesnya, supaya kalau suatu saat halaman ubah dibuat, ketiadaan pagar itu
 tidak lolos diam-diam.
 
+## Batch L2 — penyegaran tampilan halaman muka
+
+Batch tampilan, bukan batch fitur. Tidak ada logika autentikasi, PPDB, CBT,
+tenant, maupun skema basis data yang disentuh; rute yang bertambah tidak ada.
+Yang berubah hanya `resources/views/landing.blade.php`, tata letaknya, dan
+naskahnya.
+
+### 416. Gaya halaman muka menjadi satu sistem kecil, bukan nilai yang diulang
+
+Sebelum batch ini setiap jarak, radius, dan bayangan ditulis di tempat
+pemakaiannya — `border-radius: .9rem` di kartu, `.6rem` di tombol, `1rem` di
+ajakan, tanpa satu pun yang merujuk yang lain. Akibatnya bukan hanya tidak rapi:
+mengubah satu keputusan visual berarti mencarinya di sepuluh tempat, dan yang
+terlewat akan tetap memakai nilai lama tanpa terlihat.
+
+Sekarang seluruhnya token di `:root` — warna, radius (`--radius-sm/-/-lg/-pill`),
+bayangan (`--shadow-sm/-md/-lg`), lebar container, dan tinggi jarak antarbagian.
+Warnanya tetap `SchoolBranding::FALLBACK_*` dan tetap **bukan** warna cabang;
+alasannya tidak berubah sejak butir 344, dan tesnya masih menjaganya.
+
+Yang **tidak** dilakukan: memindahkan halaman ini ke Tailwind atau ke Vite.
+`public/build` tetap tidak ada, dan `npm run build` tetap bukan syarat merender
+`/` (butir 345).
+
+### 417. Gubahan hero dibangun dari HTML, karena tidak ada gambar yang boleh dipakai
+
+Hero versi lama satu kolom teks. Yang ditambahkan sekarang gubahan visual di
+kolom kanan: kartu bergaya antarmuka berisi tiga ubin ringkasan, tiga baris
+daftar, dan enam batang diagram, ditambah dua kartu kecil yang mengambang.
+
+Pilihannya sempit dan disengaja. Repository ini **tidak punya satu berkas gambar
+pun** — tidak ada logo Smart Sukses School, tidak ada foto sekolah. Mengunduh
+foto stok berarti membawa masalah lisensi ke dalam project atas keputusan
+pengembang sendiri, dan menambah berkas berat pada halaman yang selama ini
+ringan. Karena itu gubahannya dibangun dari HTML dan CSS.
+
+Aturan yang mengikatnya: **tidak ada satu angka pun di dalamnya.** Bentuknya
+memang meniru antarmuka yang benar-benar ada di produk — jadwal, nilai, ringkasan
+— tetapi isinya batang abu-abu, bukan "1.240 siswa" atau "98% kehadiran". Seluruh
+blok `aria-hidden`, dan sebuah tes memastikan tidak ada digit yang menyelinap ke
+dalamnya. Gubahan ini disembunyikan di bawah 48rem: pada layar ponsel ia hanya
+akan mendorong tombol yang justru dicari orang.
+
+### 418. Akses Pengguna naik ke tepat bawah hero
+
+Perubahan tata letak yang paling menentukan, dan yang paling mudah dianggap
+selera padahal bukan.
+
+Urutan lama: hero → tentang → fitur → akses → cabang. Artinya seorang wali murid
+yang membuka halaman ini untuk masuk ke portal anaknya harus melewati dua bagian
+pemasaran lebih dulu. Halaman muka sekolah bukan halaman jualan produk kepada
+orang yang belum pernah mendengarnya; sebagian besar pengunjungnya sudah tahu apa
+itu, dan datang untuk **masuk**.
+
+Urutan sekarang: hero → **akses** → fitur → tentang → ajakan PPDB → cabang.
+Urutannya diuji, bukan sekadar disepakati: `test_the_access_section_comes_before_features_and_branches`
+membandingkan posisi ketiga jangkar di dalam HTML, sehingga penataan ulang
+berikutnya yang menenggelamkan bagian akses akan menjatuhkan tes.
+
+Hero-nya sendiri kini menyebutkan keduanya sekaligus — tombol utama PPDB
+(oranye, aksi yang paling dicari pengunjung baru) dan tombol sekunder "Masuk ke
+Sistem" yang mengantar ke bagian akses. Tetap tidak ada `/login` yang dikarang:
+sistem ini memang punya tiga pintu berbeda (butir 349).
+
+### 419. Delapan kartu fitur, delapan ikon berbeda
+
+Sebelumnya kedelapan kartu fitur memakai satu ikon centang yang sama. Ikon yang
+identik di delapan tempat tidak membedakan apa pun; ia hanya derau visual yang
+menyita perhatian tanpa membayarnya kembali.
+
+Sekarang tiap fitur punya bentuknya sendiri — dokumen untuk PPDB, buku untuk
+akademik, dompet untuk keuangan, lonceng untuk notifikasi, dan seterusnya —
+digambar sebagai path SVG inline dari satu peta di kepala berkas. Satu pembungkus
+`<svg>` dipakai bersama supaya ukuran, ketebalan garis, dan `aria-hidden`-nya
+tidak pernah berbeda antar pemakaian.
+
+Seluruhnya hiasan: maknanya tetap dibawa judul dan teks kartunya. Tidak ada satu
+informasi pun yang hanya tersampaikan lewat ikon atau lewat warna.
+
+### 420. Batas naskah: tidak ada yang dikarang, dan itu diuji
+
+Pemilik belum menyerahkan naskah pemasaran. Godaan pada batch tampilan seperti
+ini besar dan spesifik: satu deret penghitung ("1.200+ siswa aktif", "98%
+kelulusan"), tiga testimoni, sebaris logo mitra, dan sebuah blok kontak dengan
+nomor WhatsApp — semuanya akan membuat halaman terlihat jauh lebih meyakinkan
+dalam lima menit.
+
+Tidak satu pun ditambahkan. Yang membuat halaman ini layak dipercaya seharusnya
+susunan informasinya, bukan angka yang tidak berasal dari mana-mana.
+
+Batas itu kini punya tesnya sendiri
+(`test_no_invented_contact_details_or_claims_are_published`): tidak boleh ada
+`mailto:`, `tel:`, `wa.me`, atau tautan media sosial di halaman ini, dan tidak
+boleh ada pola angka capaian seperti "N siswa" atau "N% kelulusan". Ketika Pak
+Akbar menyerahkan naskah dan kontak yang sungguhan, tes itulah yang perlu
+diperbarui lebih dulu — dan itu memang titik yang tepat untuk memaksa
+percakapannya terjadi.
+
+Bagian cabang tetap menampilkan persis yang sudah publik di halaman PPDB: nama,
+kode, dan alamat. Tidak ada peta, jam operasional, akreditasi, maupun nomor
+telepon yang ditambahkan (butir 350).
+
+### 421. Dua tepi responsif yang diperbaiki tanpa peramban
+
+Verifikasi visual **tidak** dapat dilakukan pada batch ini — lihat catatan di
+bawah. Dua risiko berikut karena itu diperbaiki dari penalaran atas kodenya,
+bukan dari melihat hasilnya, dan keduanya masih menunggu mata manusia:
+
+- **Baris kedua wordmark di navbar.** "SISTEM INFORMASI SEKOLAH" berhuruf besar
+  dengan jarak huruf lebar adalah elemen terlebar di navbar, dan pada 360px ia
+  memakan ruang yang dibutuhkan strip tautan yang menggulung di sebelahnya.
+  Disembunyikan di bawah 30rem; footer tetap menampilkannya.
+- **Kartu mengambang di gubahan hero.** Versi pertamanya menjorok ke kiri dan ke
+  kanan melewati tepi container. `body { overflow-x: hidden }` akan memotongnya
+  tanpa satu tanda pun bahwa ia terpotong — persis bentuk cacat yang paling sulit
+  disadari. Sekarang ia hanya menjorok ke atas dan ke bawah.
+
+Sisanya mengikuti pelajaran S9.4 yang sudah ada: satu kolom lebih dulu, melebar
+hanya pada `min-width`; sasaran sentuh 2.75rem; strip navigasi yang menggulung
+dengan `min-width: 0` (butir 390); dan tidak ada yang boleh mendorong halaman
+melebar.
+
+### 422. Aksesibilitas dan gerak
+
+Yang dipertahankan: satu `<h1>`, landmark `header`/`nav`/`main`/`footer`, tautan
+lompat ke konten, `aria-label` pada navigasi, fokus keyboard yang terlihat
+(`outline` 3px pada `:focus-visible`), dan nama pembaca layar pada setiap kartu
+akses. Kartu yang seluruhnya dapat diklik tetap `<a>` — tidak ada `div` dengan
+penangan klik.
+
+Yang ditambahkan: `prefers-reduced-motion` kini mematikan **seluruh** animasi dan
+transisi, bukan hanya `scroll-behavior`. Batch ini memperkenalkan satu animasi
+(kartu mengambang bergerak 6px naik-turun) dan sejumlah transisi hover; keduanya
+harus benar-benar berhenti bagi yang memintanya, bukan sekadar melambat.
+
+Judul `<h1>` dipecah menjadi dua kunci terjemahan, bukan satu kalimat ber-HTML
+yang harus diterjemahkan berikut markupnya. Warna pada bagian pertama judul
+hanya penekanan; kalimatnya tetap utuh dibaca tanpa warna itu.
+
+### 423. Verifikasi visual TIDAK dilakukan
+
+Perkakas peramban sempat melaporkan satu Chrome terhubung, lalu terputus sebelum
+satu halaman pun dimuat. **Tidak ada satu piksel pun yang diperiksa** pada batch
+ini: tidak pada 360px, 390px, 768px, maupun desktop, dan tidak pada ID maupun EN.
+
+Yang dapat dibuktikan hanyalah yang dapat dibuktikan dari markup dan CSS — dan
+itu tidak sama dengan "tampilannya benar". Halaman ini karena itu **belum**
+lulus tinjauan tampilan, dan tetap menunggu `docs/responsive-qa.md` dijalankan
+manusia.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
