@@ -8,6 +8,7 @@ use App\Livewire\Ppdb\SchoolList;
 use App\Models\AcademicYear;
 use App\Models\PpdbRegistration;
 use App\Models\School;
+use App\Support\PpdbDocument;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -166,10 +167,16 @@ class PpdbPublicRegistrationTest extends TestCase
             ->assertHasErrors(['parent_email']);
     }
 
-    public function test_supporting_documents_are_stored_and_recorded(): void
+    /**
+     * Berkas pendaftaran memuat dokumen keluarga, jadi ia **tidak** boleh
+     * mendarat di disk publik yang dilayani web server tanpa autentikasi
+     * (M-1, butir 411).
+     */
+    public function test_supporting_documents_are_stored_privately(): void
     {
         // ERD 2.2 — documents: path file dokumen yang diupload (array URL).
-        Storage::fake('public');
+        Storage::fake(PpdbDocument::DISK);
+        Storage::fake(PpdbDocument::LEGACY_DISK);
 
         Livewire::test(RegistrationForm::class, ['schoolCode' => 'MADANI'])
             ->set($this->validForm())
@@ -181,13 +188,15 @@ class PpdbPublicRegistrationTest extends TestCase
 
         $this->assertIsArray($documents);
         $this->assertCount(1, $documents);
-        Storage::disk('public')->assertExists($documents[0]);
+
+        Storage::disk(PpdbDocument::DISK)->assertExists($documents[0]);
+        Storage::disk(PpdbDocument::LEGACY_DISK)->assertMissing($documents[0]);
     }
 
     public function test_only_jpg_png_and_pdf_documents_are_accepted(): void
     {
         // Arsitektur 3.4 — File Upload: hanya JPG/PNG/PDF diperbolehkan.
-        Storage::fake('public');
+        Storage::fake(PpdbDocument::DISK);
 
         Livewire::test(RegistrationForm::class, ['schoolCode' => 'MADANI'])
             ->set($this->validForm())
