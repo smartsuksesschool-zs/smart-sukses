@@ -7285,6 +7285,134 @@ sungguhan belum pernah dilihat, dan transformasi terhadap kolom yang belum
 diketahui adalah tebakan yang mahal untuk dibongkar. Rancangan perintah
 dry-run-nya ada di `docs/data-migration-readiness.md` §10, sebatas rancangan.
 
+## Batch M0.1 — pengerasan privasi berkas PPDB
+
+Menutup M-1 dari audit M0. Rincian lengkapnya di
+`docs/ppdb-document-storage.md`; yang di bawah ini keputusan-keputusan yang
+tidak terbaca dari kodenya.
+
+### 411. Disk berubah, jalur tidak — dan itulah yang membuatnya tanpa migrasi
+
+Berkas pendukung PPDB dulu disimpan di disk `public`. Setelah `storage:link`,
+web server melayani direktori itu langsung: tanpa sesi, tanpa policy, tanpa
+pemeriksaan cabang. Yang memisahkan kartu keluarga seorang anak dari publik
+hanyalah nama acak di jalurnya — ketidaktahuan pihak lain, bukan kendali akses.
+
+Yang membuatnya lebih runcing: panel tidak menyediakan cara membuka berkasnya
+sama sekali. Entri "Dokumen" hanya mencetak `basename()` sebagai teks. Jadi
+satu-satunya cara mengambil berkas justru jalur yang tidak berwenang itu. Batch
+ini karena itu tidak hanya menutup pintu yang salah, tetapi juga membuka pintu
+yang benar.
+
+Disk barunya bukan disk baru: `local` (`storage/app/private`) sudah dipakai
+bukti pembayaran SPP-03 dan bukti transaksi kas KAS-01, lengkap dengan pola
+pagar jalurnya (`App\Support\ProofPath`) dan pola nama unduhannya
+(`TransactionResource::proofFilenameFor()`). PPDB-lah yang menyimpang, bukan
+sebaliknya.
+
+Yang membuat perubahan ini tidak menuntut migrasi basis data: `documents`
+menyimpan **jalur relatif saja** — tanpa URL, tanpa keterangan disk, tanpa
+metadata. Jadi direktorinya sengaja dibiarkan persis seperti semula
+(`ppdb/{kode-cabang}/`), dan yang berpindah hanya berkasnya. Tidak ada satu
+baris basis data yang ditulis ulang, dan `--dry-run` perintah pemindahannya
+karena itu benar-benar dapat menulis nol.
+
+`PpdbDocument::diskFor()` memeriksa disk privat lebih dulu, lalu disk publik.
+Baris lama karena itu tetap dapat diunduh lewat rute berwenang sejak hari ini,
+bahkan sebelum berkasnya dipindahkan. Rute berwenang menutup pintu depan;
+pemindahan berkas menutup pintu belakang — keduanya perlu, dan keduanya tidak
+saling menunggu.
+
+### 412. Rute unduhan didaftarkan lewat panel, bukan lewat routes/web.php
+
+Rute panel Filament **tidak** melewati grup middleware `web`. Mendaftarkan
+`admin/ppdb/{registration}/dokumen/{documentKey}` di `routes/web.php` karena itu
+berarti merakit tumpukan autentikasi kedua: memilih sendiri middleware sesi,
+CSRF, Authenticate, dan EnsurePasswordIsChanged, lalu berharap pilihan itu tetap
+sama dengan panel setiap kali panel berubah.
+
+`Panel::authenticatedRoutes()` mendaftarkannya di dalam grup `getAuthMiddleware()`
+milik panel. Warisannya otomatis dan tidak dapat menyimpang: sesi, CSRF,
+`Authenticate`, `SetUserLocale`, `EnsurePasswordIsChanged`, dan
+`RecordAuditIpAddress`.
+
+Kewenangannya menumpang `PpdbRegistrationPolicy::view` apa adanya — tidak ada
+matriks peran baru, dan perilaku Super Admin datang dari `Gate::before` yang
+sudah ada (Arsitektur 3.2.2), bukan dari perlakuan khusus di controller.
+
+Isolasi cabang punya dua pagar yang berbeda sifatnya. Route model binding
+menjalankan `SchoolScope`, sehingga pendaftaran cabang lain **tidak ditemukan** —
+404, bukan 403, sehingga keberadaannya pun tidak terbocorkan. Policy
+memeriksanya lagi lewat `sharesTenant()`.
+
+`documentKey` adalah **indeks** di dalam `documents` milik pendaftaran itu
+sendiri, dan kedua parameter rutenya dibatasi `whereNumber`. Jalur berkas karena
+itu tidak pernah dapat sampai ke aplikasi lewat URL — bukan karena disaring,
+melainkan karena rutenya tidak akan cocok sejak awal. Pagar `sanitise()` tetap
+dipasang atas nilai yang datang dari basis data: satu-satunya hal yang
+memisahkan `documents` dari pembacaan berkas sembarang adalah asumsi bahwa
+isinya selalu benar, dan asumsi bukan pagar.
+
+### 413. Yang ditampilkan bukan nama berkasnya
+
+Entri dokumen kini `ViewEntry` yang merender tautan ke rute berwenang. Teks
+tautannya dibentuk dari nomor pendaftaran — `madani-2026-0001-berkas-1.pdf` —
+bukan `basename()` dari jalur penyimpanan.
+
+Bedanya kecil tetapi disengaja. Nama di penyimpanan adalah identitas berkas itu
+di server; ia muncul di URL publik lama, dan menampilkannya berarti terus
+menyebarkan satu-satunya rahasia yang dulu melindungi berkas tersebut. Nama
+unduhannya pun dibentuk ulang, sehingga tidak ada respons yang membawa jalur
+apa pun — termasuk pada 404, yang sengaja tidak menyebut letak berkas yang
+hilang.
+
+### 414. Pemindahan yang menolak menebak
+
+`ppdb:privatize-documents` bekerja dari daftar rujukan, bukan dari isi
+direktori: hanya jalur yang benar-benar tercatat di `documents` yang disentuh.
+Memindai `storage/app/public/ppdb` akan lebih sederhana dan akan salah — di
+sana dapat ada berkas yang tidak dirujuk baris mana pun, dan memindahkannya
+berarti memutuskan nasib sesuatu yang tidak dipahami.
+
+Empat pagar yang bukan hiasan:
+
+- **Salin, buktikan, baru hapus.** Berkas publik hanya dihapus setelah salinan
+  privatnya ada dan ukurannya cocok. Urutan sebaliknya — atau penghapusan atas
+  dasar "penyalinan tidak melempar exception" — adalah cara kehilangan berkas.
+- **Berkas privat berbeda di jalur yang sama tidak pernah ditimpa.** Dilaporkan
+  dilewati, untuk dilihat manusia.
+- **Hilang dilaporkan hilang.** Berkas yang tercatat tetapi tidak ada di kedua
+  disk tidak dihitung sebagai "sudah dipindah". Menyamakan keduanya akan
+  menyembunyikan kehilangan data di balik laporan yang tampak bersih.
+- **Jalur yang tidak lolos pagar tidak disentuh sama sekali** — tidak dibaca,
+  tidak disalin, tidak dihapus.
+
+Simulasi adalah bawaannya; menulis menuntut `--apply` yang diketik sadar, pola
+yang sama dengan `ops/restore-database.sh`. `--dry-run` tetap diterima secara
+eksplisit dan menolak digabung dengan `--apply`, supaya perintah yang salah
+ketik berhenti alih-alih memilih salah satu diam-diam.
+
+Menjalankan ulang aman, termasuk setelah jalan yang terputus di tengah: berkas
+yang salinan privatnya sudah utuh hanya perlu salinan publiknya dibuang, bukan
+disalin ulang.
+
+Satu hal yang tidak dapat dibalik: setelah `--apply`, salinan publiknya sudah
+tidak ada. Itu alasan simulasi menjadi bawaan, dan alasan dokumennya menaruh
+backup sebagai langkah sebelumnya.
+
+### 415. Tidak ada perilaku hapus/ganti yang perlu dilindungi
+
+Diperiksa, bukan diasumsikan. Pendaftaran PPDB hanya lahir dari formulir publik;
+panel tidak punya halaman ubah (`getPages()` hanya index dan view);
+`PpdbRegistrationPolicy::create()` dan `::delete()` keduanya mengembalikan
+`false`; dan enroll PPDB-05 tidak menyentuh `documents` sama sekali.
+
+Tidak ada satu jalur pun yang dapat menimpa atau menghapus berkas yang sudah
+tersimpan. Karena itu tidak ada kebocoran berkas yatim yang perlu ditutup, dan
+tidak ada penghapusan-setelah-penggantian yang perlu diurutkan. Yang ditambahkan
+hanya tesnya, supaya kalau suatu saat halaman ubah dibuat, ketiadaan pagar itu
+tidak lolos diam-diam.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

@@ -377,20 +377,27 @@ dipatuhi — tetapi migrasi tetap harus memeriksanya, bukan mengandalkannya.
 Formulir yang ada menyimpannya lewat
 `$document->store('ppdb/'.Str::lower($school->code), 'public')`.
 
-Perhatikan disk-nya: **`public`**. Setelah `storage:link`, isinya dapat diakses
-siapa pun yang mengetahui atau menebak path-nya, tanpa login. Untuk berkas PPDB
-Phase 1 hal itu sudah berjalan begitu sejak Sprint 3.
+Disk-nya dulu **`public`**: setelah `storage:link`, isinya dapat diakses siapa
+pun yang mengetahui atau menebak path-nya, tanpa login. Hal itu berjalan begitu
+sejak Sprint 3, dan menjadi temuan M-1 audit ini.
 
-Memindahkan **berkas pendaftaran sungguhan** ke sana — kartu keluarga, akta
-kelahiran, ijazah — berarti menempatkan dokumen identitas anak pada URL publik.
-Itu bukan hal yang boleh diputuskan pengembang sambil mengerjakan migrasi.
-Diangkat sebagai keputusan pemilik di §11, dan **tidak** diubah pada batch ini:
-memindahkan disk akan mematahkan seluruh baris `documents` yang sudah ada.
+**Sudah ditutup pada Batch M0.1.** Unggahan PPDB kini mendarat di disk privat
+`local` (`storage/app/private`) — disk yang sama dengan bukti pembayaran dan
+bukti transaksi kas — dan satu-satunya jalan menuju berkasnya adalah rute
+berwenang milik panel, `filament.admin.ppdb.document`. Bentuk nilai `documents`
+tidak berubah sedikit pun, sehingga tidak ada migrasi basis data yang
+dibutuhkan; berkas lama dipindahkan `php artisan ppdb:privatize-documents`.
+Rinciannya di **`docs/ppdb-document-storage.md`**.
 
-Sampai keputusan itu diambil, rekomendasi kerjanya: **jangan** memigrasikan
-berkas Drive. Simpan tautannya di luar sistem, dan biarkan kolom `documents`
-kosong untuk baris hasil migrasi. Data pendaftarannya tetap masuk; berkasnya
-menunggu.
+Konsekuensinya untuk migrasi legacy: berkas Drive **boleh** dimigrasikan, tetapi
+lewat kontrak yang sudah ditetapkan — divalidasi dengan aturan yang sama
+(JPG/PNG/PDF, maks 2 MB, maks 5 berkas), disimpan lewat
+`PpdbDocument::directoryFor()` pada disk privat, dan jalurnya ditulis ke
+`documents` dalam bentuk yang sama. Tautan Drive sendiri tidak pernah disimpan
+di kolom itu. Lihat `docs/ppdb-document-storage.md` §7.
+
+Sampai migrasi berkas benar-benar dijalankan, `documents` dibiarkan kosong untuk
+baris hasil migrasi. Data pendaftarannya tetap masuk; berkasnya menyusul.
 
 ---
 
@@ -431,7 +438,7 @@ Tidak satu pun diputuskan sendiri.
 
 | | Perkara | Mengapa bukan keputusan pengembang |
 | --- | --- | --- |
-| M-1 | **Berkas PPDB di disk `public`** (§9.4). Migrasi berkas Drive akan menempatkan dokumen identitas anak pada URL yang dapat diakses tanpa login | Keputusan privasi data pribadi, dan perubahannya mematahkan baris `documents` yang sudah ada |
+| ~~M-1~~ | ~~**Berkas PPDB di disk `public`**~~ — **SELESAI pada Batch M0.1.** Berkas PPDB adalah data aplikasi yang privat dan tidak dipaparkan sebagai URL penyimpanan publik. Tidak ada keputusan pemilik yang dibutuhkan: ini pengerasan keamanan, bukan perubahan produk | `docs/ppdb-document-storage.md` |
 | M-2 | **Jalur A atau B** untuk angkatan PPDB berjalan (§9.2) | Menentukan apakah riwayat pendaftaran dan statistik PPDB tersimpan |
 | M-3 | **Penomoran NIS** untuk siswa lama yang belum punya | Kewenangan sekolah; importer tidak boleh mengarang identitas |
 | M-4 | **Akun portal siswa & orang tua**: dibuatkan untuk seluruh siswa sekaligus, atau bertahap | Menentukan besarnya langkah 7 §8, dan bagaimana kata sandi awal disalurkan |
@@ -491,7 +498,7 @@ Aturan yang berlaku sejak sekarang, bukan setelah data datang:
 - Tidak ada `UserImport`, tidak ada bulk enroll, tidak ada penempatan kelas
   otomatis.
 - Tidak ada integrasi Google API.
-- Tidak ada perubahan pada `StudentsImport`, `PpdbRegistrationResource`, atau
-  disk penyimpanan berkas PPDB.
+- Tidak ada perubahan pada `StudentsImport`. (Disk penyimpanan berkas PPDB
+  **kemudian** diubah pada Batch M0.1 — lihat `docs/ppdb-document-storage.md`.)
 - Tidak ada test baru: tidak ada kode yang berubah, dan test yang hanya
   membuktikan keberadaan dokumen tidak membuktikan apa pun.
