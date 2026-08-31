@@ -7174,6 +7174,117 @@ dan tidak ada tes yang dapat membuktikannya dari sisi repositori.
   guru, pembuatan nilai manual global setelah rapor terbit, serta materi
   pemasaran dan kontak final halaman muka.
 
+## Batch M0 — audit kesiapan migrasi data sekolah berjalan
+
+Audit dan dokumentasi. Tidak ada kode aplikasi yang berubah, tidak ada migrasi
+basis data yang dibuat, dan tidak ada satu baris data sungguhan yang disentuh.
+Rinciannya di `docs/data-migration-readiness.md`; yang di bawah ini hanya
+temuan yang tidak terbaca dari skema.
+
+### 406. Berkas export siswa ternyata sudah dapat diimport kembali
+
+Tampak seperti cacat pada pandangan pertama: `StudentsExport` menulis judul
+kolom berhuruf besar berspasi ("Nama Lengkap", "HP Orang Tua"), sedangkan
+`StudentsImport` membaca kunci ber-garis-bawah (`nama_lengkap`, `hp_orang_tua`).
+Dua bentuk berbeda untuk satu berkas yang sama seharusnya berarti hasil export
+tidak dapat diunggah kembali.
+
+Ternyata cocok. `WithHeadingRow` melewatkan baris judul ke
+`HeadingRowFormatter`, yang bawaannya `slug` dan menjalankan
+`Str::slug($value, '_')` — "Nama Lengkap" menjadi `nama_lengkap`. Project ini
+tidak menimpanya: `config/excel.php` memang tidak ada, jadi bawaan paketnya yang
+berlaku.
+
+Konsekuensinya untuk migrasi cukup besar dan sebaiknya tidak dilupakan: tidak
+ada format kedua yang perlu diperkenalkan ke sekolah. Berkas hasil export dari
+cabang kosong sudah menjadi templatnya sendiri. Kolom "Kelas" dan "Catatan" yang
+ada di export tetapi tidak dibaca importer lewat tanpa menggagalkan baris.
+
+Yang membuatnya rapuh: kecocokan ini bergantung pada *tidak adanya*
+`config/excel.php`. Menerbitkan konfigurasi paket itu lalu menyetel
+`formatter => 'none'` akan mematahkan import tanpa satu pun test judul kolom
+yang menangkapnya.
+
+### 407. Tanpa sesi login, `SchoolScope` tidak memasang pagar apa pun
+
+Sudah tertulis di `SchoolScope::apply()` sejak awal — "Tanpa sesi tidak ada
+tenant yang dapat disimpulkan" — tetapi baru pada audit ini akibatnya menjadi
+penting. Importer berbasis perintah artisan berjalan tanpa `Auth::hasUser()`,
+sehingga scope-nya tidak aktif sama sekali dan setiap query melihat **seluruh
+cabang**.
+
+Ini bukan celah: seeder, worker, dan `StudentFeeGenerator` sudah bekerja begitu,
+dan masing-masing membawa `school_id`-nya sendiri sebagai argumen. Tetapi ia
+menjadi syarat rancangan yang mengikat untuk perintah migrasi mana pun: cabang
+tujuan datang dari argumen eksplisit, dan setiap `where` menuliskannya sendiri.
+Mengandalkan scope di sana berarti tidak ada pagar sama sekali.
+
+Cabangnya diresolusi lewat `schools.code`, yang `unique` dan sudah dipakai
+`SchoolSeeder` sebagai kunci `updateOrCreate(['code' => 'PUSAT'])`. Bukan id
+numerik — id berbeda antar mesin — dan bukan `name`, yang tidak unik dan dapat
+berubah.
+
+### 408. Tiga kunci alami yang tidak dijamin basis data
+
+Migrasi yang dapat diulang menuntut kunci alami untuk setiap tabel yang
+disentuhnya. Sebagian besar sudah dijamin: `schools.code`, `users.email`
+(global, lintas cabang), `students(school_id, nis)`, `subjects(school_id,
+code)`, `class_subjects(class_id, subject_id, academic_year_id)`.
+
+Tiga tidak:
+
+- `academic_years` — nama tahun ajaran tidak unik; keaktifannya saja yang
+  ditegakkan aplikasi lewat `AcademicYear::activate`;
+- `classes` — namanya tidak unik. Yang unik justru
+  (`academic_year_id`, `homeroom_teacher_id`), aturan "satu guru satu kelas";
+- `student_classes` — "satu baris ACTIVE per siswa per tahun ajaran" ditegakkan
+  aplikasi, karena baris `MOVED` sengaja disimpan sebagai histori perpindahan.
+
+Untuk ketiganya, pencarian yang mengembalikan lebih dari satu baris harus
+menjadi galat baris, bukan alasan memanggil `first()`. Kegagalan senyap di sini
+berarti siswa masuk ke kelas yang salah tanpa ada yang tahu.
+
+`nisn` juga tidak unik — hanya ber-`index`, dan validasinya sebatas `digits:10`
+ketika terisi. Ia berguna sebagai pemeriksaan silang (satu siswa terdaftar
+dengan dua NIS), tetapi tidak dapat menjadi kunci utama.
+
+### 409. Berkas PPDB tersimpan di disk `public`
+
+`RegistrationForm::storeDocuments()` menyimpan unggahan dengan
+`$document->store('ppdb/'.Str::lower($school->code), 'public')`. Disk `public`,
+setelah `storage:link`, dilayani langsung oleh web server tanpa autentikasi.
+
+Untuk Phase 1 hal itu sudah berjalan sejak Sprint 3 dan tidak diubah di sini —
+memindahkan disk akan mematahkan seluruh baris `documents` yang sudah ada.
+
+Yang membuatnya perlu dicatat sekarang: rencana migrasi menyebut berkas
+pendukung di Google Drive. Memindahkannya ke sana berarti menempatkan kartu
+keluarga dan akta kelahiran anak pada URL yang dapat diakses siapa pun yang
+mengetahui path-nya. Itu keputusan kepatuhan data pribadi, bukan keputusan
+teknis, dan diangkat sebagai M-1 di `docs/data-migration-readiness.md` §11.
+
+Sampai dijawab: berkas Drive tidak dimigrasikan, dan `documents` dibiarkan
+kosong untuk baris hasil migrasi.
+
+### 410. Yang belum ada, dan tetap belum ada setelah batch ini
+
+Import siswa yang ada hari ini menulis **hanya** tabel `students`. Ia tidak
+membuat akun portal, tidak menautkan orang tua, dan tidak menempatkan siswa ke
+kelas mana pun — siswa hasil import berada di luar seluruh rombel sampai
+seseorang menempatkannya lewat panel. Enroll PPDB berperilaku sama, satu
+pendaftar per aksi.
+
+Selain itu tidak ada `UserImport` sama sekali (tidak ada aksi import di
+`UserResource`), tidak ada dry-run di mana pun dalam project — dua perintah
+artisan yang ada, `ProductionCheck` dan `PruneNotifications`, keduanya tanpa
+mode simulasi — dan import tidak menulis `audit_logs`, sehingga tidak ada
+catatan siapa mengunggah berkas apa.
+
+Tidak satu pun dibuat pada batch ini, dan itu disengaja: bentuk kolom data
+sungguhan belum pernah dilihat, dan transformasi terhadap kolom yang belum
+diketahui adalah tebakan yang mahal untuk dibongkar. Rancangan perintah
+dry-run-nya ada di `docs/data-migration-readiness.md` §10, sebatas rancangan.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
