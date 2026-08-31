@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Http\Controllers\Admin\PpdbDocumentController;
 use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\RecordAuditIpAddress;
 use App\Http\Middleware\SetUserLocale;
@@ -23,6 +24,7 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
@@ -102,6 +104,18 @@ class AdminPanelProvider extends PanelProvider
                 Authenticate::class,
                 SetUserLocale::class,
                 EnsurePasswordIsChanged::class,
-            ]);
+            ])
+            // Unduhan berkas PPDB. Didaftarkan di sini, bukan di routes/web.php,
+            // supaya ia mewarisi tumpukan middleware panel apa adanya —
+            // termasuk authMiddleware di atas. Rute panel tidak melewati grup
+            // `web`, jadi mendaftarkannya di luar sini berarti membangun
+            // tumpukan autentikasi kedua untuk satu rute (butir 412).
+            //
+            // Kedua parameter dibatasi angka, sehingga jalur berkas tidak
+            // mungkin sampai ke aplikasi lewat URL.
+            ->authenticatedRoutes(fn () => Route::get(
+                'ppdb/{registration}/dokumen/{documentKey}',
+                PpdbDocumentController::class,
+            )->whereNumber(['registration', 'documentKey'])->name('ppdb.document'));
     }
 }

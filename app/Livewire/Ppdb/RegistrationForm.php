@@ -6,6 +6,7 @@ use App\Enums\Gender;
 use App\Models\AcademicYear;
 use App\Models\PpdbRegistration;
 use App\Models\School;
+use App\Support\PpdbDocument;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -136,6 +137,17 @@ class RegistrationForm extends Component
     }
 
     /**
+     * Berkas pendukung disimpan di disk **privat**, bukan `public`.
+     *
+     * Berkas ini memuat dokumen keluarga calon siswa. Di disk `public` ia
+     * dilayani web server tanpa autentikasi begitu `storage:link` dipasang;
+     * satu-satunya yang memisahkannya dari publik adalah nama acak di jalurnya.
+     * Sejak batch ini satu-satunya jalan menuju berkasnya adalah rute berwenang
+     * milik panel (App\Http\Controllers\Admin\PpdbDocumentController).
+     *
+     * Aturan validasinya tidak dilonggarkan: tetap JPG/PNG/PDF, maks 2 MB,
+     * maks 5 berkas.
+     *
      * @return array<int, string>|null
      */
     protected function storeDocuments(): ?array
@@ -145,9 +157,10 @@ class RegistrationForm extends Component
         }
 
         $paths = [];
+        $directory = PpdbDocument::directoryFor($this->school);
 
         foreach ($this->documents as $document) {
-            $paths[] = $document->store('ppdb/'.Str::lower($this->school->code), 'public');
+            $paths[] = $document->store($directory, PpdbDocument::DISK);
         }
 
         return $paths;

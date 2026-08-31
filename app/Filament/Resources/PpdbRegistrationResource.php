@@ -97,11 +97,11 @@ class PpdbRegistrationResource extends Resource
 
             Infolists\Components\Section::make(__('Berkas & Catatan'))
                 ->schema([
-                    Infolists\Components\TextEntry::make('documents')
+                    // Berkas privat: tidak ada URL penyimpanan yang dikirim ke
+                    // peramban, hanya tautan ke rute berwenang panel.
+                    Infolists\Components\ViewEntry::make('documents')
                         ->label(__('Dokumen'))
-                        ->placeholder(__('Tidak ada berkas diunggah'))
-                        ->listWithLineBreaks()
-                        ->formatStateUsing(fn ($state) => basename((string) $state)),
+                        ->view('filament.ppdb.documents'),
 
                     Infolists\Components\TextEntry::make('status_notes')
                         ->label(__('Catatan Status'))
