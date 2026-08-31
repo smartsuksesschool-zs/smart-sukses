@@ -53,7 +53,7 @@
 
             --ink: #16202f;
             --ink-soft: #33415a;
-            --muted: #5b6577;
+            --muted: #4d576b;
             --line: #e2e6ee;
             --line-soft: #edf0f6;
             --surface: #ffffff;
@@ -180,12 +180,13 @@
         }
 
         /*
-           Pada layar 360px, baris kedua wordmark inilah elemen terlebar di
-           navbar; ia memakan ruang yang dibutuhkan strip tautan yang menggulung
-           di sebelahnya. Di bawah 30rem namanya saja sudah cukup — footer tetap
-           menampilkannya utuh (butir 421).
+           Baris kedua wordmark disembunyikan pada layar tersempit. Sejak
+           navigasi seluler menjadi satu tombol menu (butir 425) ruangnya jauh
+           lebih longgar, tetapi pada 360px tombol Menu dan Masuk masih harus
+           muat berdampingan dengan wordmark — dan nama sekolahnya yang penting,
+           bukan tagline-nya. Footer tetap menampilkannya utuh (butir 421).
         */
-        @media (max-width: 29.99rem) {
+        @media (max-width: 26rem) {
             .nav .brand__tag { display: none; }
         }
 
@@ -401,7 +402,7 @@
             margin-top: 2rem;
         }
 
-        .hero__note { margin-top: 1.1rem; font-size: .9rem; color: var(--muted); }
+        .hero__note { margin-top: 1.15rem; font-size: .95rem; color: var(--muted); }
 
         /* ------------------------------------- gubahan visual hero (hiasan) */
 
@@ -579,7 +580,7 @@
             letter-spacing: -.03em;
         }
 
-        .section__head p { margin-top: .8rem; color: var(--muted); font-size: 1.02rem; }
+        .section__head p { margin-top: .85rem; color: var(--muted); font-size: 1.06rem; line-height: 1.7; }
 
         /* Satu kolom lebih dulu; melebar hanya ketika layarnya memang cukup. */
         .grid {
@@ -613,7 +614,7 @@
 
         .card h3 { font-size: 1.06rem; }
 
-        .card p { margin-top: .5rem; color: var(--muted); font-size: .93rem; }
+        .card p { margin-top: .55rem; color: var(--muted); font-size: .975rem; line-height: 1.7; }
 
         .card__icon {
             display: grid;
@@ -708,7 +709,7 @@
         }
 
         .pillar h3 { font-size: 1.02rem; }
-        .pillar p { margin-top: .45rem; color: var(--muted); font-size: .93rem; }
+        .pillar p { margin-top: .5rem; color: var(--muted); font-size: .975rem; line-height: 1.7; }
 
         /* ======================================================== ajakan PPDB */
 
@@ -788,10 +789,10 @@
         }
 
         .footer h3 {
-            font-size: .76rem;
+            font-size: .8rem;
             text-transform: uppercase;
             letter-spacing: .1em;
-            color: #93a1ba;
+            color: #aab5c9;
             margin-bottom: .85rem;
         }
 
@@ -801,13 +802,13 @@
             display: inline-flex;
             align-items: center;
             min-height: 2.25rem;
-            font-size: .92rem;
+            font-size: .96rem;
         }
 
         .footer__brand { display: inline-flex; align-items: center; gap: .65rem; color: #fff; font-weight: 700; }
         .footer__brand .brand__tag { color: #93a1ba; }
 
-        .footer__note { margin-top: .9rem; font-size: .92rem; color: #93a1ba; max-width: 24rem; }
+        .footer__note { margin-top: .9rem; font-size: .96rem; line-height: 1.7; color: #c2cbdc; max-width: 24rem; }
 
         .footer__locale { margin-top: 1.25rem; }
 
@@ -820,8 +821,263 @@
             margin-top: 2.5rem;
             padding-top: 1.35rem;
             border-top: 1px solid rgba(255, 255, 255, .1);
-            font-size: .85rem;
-            color: #93a1ba;
+            font-size: .9rem;
+            color: #aab5c9;
+        }
+
+        /* ------------------------------------------- navigasi seluler (L2.1) */
+
+        /*
+           Tinjauan tampilan manusia menyimpulkan strip yang menggulung ke
+           samping "berjalan, tetapi tidak terlihat sebagai menu". Itu penilaian
+           yang benar: menggulung mendatar adalah gerakan yang harus ditemukan
+           sendiri, dan tidak ada satu pun tandanya di layar.
+
+           Yang menggantikannya `<details>`/`<summary>` — tombol menu yang
+           terlihat, dapat difokus dan ditekan papan ketik tanpa satu baris
+           JavaScript, dan tetap bekerja bila skrip mati. Tombol **Masuk** dan
+           wordmark sengaja tetap di bar: yang disembunyikan hanya tautan
+           bagian, bukan aksi utama (butir 425).
+        */
+        .nav__disclosure { position: relative; margin-left: auto; }
+
+        .nav__toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            min-height: 2.75rem;
+            padding: 0 .75rem;
+            border: 1px solid var(--line);
+            border-radius: var(--radius-sm);
+            background: var(--surface);
+            color: var(--ink-soft);
+            font-size: .925rem;
+            font-weight: 600;
+            list-style: none;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        /* Segitiga bawaan disembunyikan di kedua mesin render. */
+        .nav__toggle::-webkit-details-marker { display: none; }
+        .nav__toggle::marker { content: ""; }
+
+        .nav__toggle:hover { border-color: var(--brand); color: var(--brand); }
+
+        .nav__disclosure[open] .nav__toggle { border-color: var(--brand); color: var(--brand); }
+
+        /* Ikon berganti bentuk saat terbuka — bukan hanya berputar warna. */
+        .nav__toggle .nav__icon--close,
+        .nav__disclosure[open] .nav__toggle .nav__icon--open { display: none; }
+        .nav__disclosure[open] .nav__toggle .nav__icon--close { display: inline-flex; }
+
+        .nav__panel {
+            position: absolute;
+            top: calc(100% + .55rem);
+            right: 0;
+            /* Tidak pernah melebihi lebar layar: `body` memotong tanpa tanda. */
+            width: min(17rem, calc(100vw - 2.5rem));
+            padding: .5rem;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            z-index: 25;
+        }
+
+        .nav__panel a {
+            display: flex;
+            align-items: center;
+            min-height: 2.75rem;
+            padding: 0 .75rem;
+            border-radius: var(--radius-sm);
+            color: var(--ink-soft);
+            font-size: .975rem;
+            font-weight: 500;
+            text-decoration: none;
+        }
+
+        .nav__panel a:hover { background: var(--soft); color: var(--brand); }
+
+        .nav__panel-locale {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+            margin-top: .35rem;
+            padding: .5rem .75rem 0;
+            border-top: 1px solid var(--line);
+        }
+
+        .nav__panel-locale span {
+            font-size: .8rem;
+            font-weight: 600;
+            color: var(--muted);
+        }
+
+        .nav__panel-locale .locale-switch { margin: 0; padding: 0; border: 0; }
+
+        /* Bawaannya seluler: strip desktop disembunyikan sampai ada ruang. */
+        .nav__links { display: none; }
+
+        @media (min-width: 48rem) {
+            .nav__disclosure { display: none; }
+            .nav__links { display: flex; }
+        }
+
+        /* Tombol Masuk dipersempit di layar tersempit supaya ketiganya muat. */
+        @media (max-width: 24rem) {
+            .nav__cta { padding: .6rem .8rem; }
+            .nav__toggle { padding: 0 .6rem; }
+        }
+
+        .nav__cta--bar { margin-left: .4rem; }
+
+        @media (min-width: 48rem) { .nav__cta--bar { display: none; } }
+
+        /* ------------------------------------------- aksi kartu akses (L2.1) */
+
+        /*
+           Sebelumnya aksi setiap kartu hanya teks berwarna. Pada layar ponsel
+           ia terbaca sebagai keterangan, bukan sebagai sesuatu yang ditekan.
+           Sekarang berbentuk pil bergaris — jelas dapat ditekan, tetapi tetap
+           ringan; menjadikan seluruh kartu satu tombol besar akan membuat empat
+           blok berat yang justru saling berebut perhatian (butir 426).
+        */
+        .access__go {
+            align-self: flex-start;
+            padding: .5rem .9rem;
+            border: 1px solid var(--line);
+            border-radius: var(--radius-pill);
+            background: var(--surface);
+            font-size: .925rem;
+        }
+
+        .access:hover .access__go {
+            border-color: var(--brand);
+            background: var(--brand-tint);
+        }
+
+        .access--primary .access__go {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .access--primary:hover .access__go {
+            background: var(--accent-dark);
+            border-color: var(--accent-dark);
+            color: #fff;
+        }
+
+        /* --------------------------------------------- bagian tentang (L2.1) */
+
+        /*
+           Tinjauan manusia: halaman ini memakai baris kartu putih bergaris
+           tiga kali berturut-turut, dan yang ketiga terbaca sebagai pengulangan.
+           Bagian Tentang karena itu berhenti menjadi kartu dan menjadi satu
+           panel utuh dua kolom — teksnya di kiri, ketiga alasannya sebagai
+           daftar bergaris tipis di kanan. Isinya sama persis; yang berubah
+           bentuknya (butir 427).
+        */
+        .about {
+            display: grid;
+            gap: 2rem;
+            grid-template-columns: 1fr;
+            padding: 2rem 1.5rem;
+            border-radius: var(--radius-lg);
+            background: linear-gradient(160deg, var(--brand-tint) 0%, var(--surface) 68%);
+            border: 1px solid var(--line);
+        }
+
+        @media (min-width: 62rem) {
+            .about { grid-template-columns: 1fr 1.05fr; gap: 3rem; padding: 3rem; align-items: center; }
+        }
+
+        .about__copy h2 {
+            font-size: clamp(1.55rem, 3.6vw, 2.15rem);
+            letter-spacing: -.03em;
+        }
+
+        .about__copy p { margin-top: .9rem; color: var(--muted); font-size: 1.06rem; line-height: 1.7; }
+
+        .about__list { list-style: none; margin: 0; padding: 0; }
+
+        .about__item {
+            display: flex;
+            gap: 1rem;
+            padding: 1.15rem 0;
+            border-top: 1px solid var(--line);
+        }
+
+        .about__item:first-child { border-top: 0; padding-top: 0; }
+        .about__item:last-child { padding-bottom: 0; }
+
+        .about__num {
+            display: grid;
+            place-items: center;
+            flex: 0 0 auto;
+            width: 2.35rem;
+            height: 2.35rem;
+            border-radius: var(--radius-sm);
+            background: var(--brand);
+            color: #fff;
+            font-size: .9rem;
+            font-weight: 700;
+        }
+
+        .about__item h3 { font-size: 1.06rem; }
+        .about__item p { margin-top: .4rem; color: var(--muted); font-size: .975rem; line-height: 1.7; }
+
+        /* ------------------------------------------------- kartu cabang (L2.1) */
+
+        .branch__name { margin-top: .75rem; font-size: 1.2rem; }
+
+        .branch__address {
+            display: flex;
+            align-items: flex-start;
+            gap: .5rem;
+            margin-top: .6rem;
+            color: var(--muted);
+            font-size: .975rem;
+            line-height: 1.65;
+        }
+
+        .branch__address svg { flex: 0 0 auto; margin-top: .2rem; }
+
+        /* ------------------------------------------------ label hero (L2.1) */
+
+        .mock__chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem;
+        }
+
+        .mock__chip {
+            padding: .25rem .6rem;
+            border-radius: var(--radius-pill);
+            background: var(--brand-tint);
+            border: 1px solid #d5e0f2;
+            color: var(--brand);
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .03em;
+        }
+
+        .mock__chip:nth-child(2n) { background: var(--accent-tint); border-color: #f6dcc6; color: var(--accent-dark); }
+
+        /* -------------------------------------------------- hero seluler (L2.1) */
+
+        /*
+           Pada 360px kedua tombol tidak muat berdampingan, dan yang kedua
+           terdorong ke baris berikutnya dengan lebar setengah — terlihat seperti
+           kecelakaan tata letak. Di bawah 30rem keduanya melebar penuh dan
+           bertumpuk, sehingga keduanya sama mudah dijangkau ibu jari.
+        */
+        @media (max-width: 29.99rem) {
+            .hero__cta { flex-direction: column; align-items: stretch; }
+            .hero__cta .btn { width: 100%; }
+            .hero__inner { padding: 2.5rem 0 3rem; }
         }
 
         /* ========================================================== utilitas */
