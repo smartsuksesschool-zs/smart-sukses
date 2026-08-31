@@ -28,3 +28,12 @@ Thumbs.db
 # tujuan sebagai argumen — termasuk akar repositori.
 smartsukses-*.sql
 smartsukses-*.sql.gz
+
+# Berkas data migrasi sekolah. Tempatnya di luar repositori sepenuhnya
+# (docs/data-migration-readiness.md §13) — pola berikut hanya jaring pengaman
+# untuk berkas yang telanjur dijatuhkan di akar, dan sengaja berjangkar di akar
+# supaya docs/templates/*.csv tetap terlacak.
+/*.xlsx
+/*.xls
+/*.csv
+/migration-private/
