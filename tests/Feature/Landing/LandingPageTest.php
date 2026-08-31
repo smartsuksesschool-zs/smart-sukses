@@ -467,6 +467,180 @@ class LandingPageTest extends TestCase
         $this->get(route('portal.dashboard'))->assertRedirect(route('portal.login'));
     }
 
+    // ==================================================== Batch L2 — tata letak
+
+    /**
+     * Butir 418 — keputusan tata letak yang paling menentukan pada batch ini.
+     *
+     * Pertanyaan pertama pengunjung halaman muka sekolah bukan "apa saja
+     * fiturnya", melainkan "saya masuk lewat mana". Karena itu bagian Akses
+     * Pengguna berada tepat di bawah hero, sebelum daftar fitur maupun daftar
+     * cabang — dan urutannya diuji, bukan sekadar disepakati.
+     */
+    public function test_the_access_section_comes_before_features_and_branches(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $akses = strpos($html, 'id="akses"');
+        $fitur = strpos($html, 'id="fitur"');
+        $cabang = strpos($html, 'id="cabang"');
+
+        $this->assertIsInt($akses, 'Bagian akses tidak ada.');
+        $this->assertIsInt($fitur, 'Bagian fitur tidak ada.');
+        $this->assertIsInt($cabang, 'Bagian cabang tidak ada.');
+
+        $this->assertLessThan($fitur, $akses, 'Akses Pengguna harus mendahului daftar fitur.');
+        $this->assertLessThan($cabang, $akses, 'Akses Pengguna harus mendahului daftar cabang.');
+    }
+
+    /**
+     * Layar pertama sudah menjawab keempat hal yang perlu diketahui pengunjung:
+     * ini platform apa, siapa pemiliknya, di mana mendaftar, dan di mana masuk.
+     */
+    public function test_the_first_screen_states_the_identity_and_both_actions(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $hero = substr($html, 0, strpos($html, 'id="akses"'));
+
+        $this->assertStringContainsString(config('app.name'), $hero);
+        $this->assertStringContainsString('Platform Manajemen Sekolah Terintegrasi', $hero);
+        $this->assertStringContainsString(route('ppdb.schools'), $hero);
+        $this->assertStringContainsString('Masuk ke Sistem', $hero);
+    }
+
+    // ------------------------------------------------------------------- PPDB
+
+    /**
+     * Ajakan PPDB punya bagiannya sendiri, dan kedua tombolnya menunjuk rute
+     * PPDB yang memang ada — bukan alamat yang dikarang.
+     */
+    public function test_the_ppdb_call_to_action_uses_the_real_ppdb_routes(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('Penerimaan Peserta Didik Baru', $html);
+        $this->assertStringContainsString('Mulai Pendaftaran', $html);
+        $this->assertStringContainsString('href="'.route('ppdb.schools').'"', $html);
+        $this->assertStringContainsString('href="'.route('ppdb.check-status').'"', $html);
+    }
+
+    // --------------------------------------------------------------- bahasa
+
+    /**
+     * NFR 1.4 — pemilih bahasa tetap dapat dicapai dari halaman muka, dan tetap
+     * berupa form POST yang dilindungi CSRF (butir 388). Ia muncul dua kali:
+     * di navbar dan di footer.
+     */
+    public function test_the_language_switch_stays_reachable(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertGreaterThanOrEqual(
+            2,
+            substr_count($html, 'class="locale-switch'),
+            'Pemilih bahasa harus ada di navbar dan di footer.',
+        );
+
+        $this->assertStringContainsString('action="'.route('locale.switch', ['locale' => 'id']).'"', $html);
+        $this->assertStringContainsString('name="_token"', $html);
+        // Menulis lewat GET tidak pernah ditawarkan.
+        $this->assertStringNotContainsString('<a href="'.route('locale.switch', ['locale' => 'en']).'"', $html);
+    }
+
+    // --------------------------------------------------- naskah tanpa karangan
+
+    /**
+     * Batas naskah batch ini, dan alasan ia diuji: tidak ada satu pun nomor
+     * telepon, surel, akun media sosial, atau angka pencapaian yang dikarang.
+     * Pemilik belum menyerahkan naskah pemasaran, dan halaman yang tampak
+     * meyakinkan karena data palsu lebih buruk daripada halaman yang jujur
+     * (butir 420).
+     */
+    public function test_no_invented_contact_details_or_claims_are_published(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        foreach (['mailto:', 'tel:', 'wa.me', 'instagram.com', 'facebook.com', 'twitter.com', 'youtube.com'] as $needle) {
+            $this->assertStringNotContainsString($needle, $html, "Kontak yang dikarang: {$needle}");
+        }
+
+        // Tidak ada penghitung capaian: "1.200+ siswa", "98% lulus", dan sejenisnya.
+        $this->assertDoesNotMatchRegularExpression(
+            '/\b\d[\d.,]*\s*\+?\s*(siswa|alumni|lulusan|students|graduates)\b/i',
+            strip_tags($html),
+            'Halaman memuat angka capaian yang tidak berasal dari data mana pun.',
+        );
+
+        $this->assertDoesNotMatchRegularExpression(
+            '/\b\d{1,3}\s*%\s*(kelulusan|kepuasan|graduation|satisfaction)\b/i',
+            strip_tags($html),
+        );
+    }
+
+    // ------------------------------------------------------ struktur & gerak
+
+    public function test_the_page_uses_real_landmarks(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        foreach (['<header', '<nav', '<main', '<footer'] as $landmark) {
+            $this->assertStringContainsString($landmark, $html, "Landmark {$landmark} tidak ada.");
+        }
+
+        // Kartu yang dapat diklik tetap <a>, bukan div dengan penangan klik.
+        // Yang dilarang atributnya, bukan katanya: komentar CSS di tata letak
+        // menyebut istilah itu justru untuk menerangkan mengapa ia tidak dipakai.
+        $this->assertStringNotContainsString('onclick=', $html);
+    }
+
+    /**
+     * Gubahan visual hero sepenuhnya hiasan: ia disembunyikan dari pembaca
+     * layar, dan tidak memuat satu angka pun yang mengaku data sungguhan
+     * (butir 417).
+     */
+    public function test_the_hero_composition_is_decorative_only(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('class="hero__visual" aria-hidden="true"', $html);
+
+        $start = strpos($html, 'class="hero__visual"');
+        $end = strpos($html, '</section>', $start);
+        $visual = strip_tags(substr($html, $start, $end - $start));
+
+        $this->assertDoesNotMatchRegularExpression(
+            '/\d/',
+            $visual,
+            'Gubahan hiasan hero tidak boleh memuat angka yang tampak seperti data.',
+        );
+    }
+
+    public function test_motion_respects_the_reduced_motion_preference(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('@keyframes', $html, 'Batch ini memang menambahkan gerak halus.');
+        $this->assertStringContainsString('prefers-reduced-motion: reduce', $html);
+    }
+
+    /**
+     * Sebelum batch ini kedelapan kartu fitur memakai ikon centang yang sama,
+     * sehingga ikonnya tidak membedakan apa pun (butir 419).
+     */
+    public function test_the_iconography_is_not_one_shape_repeated(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        preg_match_all('/<path d="([^"]+)"/', $html, $matches);
+
+        $this->assertGreaterThanOrEqual(
+            10,
+            count(array_unique($matches[1])),
+            'Halaman memakai terlalu sedikit bentuk ikon yang berbeda.',
+        );
+    }
+
     protected function countQueries(\Closure $work): int
     {
         DB::flushQueryLog();

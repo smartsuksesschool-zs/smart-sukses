@@ -97,7 +97,7 @@ class LocaleSwitchTest extends TestCase
 
         $this->get('/')
             ->assertOk()
-            ->assertSee('Ready to use Smart Sukses School?', escape: false);
+            ->assertSee('New Student Admissions', escape: false);
     }
 
     /**
@@ -130,7 +130,7 @@ class LocaleSwitchTest extends TestCase
         $this->post(route('locale.switch', ['locale' => 'id']))
             ->assertSessionHas(Locale::sessionKey(), 'id');
 
-        $this->get('/')->assertOk()->assertSee('Siap menggunakan Smart Sukses School?', escape: false);
+        $this->get('/')->assertOk()->assertSee('Penerimaan Peserta Didik Baru', escape: false);
     }
 
     // -------------------------------------------------- pengguna (users.locale)
