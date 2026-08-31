@@ -7563,6 +7563,153 @@ itu tidak sama dengan "tampilannya benar". Halaman ini karena itu **belum**
 lulus tinjauan tampilan, dan tetap menunggu `docs/responsive-qa.md` dijalankan
 manusia.
 
+## Batch L2.1 — perbaikan setelah tinjauan tampilan oleh manusia
+
+Tinjauan tangkapan layar sungguhan atas hasil Batch L2. Halamannya tidak
+dirancang ulang; yang dikerjakan tujuh temuan konkret. Tidak ada rute, skema,
+logika tenant, PPDB, maupun autentikasi yang disentuh.
+
+### 424. Bagian fitur tidak pernah diterjemahkan, dan tidak ada tes yang tahu
+
+Temuan paling serius, dan yang paling pantas dipikirkan.
+
+Dalam mode EN, keempat judul fitur ("Data Siswa & Kelas", "Akademik & E-Rapor",
+"Keuangan Sekolah", "Notifikasi & Pengumuman") **dan kedelapan ringkasannya**
+masih berbahasa Indonesia sepenuhnya — dua belas naskah, satu bagian penuh
+halaman. Seluruh suite hijau ketika itu terjadi, termasuk tes yang namanya
+justru menjanjikan hal ini:
+`test_every_translation_key_in_the_code_exists_in_both_files`.
+
+Sebabnya bentuk pemanggilannya. Daftar fitur berupa array yang dilewatkan ke
+`@foreach`, lalu dirender `__($name)` — **atas variabel**. Pemindai kunci di
+BilingualCoverageTest mencari `__('literal')` dengan regex; kunci yang hanya ada
+sebagai isi array, bukan sebagai argumen harfiah, tidak pernah terlihat olehnya.
+Kedua belas kunci itu absen dari `lang/en.json`, dan `__()` yang tidak menemukan
+kunci mengembalikan kuncinya sendiri — yaitu kalimat Indonesianya. Gagal dengan
+diam, persis di tempat yang paling terlihat pengunjung.
+
+Perbaikannya dua lapis, dan lapis pertama yang penting:
+
+1. **Bentuknya diubah, bukan hanya isinya.** Array fitur kini memanggil
+   `__('...')` harfiah di dalam elemennya, dan template merender hasilnya. Sejak
+   itu pemindai yang sudah ada melihat kedua belas kunci tersebut, dan kelas
+   cacat ini tertutup untuk seterusnya — tidak hanya untuk dua belas kunci hari
+   ini.
+2. Dua tes regresi atas **halaman yang benar-benar dirender** dalam mode EN:
+   satu memeriksa daftar naskah yang benar-benar tertinggal, satu lagi menjaring
+   lebih lebar dengan kata-kata Indonesia yang mustahil muncul di kalimat
+   Inggris (" yang ", " dan ", " dengan ", …). Yang kedua akan menangkap naskah
+   baru yang lupa diterjemahkan tanpa perlu ada yang mendaftarkannya lebih dulu.
+
+Tes parity kunci tidak dilemahkan sedikit pun; ia justru kini mencakup lebih
+banyak.
+
+Seluruh halaman diperiksa ulang dalam mode EN setelah perbaikan — nol naskah
+Indonesia tersisa selain nama cabang, yang memang data sekolah.
+
+### 425. Navigasi seluler: dari strip yang menggulung menjadi menu yang terlihat
+
+Penilaian tinjauannya tepat: strip yang menggulung ke samping "berfungsi, tetapi
+tidak terlihat sebagai menu". Menggulung mendatar adalah gerakan yang harus
+ditemukan sendiri, dan pada 360px yang terlihat hanya dua tautan pertama —
+sisanya seolah tidak ada. Untuk orang tua yang tidak terbiasa, itu sama saja
+dengan hilang.
+
+Penggantinya `<details>`/`<summary>`: tombol **Menu** yang terlihat, dapat
+difokus dan ditekan papan ketik tanpa satu baris JavaScript, dan tetap bekerja
+bila skrip mati. Ikonnya berganti bentuk (garis → silang) saat terbuka, bukan
+sekadar berganti warna.
+
+Satu keputusan yang membedakannya dari menu hamburger biasa: **tombol Masuk dan
+wordmark tetap di bar, di luar `<details>`.** Yang disembunyikan hanya tautan
+antarbagian. Aksi utama halaman ini tidak boleh menuntut satu ketukan tambahan
+hanya karena layarnya sempit. Pemilih bahasa ikut ke dalam panel, dengan
+labelnya sendiri, dan tetap ada di footer.
+
+Navigasi desktop tidak berubah sama sekali; strip lengkapnya muncul kembali
+di ≥48rem.
+
+### 426. Aksi kartu akses menjadi pil, bukan teks berwarna
+
+Keempat kartu akses strukturnya sudah baik, jadi yang berubah hanya aksinya.
+Sebelumnya berupa teks berwarna dengan panah — pada layar ponsel itu terbaca
+sebagai keterangan, bukan sesuatu yang ditekan.
+
+Sekarang pil bergaris dengan latar sendiri: jelas dapat ditekan, tetap ringan.
+Kartu PPDB — yang pertama menurut urutan prioritas — mendapat pil **terisi**
+berwarna aksen, sehingga satu aksi menonjol di antara empat tanpa membuat
+keempatnya berteriak. Menjadikan seluruh kartu satu tombol besar akan
+menghasilkan empat blok berat yang saling berebut perhatian; itu sengaja tidak
+dilakukan.
+
+Urutannya (PPDB → Siswa → Orang Tua → Admin & Guru) tidak berubah, dan kini
+diuji.
+
+### 427. Bagian Tentang berhenti menjadi baris kartu ketiga
+
+Temuan tinjauan: halaman memakai baris kartu putih bergaris tiga kali berturut-
+turut — Akses, Fitur, Tentang — dan yang ketiga terbaca sebagai pengulangan
+belaka.
+
+Yang dipertahankan dua yang pertama; Tentang menjadi satu panel utuh dua kolom
+dengan latar gradien tipis: naskahnya di kiri, ketiga alasannya di kanan sebagai
+daftar bergaris tipis. **Isinya tidak berubah satu kata pun** — tidak ada angka,
+foto, testimoni, atau logo mitra yang ditambahkan, dan tesnya memeriksa ketiga
+alasan itu masih ada kata demi kata.
+
+### 428. Label hero yang menyebut produk, tanpa satu angka pun
+
+Gubahan hero tetap yang lama; yang ditambahkan sebaris chip berisi nama fitur
+yang benar-benar ada: PPDB, Jadwal, Nilai, Ujian, Portal. Itu mengikat gubahan
+abstrak tersebut ke produk yang sesungguhnya tanpa mengarang apa pun.
+
+Tetap hiasan, tetap `aria-hidden`, dan aturan lamanya tidak dilonggarkan: tes
+masih menuntut **nol digit** di dalam blok itu, sehingga tidak ada statistik yang
+dapat menyelinap masuk lewat pintu ini.
+
+### 429. Keterbacaan: ukuran dan kontras teks pendukung
+
+Tinjauan menyebut teks pendukung "sedikit terlalu kecil dan terlalu terang".
+Pembacanya orang tua dan staf sekolah, bukan pengembang yang terbiasa antarmuka
+padat.
+
+- teks kartu .93rem → **.975rem**, line-height 1.7;
+- pengantar bagian 1.02rem → **1.06rem**, line-height 1.7;
+- `--muted` **#5b6577 → #4d576b** — menaikkan rasio kontras di atas putih dari
+  sekitar 4,9:1 menjadi sekitar 6:1;
+- naskah footer .92rem → .96rem, dan warnanya dari #93a1ba menjadi #c2cbdc untuk
+  paragraf serta #aab5c9 untuk judul kolom;
+- alamat cabang mengikuti ukuran kartu yang baru.
+
+Skala judul tidak dinaikkan: yang kurang keterbacaan teks kecilnya, dan
+membesarkan judul hanya akan membuat halaman terasa berjejal.
+
+### 430. Cabang dan hero seluler
+
+Kartu cabang: nama sekolah naik menjadi 1,2rem dan menjadi hal pertama yang
+terbaca; kode cabang tetap lencana, kini dengan label pembaca layar "Kode
+cabang"; alamat mendapat ikon pin dan label "Alamat". Alamat hanya dirender bila
+memang tersimpan — tidak ada yang dikarang, dan tesnya memeriksa kedua keadaan.
+
+Hero pada layar sempit: di bawah 30rem kedua tombol melebar penuh dan bertumpuk.
+Sebelumnya keduanya berdesakan pada satu baris di 360px, dan yang kedua
+terdorong turun dengan lebar setengah — terbaca sebagai kecelakaan tata letak,
+bukan pilihan. Padding hero juga dipersempit supaya teks bantuan tidak mendesak
+layar pertama. Gubahan hiasan tetap disembunyikan di bawah 48rem, seperti
+sebelumnya.
+
+### 431. Verifikasi visual tetap belum dilakukan oleh saya
+
+Perbaikan-perbaikan di atas berasal dari tinjauan tangkapan layar oleh **manusia**,
+bukan dari pengamatan saya sendiri: perkakas peramban tetap tidak terhubung pada
+batch ini, sama seperti L2 (butir 423 batch sebelumnya).
+
+Artinya hasil perbaikan ini pun **belum pernah saya lihat**. Yang dapat saya
+buktikan hanya yang dapat dibuktikan dari markup, CSS, dan halaman yang dirender
+di dalam tes. Tinjauan tangkapan layar berikutnya tetap dibutuhkan — terutama
+untuk menu seluler baru pada 360px dan 390px, yang belum pernah tampil di layar
+mana pun sebelum batch ini selesai.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
