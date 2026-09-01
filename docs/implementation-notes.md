@@ -7710,6 +7710,165 @@ di dalam tes. Tinjauan tangkapan layar berikutnya tetap dibutuhkan — terutama
 untuk menu seluler baru pada 360px dan 390px, yang belum pernah tampil di layar
 mana pun sebelum batch ini selesai.
 
+## Unified Login — satu pintu masuk untuk seluruh peran
+
+Keputusan pemilik, menggantikan tiga pintu terpisah. Rinciannya di
+`docs/unified-login.md`; yang di bawah ini keputusan-keputusan yang tidak
+terbaca dari kodenya.
+
+### 437. Perannya dibaca sesudah kredensial, bukan ditanyakan sebelumnya
+
+Arsitektur lama menuntut pengunjung menjawab "saya jenis pengguna apa?" sebelum
+boleh mengetikkan kata sandinya — tiga alamat berbeda untuk satu tabel pengguna,
+satu guard, dan satu provider. Tidak ada satu pun perbedaan teknis di antara
+ketiganya; yang berbeda hanya alamatnya.
+
+Sekarang urutannya dibalik: kredensial dulu, lalu server membaca peran dari
+basis data dan menentukan tujuannya.
+
+Yang membuat ini aman **bukan** ketiadaan field peran di formulir.
+`App\Support\LoginDestination` tidak pernah membaca request sama sekali — tidak
+`$request`, tidak query string, tidak properti komponen. Nilai `role` yang
+diselipkan ke payload Livewire tidak punya satu pun tempat untuk masuk, dan itu
+yang diuji, bukan sekadar bahwa formulirnya tidak punya `<select>`.
+
+Guru sengaja tetap diantar ke panel, bukan ke `/teacher`. Rute itu memang ada,
+tetapi hari ini guru masuk lewat panel dan mendarat di panel; memindahkannya
+tanpa dasar dari sumber akan menjadi perubahan produk yang menyamar sebagai
+perubahan teknis.
+
+### 438. Kata sandi sementara tidak digandakan logikanya
+
+Godaannya besar: halaman masuk sudah memegang `$user`, jadi memeriksa
+`must_change_password` di sana terasa wajar. Itu akan menghasilkan dua salinan
+aturan yang sama, dan salinan kedua adalah yang tidak ikut diperbarui.
+
+Yang dilakukan: bagi staf, halaman masuk **tidak memeriksanya sama sekali** dan
+mengantar ke panel — `EnsurePasswordIsChanged` di dalam panel yang mengambil
+alih, persis seperti sebelum batch ini. Bagi portal, `PortalEligibility` tetap
+menolak dengan petunjuk yang sudah ada sejak butir 158.
+
+Satu kesenjangan yang perlu dicatat jujur, dan yang **tidak** diciptakan batch
+ini: akun portal berkata sandi sementara diminta memakai tautan lupa kata sandi,
+sementara surel belum dapat terkirim sama sekali. Jalan keluarnya hari ini admin
+menyetel ulang dari panel. Ia hilang sendiri begitu SMTP diadakan.
+
+### 439. Dua peran ditolak, bukan ditebak
+
+`roles->first()` adalah cara termudah menentukan tujuan, dan ia salah. Urutannya
+tidak ditentukan apa pun: seseorang dengan dua peran akan mendarat di panel hari
+ini dan di portal besok, tergantung urutan baris yang kebetulan dikembalikan
+basis data.
+
+Aturan produknya tepat satu peran (PRD 1.1.1), ditegakkan `UserResource` lewat
+`maxItems(1)`. Skema Spatie sendiri mengizinkan lebih, jadi keadaan itu mungkin
+lahir lewat jalur lain — dan ketika lahir, ia cacat data. Nol peran ditolak, dua
+peran ditolak, satu peran lanjut.
+
+`User::canAccessPanel()` masih memakai `primaryRole()` — yaitu `roles->first()`
+— dan itu **tidak** diubah di sini: ia perilaku lama yang sudah diuji, dan
+halaman masuk sudah menolak keadaan dua peran sebelum sampai ke sana. Bila
+keadaan itu ingin ditutup rapat, di situlah tempat berikutnya.
+
+### 440. Satu pintu menutup celah throttle yang tidak disengaja
+
+Ketiga halaman masuk lama memakai ruang nama limiter sendiri:
+`student-login:`, dan dua lainnya serupa. Masing-masing lima percobaan per
+menit — sehingga satu alamat surel sesungguhnya punya **lima belas** percobaan
+per menit, cukup dengan berpindah halaman.
+
+Tidak ada yang salah pada niatnya; celah itu lahir dari arsitekturnya. Satu
+pintu dengan satu kunci (`login:`) menutupnya tanpa aturan baru.
+
+### 441. Lupa kata sandi belum ditawarkan, dan itu disengaja
+
+Halaman reset milik Filament tetap ada dan tetap berfungsi secara internal. Yang
+tidak dilakukan hanya menampilkan tautannya.
+
+Sebabnya operasional, bukan teknis: aplikasi ini belum mengirim satu surel pun —
+tidak ada Mailable, tidak ada `MailMessage`, tidak ada pemanggilan facade
+`Mail`, dan `MAIL_MAILER=log` (butir 403). Menawarkan pemulihan yang tidak dapat
+mengirim apa pun lebih buruk daripada diam: pengguna akan menunggu surel yang
+tidak akan pernah datang, dan menyalahkan dirinya sendiri.
+
+Ini menjadi ketergantungan yang dicatat pada P-03 di
+`docs/deployment-candidate.md`. Ketika SMTP berjalan, yang perlu dikerjakan
+hanya menampilkan kembali tautannya.
+
+### 442. Rute bernama `login` kini ada — dan separuh alasan lama gugur
+
+`routes/web.php` selama ini mencatat bahwa ketiga portal memakai middleware
+sendiri, bukan `auth` bawaan, **karena** middleware itu mengarahkan tamu ke rute
+bernama `login` yang tidak ada di project ini (butir 147).
+
+Separuh alasan itu kini gugur: namanya ada. Separuh yang lain tetap berlaku, dan
+itu yang lebih penting — setiap portal masih perlu memeriksa **peran**, bukan
+sekadar "sudah masuk atau belum". `auth` bawaan tidak dapat membedakan siswa
+dari bendahara, dan portal siswa yang hanya menuntut "sudah masuk" akan terbuka
+bagi keduanya.
+
+### 443. Alamat lama tetap hidup
+
+`/siswa/masuk`, `/portal/masuk`, dan `/admin/login` seluruhnya menjadi
+pengalihan ke `/login`, dan **nama rutenya dipertahankan**. Tiga belas tempat
+merujuk `filament.admin.auth.login` saja — termasuk middleware Filament sendiri
+— dan penanda halaman yang sudah tersebar tidak boleh menjadi 404 hanya karena
+arsitekturnya disatukan.
+
+### 444. Filament: satu Closure, bukan fork
+
+`Panel::login()` menerima `string | Closure | array`. Bentuk terkecil yang tetap
+didukung karena itu:
+
+```php
+->login(fn () => redirect()->route('login'))
+```
+
+Rutenya tetap terdaftar dengan nama aslinya, `/admin/login` tetap bukan 404, dan
+tamu yang membuka `/admin` tetap dialihkan Filament ke halaman masuknya sendiri
+— yang kini meneruskan ke `/login`. Tidak satu pun internal autentikasi Filament
+yang disalin atau ditimpa.
+
+### 445. Tes yang premisnya memang terbalik
+
+Beberapa tes lama menjaga hal yang sekarang justru salah. Ia tidak dihapus,
+melainkan **ditulis ulang ke jaminan yang masih berlaku**:
+
+- "guru tidak boleh masuk di sini" → sejak pintunya satu, guru memang boleh
+  masuk. Yang harus tetap benar: ia diantar ke panel, tidak pernah ke portal
+  siswa, dan pagar portal tetap menolaknya 403 sesudahnya.
+- "halaman muka tidak boleh mengarang `/login`" (butir 349) → kini `/login`
+  benar-benar ada, jadi yang dijaga berbalik: halaman muka harus menunjuk ke
+  sana, dan tidak boleh menawarkan alamat masuk per peran.
+- "parameter query tidak boleh mengarahkan pengalihan" → jaminannya tetap, hanya
+  alamat yang diujinya berpindah; kini ditambah pembuktian bahwa tujuan sesudah
+  masuk tetap datang dari peran.
+
+Yang **tidak** dilemahkan: seluruh pemeriksaan penolakan, keseragaman pesan
+gagal, regenerasi sesi, throttle, dan batas tenant tetap diuji seperti sebelumnya
+— hanya komponen yang dijalankannya berganti.
+
+### 446. Halaman muka: satu pintu, penjelasan peran tetap
+
+Keempat kartu akses tetap ada dan tetap menjelaskan siapa mendapat apa; yang
+berubah, tiga di antaranya kini menunjuk alamat yang sama. PPDB tetap pintu
+terpisah karena ia memang bukan autentikasi.
+
+Naskah pengantarnya ikut berubah: "Setiap peran masuk lewat halamannya sendiri"
+tidak lagi benar, dan naskah yang tidak lagi benar lebih buruk daripada naskah
+yang membosankan.
+
+### 447. Bahasa dapat diganti sebelum masuk
+
+Pemilih bahasa ada di halaman masuk itu sendiri, di luar `<form>` autentikasi —
+bukan di dalamnya, karena form bersarang tidak sah dan tesnya sudah menjaga itu
+di seluruh permukaan. Sesudah masuk, `users.locale` tetap yang berwenang seperti
+rancangan S9.3.
+
+Halaman masuk memakai tata letak halaman muka apa adanya, sehingga seluruh
+token warna, radius, bayangan, dan tombolnya sama persis tanpa satu baris CSS
+yang digandakan (butir 436).
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
