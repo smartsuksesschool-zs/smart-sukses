@@ -304,6 +304,9 @@ class ProductionConfigTest extends TestCase
     {
         $this->get('/')->assertOk();
         $this->get(route('ppdb.schools'))->assertOk();
-        $this->get(route('filament.admin.auth.login'))->assertOk();
+        // Halaman masuk panel kini mengantar ke pintu tunggal (butir 444);
+        // yang harus tetap benar adalah keduanya dapat dicapai tanpa galat.
+        $this->get(route('filament.admin.auth.login'))->assertRedirect(route('login'));
+        $this->get(route('login'))->assertOk();
     }
 }

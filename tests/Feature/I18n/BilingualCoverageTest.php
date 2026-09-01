@@ -140,30 +140,25 @@ class BilingualCoverageTest extends TestCase
 
     // ================================================ C/F. halaman masuk
 
-    public function test_the_student_login_page_reads_in_both_languages(): void
+    /**
+     * Dua halaman masuk menjadi satu (butir 437); cakupan bahasanya diperiksa
+     * di pintu yang tersisa.
+     */
+    public function test_the_login_page_reads_in_both_languages(): void
     {
-        $this->get(route('student.login'))
+        $this->get(route('login'))
             ->assertOk()
+            ->assertSee('Masuk ke Sistem', escape: false)
             ->assertSee('Kata Sandi', escape: false)
-            ->assertSee('Ingat saya di perangkat ini', escape: false);
+            ->assertSee('Ingat saya', escape: false);
 
         $this->inEnglish()
-            ->get(route('student.login'))
+            ->get(route('login'))
             ->assertOk()
+            ->assertSee('Sign in to the System', escape: false)
             ->assertSee('Password', escape: false)
-            ->assertSee('Remember me on this device', escape: false);
-    }
-
-    public function test_the_parent_login_page_reads_in_both_languages(): void
-    {
-        $this->get(route('portal.login'))
-            ->assertOk()
-            ->assertSee('Portal Orang Tua', escape: false);
-
-        $this->inEnglish()
-            ->get(route('portal.login'))
-            ->assertOk()
-            ->assertSee('Parent Portal', escape: false);
+            ->assertSee('Remember me', escape: false)
+            ->assertDontSee('Kata Sandi', escape: false);
     }
 
     // ================================================== C. portal siswa
@@ -391,7 +386,7 @@ class BilingualCoverageTest extends TestCase
 
     public function test_a_login_validation_error_reads_in_both_languages(): void
     {
-        $this->get(route('student.login'))->assertOk();
+        $this->get(route('login'))->assertOk();
 
         app()->setLocale('id');
         $this->assertSame(

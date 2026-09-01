@@ -6,8 +6,8 @@ use App\Enums\RoleName;
 use App\Enums\StudentClassStatus;
 use App\Enums\StudentFeeStatus;
 use App\Enums\StudentStatus;
+use App\Livewire\Auth\Login;
 use App\Livewire\Portal\ParentDashboard;
-use App\Livewire\Portal\PortalLogin;
 use App\Models\AcademicYear;
 use App\Models\FeeType;
 use App\Models\School;
@@ -107,11 +107,18 @@ class ParentPortalUiTest extends TestCase
             ->assertSee('Ahmad Fauzi');
     }
 
-    public function test_a_guest_is_sent_to_the_portal_login(): void
+    /**
+     * Tamu tetap diantar keluar, dan alamat lama tetap hidup — kini sebagai
+     * pengalihan ke pintu masuk tunggal (butir 443).
+     */
+    public function test_a_guest_is_sent_to_the_unified_login(): void
     {
         $this->get(route('portal.dashboard'))->assertRedirect();
 
-        $this->get(route('portal.login'))->assertOk()->assertSee('Portal Orang Tua');
+        // Penanda halaman lama tidak menjadi 404.
+        $this->get(route('portal.login'))->assertRedirect(route('login'));
+
+        $this->get(route('login'))->assertOk()->assertSee('Masuk ke Sistem');
     }
 
     /**
@@ -187,7 +194,7 @@ class ParentPortalUiTest extends TestCase
         ]);
         $this->childOf($parent, $this->schoolA, 'Anak Login');
 
-        Livewire::test(PortalLogin::class)
+        Livewire::test(Login::class)
             ->set('email', 'ortu@example.test')
             ->set('password', 'rahasia123')
             ->call('authenticate')
@@ -197,23 +204,25 @@ class ParentPortalUiTest extends TestCase
     }
 
     /**
-     * Kredensial benar tetapi peran keliru: tidak boleh tertinggal sesi
-     * setengah masuk.
+     * Sejak pintu masuknya satu, seorang Admin Sekolah memang boleh masuk —
+     * yang harus tetap benar: ia diantar ke panel, tidak pernah ke portal
+     * orang tua, dan pagar portalnya tetap menolaknya sesudahnya (butir 445).
      */
-    public function test_a_non_parent_cannot_sign_in_to_the_portal(): void
+    public function test_an_admin_never_lands_in_the_parent_portal(): void
     {
-        $this->userIn($this->schoolA, RoleName::SchoolAdmin, [
+        $admin = $this->userIn($this->schoolA, RoleName::SchoolAdmin, [
             'email' => 'admin@example.test',
             'password' => bcrypt('rahasia123'),
         ]);
 
-        Livewire::test(PortalLogin::class)
+        Livewire::test(Login::class)
             ->set('email', 'admin@example.test')
             ->set('password', 'rahasia123')
             ->call('authenticate')
-            ->assertHasErrors('email');
+            ->assertHasNoErrors()
+            ->assertRedirect(filament()->getPanel('admin')->getUrl());
 
-        $this->assertGuest();
+        $this->actingAs($admin)->get(route('portal.dashboard'))->assertForbidden();
     }
 
     public function test_a_wrong_password_is_indistinguishable_from_an_unknown_email(): void
@@ -223,13 +232,13 @@ class ParentPortalUiTest extends TestCase
             'password' => bcrypt('rahasia123'),
         ]);
 
-        $wrongPassword = Livewire::test(PortalLogin::class)
+        $wrongPassword = Livewire::test(Login::class)
             ->set('email', 'ortu@example.test')
             ->set('password', 'salah')
             ->call('authenticate')
             ->errors()->get('email');
 
-        $unknownEmail = Livewire::test(PortalLogin::class)
+        $unknownEmail = Livewire::test(Login::class)
             ->set('email', 'tidakada@example.test')
             ->set('password', 'apa saja')
             ->call('authenticate')
@@ -455,7 +464,7 @@ class ParentPortalUiTest extends TestCase
         $this->startSession();
         $before = session()->getId();
 
-        Livewire::test(PortalLogin::class)
+        Livewire::test(Login::class)
             ->set('email', 'ortu@example.test')
             ->set('password', 'rahasia123')
             ->call('authenticate')
@@ -492,7 +501,7 @@ class ParentPortalUiTest extends TestCase
             ...$overrides,
         ]);
 
-        Livewire::test(PortalLogin::class)
+        Livewire::test(Login::class)
             ->set('email', 'ortu@example.test')
             ->set('password', 'rahasia123')
             ->call('authenticate')
@@ -637,11 +646,11 @@ class ParentPortalUiTest extends TestCase
         $this->childOf($parent, $this->schoolA, 'Anak Redirect');
 
         foreach (['redirect', 'next', 'return', 'intended'] as $parameter) {
-            $this->get(route('portal.login').'?'.$parameter.'=https://jahat.example.com')
+            $this->get(route('login').'?'.$parameter.'=https://jahat.example.com')
                 ->assertOk();
         }
 
-        Livewire::test(PortalLogin::class)
+        Livewire::test(Login::class)
             ->set('email', 'ortu@example.test')
             ->set('password', 'rahasia123')
             ->call('authenticate')
@@ -656,7 +665,7 @@ class ParentPortalUiTest extends TestCase
         ]);
 
         for ($attempt = 0; $attempt < 5; $attempt++) {
-            Livewire::test(PortalLogin::class)
+            Livewire::test(Login::class)
                 ->set('email', 'ortu@example.test')
                 ->set('password', 'salah')
                 ->call('authenticate')
@@ -665,7 +674,7 @@ class ParentPortalUiTest extends TestCase
 
         // Percobaan keenam ditolak karena batasnya, bukan karena kata sandinya
         // — bahkan dengan kata sandi yang benar.
-        $errors = Livewire::test(PortalLogin::class)
+        $errors = Livewire::test(Login::class)
             ->set('email', 'ortu@example.test')
             ->set('password', 'rahasia123')
             ->call('authenticate')

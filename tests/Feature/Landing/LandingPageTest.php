@@ -157,14 +157,17 @@ class LandingPageTest extends TestCase
 
     // ---------------------------------------------------- pintu masuk peran
 
+    /**
+     * Keputusan pemilik: satu pintu masuk untuk semua peran. Ketiga kartu peran
+     * karena itu menunjuk alamat yang sama, dan PPDB tetap punya alamatnya
+     * sendiri (butir 437).
+     */
     public function test_every_role_entry_point_is_linked(): void
     {
         $response = $this->get('/')->assertOk();
 
         foreach ([
-            route('filament.admin.auth.login'),
-            route('student.login'),
-            route('portal.login'),
+            route('login'),
             route('ppdb.schools'),
             route('ppdb.check-status'),
         ] as $url) {
@@ -176,25 +179,41 @@ class LandingPageTest extends TestCase
     {
         $html = $this->get('/')->assertOk()->getContent();
 
-        foreach (['/admin/login', '/siswa/masuk', '/portal/masuk', '/ppdb'] as $path) {
+        foreach (['/login', '/ppdb'] as $path) {
             $this->assertStringContainsString('href="'.url($path).'"', $html, "Tautan {$path} tidak ada.");
+        }
+
+        // Alamat lama tetap dapat dibuka, tetapi halaman muka tidak lagi
+        // mengirim siapa pun ke sana.
+        foreach (['/siswa/masuk', '/portal/masuk', '/admin/login'] as $legacy) {
+            $this->assertStringNotContainsString('href="'.url($legacy).'"', $html);
+            $this->get($legacy)->assertRedirect();
         }
     }
 
     /**
-     * Tidak ada `/login` umum di project ini, dan halaman muka tidak boleh
-     * berpura-pura ada (butir 349).
+     * Premis terbalik, dan disengaja.
+     *
+     * Sampai batch ini `/login` memang tidak ada, dan tes ini menjaga agar
+     * halaman muka tidak berpura-pura ada — sistemnya punya tiga pintu, dan
+     * mengarang pintu keempat akan menyesatkan (butir 349).
+     *
+     * Keputusan pemilik membalikkannya: kini benar-benar ada satu pintu, jadi
+     * yang dijaga berbalik pula — halaman muka harus menunjuk ke sana, dan
+     * tidak boleh menawarkan pintu per peran (butir 446).
      */
-    public function test_no_universal_login_link_is_invented(): void
+    public function test_the_landing_points_at_the_single_login_door(): void
     {
         $html = $this->get('/')->assertOk()->getContent();
 
-        $this->assertStringNotContainsString('href="'.url('/login').'"', $html);
-        $this->assertNull(app('router')->getRoutes()->getByName('login'));
-
-        // Tombol "Masuk ke Sistem" mengantar ke bagian akses peran.
+        $this->assertNotNull(app('router')->getRoutes()->getByName('login'));
+        $this->assertStringContainsString('href="'.url('/login').'"', $html);
         $this->assertStringContainsString('Masuk ke Sistem', $html);
-        $this->assertStringContainsString('href="#akses"', $html);
+
+        // Tidak ada alamat masuk per peran yang dikarang.
+        foreach (['/login/siswa', '/login/admin', '/login/guru', '/masuk'] as $invented) {
+            $this->assertStringNotContainsString('href="'.url($invented).'"', $html);
+        }
     }
 
     public function test_the_role_labels_are_understandable(): void
@@ -459,8 +478,13 @@ class LandingPageTest extends TestCase
         $this->get(route('ppdb.schools'))->assertOk();
         $this->get(route('ppdb.check-status'))->assertOk();
 
-        // Panel tetap menuntut masuk.
-        $this->get(route('filament.admin.auth.login'))->assertOk();
+        // Pintu masuk tunggal terbuka untuk tamu.
+        $this->get(route('login'))->assertOk();
+
+        // Alamat masuk lama tidak menjadi 404; keduanya mengantar ke sana.
+        $this->get(route('filament.admin.auth.login'))->assertRedirect(route('login'));
+        $this->get('/siswa/masuk')->assertRedirect(route('login'));
+        $this->get('/portal/masuk')->assertRedirect(route('login'));
 
         // Portal tetap tertutup bagi tamu.
         $this->get(route('student.exams'))->assertRedirect(route('student.login'));
@@ -787,20 +811,29 @@ class LandingPageTest extends TestCase
 
         $section = $this->between($html, 'id="akses"', 'id="fitur"');
 
+        // Urutannya dibaca dari judul kartunya: sejak ketiga peran berbagi satu
+        // alamat, URL tidak lagi dapat membedakan mereka (butir 437).
         $order = [];
 
         foreach ([
-            route('ppdb.schools') => 'ppdb',
-            route('student.login') => 'siswa',
-            route('portal.login') => 'ortu',
-            route('filament.admin.auth.login') => 'panel',
-        ] as $url => $label) {
-            $order[strpos($section, 'href="'.$url.'"')] = $label;
+            'Pendaftaran (PPDB)' => 'ppdb',
+            'Portal Siswa' => 'siswa',
+            'Portal Orang Tua' => 'ortu',
+            'Admin &amp; Guru' => 'panel',
+        ] as $title => $label) {
+            $at = strpos($section, $title);
+
+            $this->assertIsInt($at, "Kartu {$title} tidak ada.");
+
+            $order[$at] = $label;
         }
 
         ksort($order);
 
         $this->assertSame(['ppdb', 'siswa', 'ortu', 'panel'], array_values($order));
+
+        // Dan ketiga kartu peran memang mengarah ke pintu yang sama.
+        $this->assertSame(3, substr_count($section, 'href="'.route('login').'"'));
     }
 
     /**
@@ -870,6 +903,140 @@ class LandingPageTest extends TestCase
     }
 
     // ------------------------------------------------------------- bantuan
+
+    // ============================================ Batch L2.2 — pagar seluler
+
+    /*
+     * Tes di bawah **tidak** membuktikan tampilannya benar. Yang dapat
+     * dibuktikan dari sini hanya bahwa pagar strukturalnya masih terpasang:
+     * kepala masih memuat ketiga kendalinya, wordmark masih boleh menyusut,
+     * dan tidak ada lebar keras yang mustahil muat di 360px. Penilaian visual
+     * tetap milik manusia yang melihat layarnya (butir 435).
+     */
+
+    /**
+     * Cacat yang ditemukan tinjauan: kepala terpotong di 360px.
+     *
+     * Sebabnya `.brand { white-space: nowrap }` — wordmark satu baris menolak
+     * menyusut di bawah lebar min-content-nya, barisnya meluber, lalu
+     * `body { overflow-x: hidden }` memotongnya tanpa satu tanda pun. Tes ini
+     * menjaga pelepasannya, karena mengembalikan `nowrap` akan mengembalikan
+     * persis cacat itu (butir 433).
+     */
+    public function test_the_wordmark_may_shrink_on_a_phone(): void
+    {
+        $css = $this->styleOf($this->get('/')->assertOk()->getContent());
+
+        $mobile = $this->between($css, '@media (max-width: 47.99rem) {', '/* ------------------------------------------------------------ hero */');
+
+        $this->assertStringContainsString('.brand {', $mobile);
+        $this->assertStringContainsString('white-space: normal;', $mobile);
+        $this->assertStringContainsString('min-width: 0;', $mobile);
+
+        // Yang menyusut wordmark-nya, bukan sasaran sentuhnya.
+        $this->assertStringContainsString('.nav__disclosure { flex: 0 0 auto; }', $mobile);
+    }
+
+    /**
+     * Ketiga kendali kepala tetap ada dan tetap dapat dicapai; tidak satu pun
+     * disembunyikan demi memuat yang lain.
+     */
+    public function test_the_mobile_header_keeps_all_three_controls(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $header = $this->between($html, '<header class="nav">', '</header>');
+
+        $this->assertStringContainsString('class="brand"', $header);
+        $this->assertStringContainsString('<summary class="nav__toggle"', $header);
+        $this->assertStringContainsString('nav__cta--bar', $header);
+
+        // Menu dan Masuk tetap dua hal berbeda: Masuk di luar <details>.
+        $this->assertLessThan(
+            strpos($header, 'nav__cta--bar'),
+            strpos($header, '</details>'),
+            'Tombol Masuk tidak boleh berada di dalam menu.',
+        );
+    }
+
+    /**
+     * Tidak ada lebar keras yang mustahil muat di layar 360px. Sebuah
+     * `min-width` dalam piksel pada wadah mana pun adalah cara paling umum
+     * membuat halaman meluber tanpa disadari.
+     */
+    public function test_no_container_carries_a_desktop_width_floor(): void
+    {
+        $css = $this->styleOf($this->get('/')->assertOk()->getContent());
+
+        $this->assertDoesNotMatchRegularExpression('/min-width:\s*\d+px/', $css);
+
+        // `width:` dalam piksel pada wadah juga tidak dipakai.
+        $this->assertDoesNotMatchRegularExpression('/\n\s+width:\s*\d{3,}px/', $css);
+    }
+
+    /**
+     * Irama seluler datang dari token yang disetel ulang di satu tempat, bukan
+     * dari puluhan penimpaan yang tidak saling tahu (butir 432).
+     */
+    public function test_the_mobile_rhythm_comes_from_tokens(): void
+    {
+        $css = $this->styleOf($this->get('/')->assertOk()->getContent());
+
+        foreach (['--section-y', '--container-pad', '--card-pad', '--grid-gap', '--head-gap'] as $token) {
+            $this->assertStringContainsString($token.':', $css, "Token {$token} tidak ada.");
+        }
+
+        $mobile = $this->between($css, '@media (max-width: 47.99rem) {', '/* =========================================================== navbar */');
+
+        // Jaraknya benar-benar mengecil, bukan hanya token yang ditambahkan.
+        $this->assertStringContainsString('--section-y: 2.75rem;', $mobile);
+        $this->assertStringContainsString('--card-pad: 1.15rem;', $mobile);
+    }
+
+    /**
+     * Kedelapan kemampuan tetap ada; yang berubah bentuknya di layar sempit
+     * (butir 434).
+     */
+    public function test_the_capability_list_gets_a_compact_mobile_form(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $features = $this->between($html, 'id="fitur"', '</section>');
+
+        $this->assertStringContainsString('grid--rows', $features);
+        $this->assertSame(8, substr_count($features, '<article class="card">'));
+
+        $css = $this->styleOf($html);
+        $this->assertStringContainsString('@media (max-width: 30rem) {', $css);
+        $this->assertStringContainsString('.grid--rows .card {', $css);
+    }
+
+    /**
+     * Label Inggris terpanjang tidak boleh terkunci pada satu baris di layar
+     * sempit — "Check Admission Status" akan mendorong barisnya keluar layar.
+     */
+    public function test_long_english_buttons_may_wrap_on_a_narrow_screen(): void
+    {
+        $css = $this->styleOf($this->inEnglish()->get('/')->assertOk()->getContent());
+
+        $narrow = substr($css, strpos($css, '@media (max-width: 30rem) {'));
+
+        $this->assertStringContainsString('.cta__buttons .btn {', $narrow);
+        $this->assertStringContainsString('white-space: normal;', $narrow);
+
+        // Dan sasaran sentuhnya tidak dikorbankan demi kepadatan.
+        $this->assertStringContainsString('min-height: 2.9rem', $narrow);
+    }
+
+    /** Isi <style> halaman, tanpa markup di sekitarnya. */
+    protected function styleOf(string $html): string
+    {
+        $start = strpos($html, '<style>');
+
+        $this->assertIsInt($start, 'Halaman tidak memuat blok gaya.');
+
+        return substr($html, $start, strpos($html, '</style>', $start) - $start);
+    }
 
     /** Beralih ke bahasa Inggris lewat jalur yang sama dengan pengunjung. */
     protected function inEnglish(): static

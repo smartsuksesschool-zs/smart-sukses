@@ -262,8 +262,7 @@ class LocaleSwitchTest extends TestCase
         $pages = [
             'landing' => fn () => $this->get('/'),
             'ppdb' => fn () => $this->get(route('ppdb.schools')),
-            'student login' => fn () => $this->get(route('student.login')),
-            'parent login' => fn () => $this->get(route('portal.login')),
+            'login' => fn () => $this->get(route('login')),
             'portal shell' => fn () => $this->actingAs($teacher)->get(route('teacher.dashboard')),
             'filament panel' => fn () => $this->actingAs($teacher)->get(route('filament.admin.pages.dashboard')),
         ];
@@ -337,16 +336,13 @@ class LocaleSwitchTest extends TestCase
         $this->assertStringContainsString(route('locale.switch', ['locale' => 'en'], absolute: false), $html);
     }
 
-    public function test_the_switch_is_present_on_the_student_login_page(): void
+    /**
+     * Bahasa dapat diganti **sebelum** masuk: pemilihnya ada di pintu masuk
+     * tunggal itu sendiri (butir 447).
+     */
+    public function test_the_switch_is_present_on_the_login_page(): void
     {
-        $html = $this->get(route('student.login'))->assertOk()->getContent();
-
-        $this->assertStringContainsString(route('locale.switch', ['locale' => 'en'], absolute: false), $html);
-    }
-
-    public function test_the_switch_is_present_on_the_parent_login_page(): void
-    {
-        $html = $this->get(route('portal.login'))->assertOk()->getContent();
+        $html = $this->get(route('login'))->assertOk()->getContent();
 
         $this->assertStringContainsString(route('locale.switch', ['locale' => 'en'], absolute: false), $html);
     }
@@ -437,8 +433,7 @@ class LocaleSwitchTest extends TestCase
         $pages = [
             'landing' => fn () => $this->get('/'),
             'ppdb' => fn () => $this->get(route('ppdb.schools')),
-            'student login' => fn () => $this->get(route('student.login')),
-            'parent login' => fn () => $this->get(route('portal.login')),
+            'login' => fn () => $this->get(route('login')),
             'portal shell' => fn () => $this->actingAs($teacher)->get(route('teacher.dashboard')),
             'filament panel' => fn () => $this->actingAs($teacher)->get(route('filament.admin.pages.dashboard')),
         ];

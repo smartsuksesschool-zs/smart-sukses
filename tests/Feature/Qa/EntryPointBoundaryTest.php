@@ -59,6 +59,7 @@ class EntryPointBoundaryTest extends TestCase
         'ppdb',
         'ppdb/cek-status',
         'ppdb/{schoolCode}',
+        'login',
         'siswa/masuk',
         'portal/masuk',
         'bahasa/{locale}',
@@ -181,9 +182,13 @@ class EntryPointBoundaryTest extends TestCase
         $this->get(route('ppdb.schools'))->assertOk();
         $this->get(route('ppdb.check-status'))->assertOk();
         $this->get(route('ppdb.register', ['schoolCode' => $this->school->code]))->assertOk();
-        $this->get(route('student.login'))->assertOk();
-        $this->get(route('portal.login'))->assertOk();
-        $this->get('/admin/login')->assertOk();
+        // Pintu masuk tunggal (butir 437).
+        $this->get(route('login'))->assertOk();
+
+        // Ketiga alamat lama tetap publik; kini sebagai pengalihan (butir 443).
+        $this->get(route('student.login'))->assertRedirect(route('login'));
+        $this->get(route('portal.login'))->assertRedirect(route('login'));
+        $this->get('/admin/login')->assertRedirect(route('login'));
     }
 
     // --------------------------------------------------------- lintas portal

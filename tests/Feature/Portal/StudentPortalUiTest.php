@@ -6,7 +6,7 @@ use App\Enums\GradeType;
 use App\Enums\RoleName;
 use App\Enums\StudentClassStatus;
 use App\Enums\StudentStatus;
-use App\Livewire\Student\StudentLogin;
+use App\Livewire\Auth\Login;
 use App\Models\AcademicYear;
 use App\Models\ClassSubject;
 use App\Models\Grade;
@@ -20,6 +20,7 @@ use App\Models\Subject;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RolePermissionSeeder;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -201,7 +202,7 @@ class StudentPortalUiTest extends TestCase
         $this->startSession();
         $before = session()->getId();
 
-        Livewire::test(StudentLogin::class)
+        Livewire::test(Login::class)
             ->set('email', 'siswa@example.test')
             ->set('password', 'rahasia123')
             ->call('authenticate')
@@ -234,7 +235,7 @@ class StudentPortalUiTest extends TestCase
             ...$overrides,
         ]);
 
-        Livewire::test(StudentLogin::class)
+        Livewire::test(Login::class)
             ->set('email', 'siswa@example.test')
             ->set('password', 'rahasia123')
             ->call('authenticate')
@@ -243,20 +244,30 @@ class StudentPortalUiTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_a_non_student_cannot_sign_in_here(): void
+    /**
+     * Sejak pintu masuknya satu, "tidak boleh masuk di sini" bukan lagi
+     * pertanyaan yang benar — seorang guru memang boleh masuk. Yang harus
+     * tetap benar: ia tidak pernah mendarat di portal siswa, dan pagar
+     * portalnya tetap menolaknya sesudah masuk (butir 445).
+     */
+    public function test_a_teacher_never_lands_in_the_student_portal(): void
     {
-        $this->userIn(RoleName::Guru, [
+        $teacher = $this->userIn(RoleName::Guru, [
             'email' => 'guru@example.test',
             'password' => bcrypt('rahasia123'),
         ]);
 
-        Livewire::test(StudentLogin::class)
+        Livewire::test(Login::class)
             ->set('email', 'guru@example.test')
             ->set('password', 'rahasia123')
             ->call('authenticate')
-            ->assertHasErrors('email');
+            ->assertHasNoErrors()
+            ->assertRedirect(Filament::getPanel('admin')->getUrl());
 
-        $this->assertGuest();
+        // Dan pagar portal siswa tetap menolaknya.
+        $this->actingAs($teacher)
+            ->get(route('student.dashboard'))
+            ->assertForbidden();
     }
 
     public function test_an_unknown_email_and_a_wrong_password_look_the_same(): void
@@ -266,11 +277,11 @@ class StudentPortalUiTest extends TestCase
             'password' => bcrypt('rahasia123'),
         ]);
 
-        $wrong = Livewire::test(StudentLogin::class)
+        $wrong = Livewire::test(Login::class)
             ->set('email', 'siswa@example.test')->set('password', 'salah')
             ->call('authenticate')->errors()->get('email');
 
-        $unknown = Livewire::test(StudentLogin::class)
+        $unknown = Livewire::test(Login::class)
             ->set('email', 'tidakada@example.test')->set('password', 'apa saja')
             ->call('authenticate')->errors()->get('email');
 
@@ -286,12 +297,12 @@ class StudentPortalUiTest extends TestCase
         ]);
 
         for ($attempt = 0; $attempt < 5; $attempt++) {
-            Livewire::test(StudentLogin::class)
+            Livewire::test(Login::class)
                 ->set('email', 'siswa@example.test')->set('password', 'salah')
                 ->call('authenticate')->assertHasErrors('email');
         }
 
-        $errors = Livewire::test(StudentLogin::class)
+        $errors = Livewire::test(Login::class)
             ->set('email', 'siswa@example.test')->set('password', 'rahasia123')
             ->call('authenticate')->errors()->get('email');
 
@@ -299,12 +310,28 @@ class StudentPortalUiTest extends TestCase
         $this->assertGuest();
     }
 
+    /**
+     * Tujuan sesudah masuk datang dari peran akun, bukan dari URL. Parameter
+     * apa pun di query string diabaikan seluruhnya (butir 437).
+     */
     public function test_no_query_parameter_can_steer_the_redirect(): void
     {
+        $user = $this->userIn(RoleName::Siswa, [
+            'email' => 'siswa@example.test',
+            'password' => bcrypt('rahasia123'),
+        ]);
+        $this->studentFor($user, 'Siswa Uji', $this->classA);
+
         foreach (['redirect', 'next', 'return', 'intended'] as $parameter) {
-            $this->get(route('student.login').'?'.$parameter.'=https://jahat.example.com')
-                ->assertOk();
+            $this->get(route('login').'?'.$parameter.'=https://jahat.example.com')->assertOk();
         }
+
+        Livewire::withQueryParams(['redirect' => 'https://jahat.example.com'])
+            ->test(Login::class)
+            ->set('email', 'siswa@example.test')
+            ->set('password', 'rahasia123')
+            ->call('authenticate')
+            ->assertRedirect(route('student.dashboard'));
     }
 
     // -------------------------------------------- must_change_password
