@@ -7869,6 +7869,99 @@ Halaman masuk memakai tata letak halaman muka apa adanya, sehingga seluruh
 token warna, radius, bayangan, dan tombolnya sama persis tanpa satu baris CSS
 yang digandakan (butir 436).
 
+### 449. Membaca berkas sekolah apa adanya
+
+`App\Imports\StudentsImport` menuntut satu baris heading rapi di baris pertama.
+Berkas sungguhan sekolah tidak begitu: ia tersusun per angkatan, dengan baris
+judul, baris heading yang **berulang** di setiap seksi, dan baris rekap
+`Jumlah Siswa Kelas N`.
+
+Menuntut sekolah merapikan berkasnya lebih dulu terdengar hemat, padahal hanya
+memindahkan pekerjaan — dan setiap penyalinan manual adalah kesempatan salah
+ketik pada data identitas. `App\Support\Migration\LegacyWorkbook` membaca bentuk
+aslinya, dan mengenali kolom dari **teks judulnya**, bukan posisinya. Sekolah
+menambah satu kolom, importer langsung membacanya tanpa satu baris kode berubah.
+
+### 450. Jalur berkas privat tidak ikut pesan galat
+
+Berkas siswa berada di luar repositori dan memang harus di sana. Ketika berkas
+tidak ditemukan, pesannya berbunyi "Berkas sumber tidak ditemukan." tanpa
+menyebut jalurnya: jalur itu memuat nama pengguna dan struktur direktori mesin,
+dan pesan galat gemar berakhir di tiket, tangkapan layar, dan log.
+
+### 451. Angka sekolah dipakai memeriksa parser
+
+Lembar siswa menutup tiap seksi dengan `Jumlah Siswa Kelas 10: 13 siswa`. Angka
+itu **tidak** dipakai sebagai data — ia dipakai sebagai pemeriksaan silang
+terhadap hasil parsing, dan selisihnya dilaporkan sebagai barisnya sendiri.
+
+Parser yang salah biasanya salah diam-diam: satu baris terlewat, dan tidak ada
+yang tahu. Di sini berkasnya sudah menyatakan berapa yang seharusnya, jadi
+membiarkan pemeriksaan itu tidak dipakai akan sia-sia.
+
+### 452. Yang tidak dikenali menjadi ambigu, bukan mata pelajaran
+
+Kolom `Pelajaran` pada lembar guru memuat tiga hal berbeda dipisah koma:
+jabatan (`Kepala Sekolah`), mata pelajaran (`PJOK`), dan kegiatan non-akademik
+(`Pramuka`). Menyalinnya bulat-bulat ke `subjects.name` akan melahirkan mata
+pelajaran bernama "Kepala Sekolah", yang lalu muncul di rapor.
+
+`AssignmentClassifier` karenanya memilah per token, dan **apa pun yang tidak ada
+di kamus menjadi `AMBIGUOUS`**, tidak pernah jatuh ke mata pelajaran sebagai
+bawaan. Kamusnya sengaja hanya memuat token yang benar-benar ada di berkas:
+menebak daftar mapel SMA yang "biasanya ada" akan mengarang penugasan yang tidak
+pernah dinyatakan sekolah.
+
+### 453. Kode mapel diusulkan, bukan diputuskan
+
+`subjects.code` wajib dan unik per cabang, sementara berkas sekolah tidak
+memuatnya. Kode diturunkan dari nama secara deterministik dan dilaporkan sebagai
+**usulan**. Kode bukan identitas orang — menurunkannya tidak melanggar larangan
+mengarang identitas — tetapi yang mengesahkan tetap sekolah.
+
+### 454. Dry-run tanpa mode terap sama sekali
+
+Pola biasanya "dry-run sebagai bawaan, `--terapkan` untuk menulis". Di sini mode
+terap **tidak dibuat sama sekali**, dan itu disengaja: menulis siswa menuntut
+NIS, NIS belum diputuskan sekolah, jadi setiap baris pasti ditolak. Tombol terap
+yang pasti menolak semuanya bukan pagar, melainkan jebakan.
+
+### 455. Master siswa tidak menunggu akun
+
+`users.email` `NOT NULL` dan unik global, dan surel siswa masih dikumpulkan lewat
+Google Form. Yang menyelamatkan urutan kerja: **`students.user_id` nullable.**
+
+Data induk siswa karenanya tidak bergantung pada akun, dan menahan impor siswa
+sampai surel terkumpul akan menahan pekerjaan yang sebenarnya sudah bisa jalan.
+Laporan memisahkannya jadi tiga keadaan — `STUDENT_MASTER_READY`,
+`ACCOUNT_READY`, `ACCOUNT_BLOCKED` — supaya keduanya tidak pernah tertukar.
+
+### 456. Satu label kelas, satu kelas
+
+Sumber hanya mengenal `10`, `11`, `12`. Tidak ada nama rombel di dalamnya, jadi
+satu label menjadi satu kelas. Memecahnya menjadi `10-A`/`10-B` akan mengarang
+rombel yang tidak pernah dinyatakan sekolah — dan rombel karangan lebih sulit
+dibereskan daripada rombel yang belum ada.
+
+Label di luar 10/11/12 tidak ditebak; ia dilaporkan
+`tingkat_kelas_tidak_terbaca`.
+
+### 457. Nama kembar bukan duplikat
+
+Dua siswa boleh bernama sama. Laporan tetap menyebutkannya — sebagai
+**peringatan**, bukan sebagai penggabungan — dan keduanya tetap menjadi dua baris
+valid. Satu-satunya identitas yang dipakai adalah NIS.
+
+Duplikat NIS di dalam berkas, sebaliknya, memang duplikat: baris keduanya tidak
+ikut dihitung valid.
+
+### 458. Berkas tes dibangun saat tes berjalan
+
+Tidak ada `.xlsx` di repositori. Setiap berkas uji dibangun dari data karangan
+saat tes berjalan lalu dihapus di `tearDown`. Berkas biner yang dikomit gemar
+berumur panjang, dan berkas biner berisi data sekolah sungguhan akan berumur
+panjang di tempat yang salah.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
