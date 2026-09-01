@@ -70,7 +70,44 @@
             --shadow-lg: 0 24px 56px -28px rgba(13, 30, 58, .38);
 
             --shell: 72rem;
+
+            /*
+               Token ruang. Batch L2.2 memisahkannya dari nilai yang tertulis di
+               tempat pemakaian supaya irama seluler dapat disetel di satu
+               tempat, bukan lewat puluhan penimpaan yang tidak saling tahu
+               (butir 432).
+            */
             --section-y: 4.5rem;
+            --container-pad: 1.25rem;
+            --card-pad: 1.5rem;
+            --grid-gap: 1rem;
+            --hero-y: 3.25rem;
+            --head-gap: 2.5rem;
+        }
+
+        /*
+           Irama seluler. Satu blok, bukan penimpaan yang tersebar: di bawah
+           48rem seluruh halaman memakai jarak yang lebih rapat, dan desktop
+           tidak tersentuh sama sekali karena nilainya hanya berlaku di dalam
+           kueri ini (butir 432).
+        */
+        /* Tablet: di antara keduanya, bukan salinan desktop. */
+        @media (min-width: 48rem) and (max-width: 63.99rem) {
+            :root {
+                --section-y: 3.5rem;
+                --head-gap: 2rem;
+            }
+        }
+
+        @media (max-width: 47.99rem) {
+            :root {
+                --section-y: 2.75rem;
+                --container-pad: 1rem;
+                --card-pad: 1.15rem;
+                --grid-gap: .75rem;
+                --hero-y: 1.75rem;
+                --head-gap: 1.5rem;
+            }
         }
 
         *, *::before, *::after { box-sizing: border-box; }
@@ -114,7 +151,7 @@
             width: 100%;
             max-width: var(--shell);
             margin: 0 auto;
-            padding: 0 1.25rem;
+            padding: 0 var(--container-pad);
         }
 
         /* Gerak hanya sebagai bumbu, dan hanya bagi yang memintanya. */
@@ -180,13 +217,12 @@
         }
 
         /*
-           Baris kedua wordmark disembunyikan pada layar tersempit. Sejak
-           navigasi seluler menjadi satu tombol menu (butir 425) ruangnya jauh
-           lebih longgar, tetapi pada 360px tombol Menu dan Masuk masih harus
-           muat berdampingan dengan wordmark — dan nama sekolahnya yang penting,
-           bukan tagline-nya. Footer tetap menampilkannya utuh (butir 421).
+           Baris kedua wordmark disembunyikan di seluruh lebar ponsel, bukan
+           hanya yang tersempit: pada 412px pun ia elemen terlebar di bar, dan
+           nama sekolahnya yang penting — bukan tagline-nya. Footer tetap
+           menampilkannya utuh (butir 421, disetel ulang pada butir 433).
         */
-        @media (max-width: 26rem) {
+        @media (max-width: 47.99rem) {
             .nav .brand__tag { display: none; }
         }
 
@@ -563,7 +599,7 @@
 
         .section--tint { background: var(--surface); border-block: 1px solid var(--line); }
 
-        .section__head { max-width: 44rem; margin-bottom: 2.5rem; }
+        .section__head { max-width: 44rem; margin-bottom: var(--head-gap); }
 
         .section__kicker {
             display: block;
@@ -585,7 +621,7 @@
         /* Satu kolom lebih dulu; melebar hanya ketika layarnya memang cukup. */
         .grid {
             display: grid;
-            gap: 1rem;
+            gap: var(--grid-gap);
             grid-template-columns: 1fr;
         }
 
@@ -608,7 +644,7 @@
             background: var(--surface);
             border: 1px solid var(--line);
             border-radius: var(--radius-lg);
-            padding: 1.5rem;
+            padding: var(--card-pad);
             box-shadow: var(--shadow-sm);
         }
 
@@ -925,11 +961,6 @@
             .nav__links { display: flex; }
         }
 
-        /* Tombol Masuk dipersempit di layar tersempit supaya ketiganya muat. */
-        @media (max-width: 24rem) {
-            .nav__cta { padding: .6rem .8rem; }
-            .nav__toggle { padding: 0 .6rem; }
-        }
 
         .nav__cta--bar { margin-left: .4rem; }
 
@@ -1068,17 +1099,270 @@
 
         /* -------------------------------------------------- hero seluler (L2.1) */
 
-        /*
-           Pada 360px kedua tombol tidak muat berdampingan, dan yang kedua
-           terdorong ke baris berikutnya dengan lebar setengah — terlihat seperti
-           kecelakaan tata letak. Di bawah 30rem keduanya melebar penuh dan
-           bertumpuk, sehingga keduanya sama mudah dijangkau ibu jari.
-        */
+        /* Kedua tombol hero bertumpuk penuh di layar tersempit. */
         @media (max-width: 29.99rem) {
             .hero__cta { flex-direction: column; align-items: stretch; }
-            .hero__cta .btn { width: 100%; }
-            .hero__inner { padding: 2.5rem 0 3rem; }
         }
+
+        /* ==================================================== seluler (L2.2) */
+
+        /*
+           Tinjauan tangkapan layar manusia: halaman seluler "terasa kebesaran,
+           terlalu panjang, dan bagian kepalanya sempit atau terpotong".
+           Blok ini menjawab keempatnya, dan hanya berlaku di bawah 48rem —
+           desktop tidak tersentuh (butir 432).
+        */
+
+        /* ----------------------------------------------- kepala yang muat */
+
+        /*
+           Cacat sungguhan, bukan sekadar sesak. Anggaran lebar di 360px:
+           isi 320px, dikurangi dua jarak 1rem dan margin tombol = 281,6px.
+           Wordmark satu baris ber-`white-space: nowrap` sendirian ±204px,
+           tombol Menu ±82px, tombol Masuk ±70px — totalnya ±356px. Flex tidak
+           dapat menyusutkan wordmark yang nowrap, jadi barisnya meluber dan
+           `body { overflow-x: hidden }` memotongnya tanpa satu tanda pun.
+           Itulah yang terlihat di tangkapan layar (butir 433).
+
+           Perbaikannya bukan menyembunyikan, melainkan membuatnya muat:
+           wordmark boleh membungkus, setiap anak flex boleh menyusut
+           (`min-width: 0`), dan jaraknya dirapatkan.
+        */
+        @media (max-width: 47.99rem) {
+            .nav__inner {
+                gap: .5rem;
+                min-height: 3.75rem;
+            }
+
+            /* Tanpa ini flex menolak menyusutkan anaknya di bawah min-content. */
+            .nav__inner > * { min-width: 0; }
+
+            /*
+               Wordmark-lah yang menyusut, dan hanya ia. Kedua tombol
+               `flex: 0 0 auto` supaya tidak pernah ikut terjepit — kalau
+               keduanya boleh menyusut, yang mengecil justru sasaran sentuh.
+            */
+            .brand {
+                flex: 1 1 auto;
+                gap: .5rem;
+                /* Boleh membungkus ke baris kedua; tidak pernah terpotong. */
+                white-space: normal;
+                min-width: 0;
+            }
+
+            .nav__disclosure { flex: 0 0 auto; }
+
+            .brand__mark { width: 2.1rem; height: 2.1rem; }
+
+            .brand__text { min-width: 0; line-height: 1.1; }
+
+            .brand__name {
+                font-size: .9rem;
+                overflow-wrap: anywhere;
+            }
+
+            .nav__toggle {
+                gap: .35rem;
+                padding: 0 .6rem;
+                font-size: .875rem;
+                white-space: nowrap;
+            }
+
+            .nav__cta--bar {
+                margin-left: .25rem;
+                padding: .6rem .8rem;
+                font-size: .9rem;
+                flex: 0 0 auto;
+            }
+
+            /* Panel menu tidak pernah lebih lebar daripada layarnya. */
+            .nav__panel { width: min(16rem, calc(100vw - 2rem)); }
+        }
+
+        /* ------------------------------------------------------------ hero */
+
+        @media (max-width: 47.99rem) {
+            .hero__inner {
+                gap: 1.5rem;
+                padding: var(--hero-y) 0 calc(var(--hero-y) + .75rem);
+            }
+
+            /*
+               Judul lama terkunci di batas bawah clamp-nya (2rem) pada seluruh
+               lebar ponsel, sehingga ia berukuran sama di 360px dan di 768px —
+               teks berukuran desktop yang dibungkus ke kolom sempit, persis
+               yang dikeluhkan tinjauan.
+            */
+            .hero h1 {
+                margin-top: .85rem;
+                font-size: clamp(1.75rem, 7vw, 2.4rem);
+                letter-spacing: -.025em;
+            }
+
+            .hero__lead {
+                margin-top: .8rem;
+                font-size: 1rem;
+                line-height: 1.65;
+            }
+
+            .hero__cta { margin-top: 1.25rem; gap: .6rem; }
+
+            .hero__note { margin-top: .85rem; font-size: .875rem; }
+
+            .eyebrow {
+                max-width: 100%;
+                padding: .3rem .7rem;
+                font-size: .75rem;
+                line-height: 1.35;
+            }
+        }
+
+        /* ------------------------------------------------- kartu akses peran */
+
+        /*
+           Empat kartu tinggi berderet membuat halaman panjang tanpa menambah
+           kejelasan. Yang dirapatkan jaraknya, bukan isinya: keempat peran,
+           keempat tujuan, dan seluruh naskahnya tetap utuh.
+        */
+        @media (max-width: 47.99rem) {
+            .access .card__icon {
+                width: 2.25rem;
+                height: 2.25rem;
+                margin-bottom: .6rem;
+                border-radius: var(--radius-sm);
+            }
+
+            .access .card__title { margin-top: .45rem; font-size: 1rem; }
+
+            .access p { margin-top: .35rem; font-size: .925rem; line-height: 1.6; }
+
+            .access__go { margin-top: .85rem; padding-top: 0; }
+        }
+
+        /* --------------------------------------------- kartu fitur (≤ 30rem) */
+
+        /*
+           Sumber panjang halaman terbesar: delapan kartu penuh dalam satu
+           kolom. Di bawah 30rem bentuknya berubah menjadi baris padat —
+           ikon di kiri, judul dan keterangan di kanan. Bukan kartu desktop yang
+           dikecilkan, dan tidak satu kemampuan pun dihilangkan.
+
+           Dua kolom sengaja tidak dipakai: pada 360px judul seperti
+           "Academics & Digital Report Cards" akan pecah menjadi empat baris
+           sempit. Keterbacaan menang atas kepadatan (butir 434).
+        */
+        @media (max-width: 30rem) {
+            .grid--rows { gap: .5rem; }
+
+            .grid--rows .card {
+                display: grid;
+                grid-template-columns: 2.25rem 1fr;
+                gap: .8rem;
+                align-items: start;
+                padding: .9rem 1rem;
+            }
+
+            .grid--rows .card__icon {
+                width: 2.25rem;
+                height: 2.25rem;
+                margin: 0;
+                border-radius: var(--radius-sm);
+            }
+
+            .grid--rows .card h3 { font-size: .975rem; }
+
+            .grid--rows .card p {
+                margin-top: .25rem;
+                font-size: .9rem;
+                line-height: 1.55;
+            }
+        }
+
+        /* ---------------------------------------------------------- tentang */
+
+        @media (max-width: 47.99rem) {
+            .about { gap: 1.25rem; padding: 1.25rem 1.15rem; }
+
+            .about__copy p { margin-top: .7rem; font-size: 1rem; line-height: 1.65; }
+
+            .about__item { gap: .8rem; padding: .9rem 0; min-width: 0; }
+
+            .about__num { width: 2rem; height: 2rem; font-size: .85rem; }
+
+            .about__item h3 { font-size: 1rem; }
+
+            .about__item p { margin-top: .3rem; font-size: .925rem; line-height: 1.6; }
+        }
+
+        /* ------------------------------------------------------- ajakan PPDB */
+
+        @media (max-width: 47.99rem) {
+            .cta { padding: 1.75rem 1.15rem; }
+
+            /* Lingkaran hiasan dikecilkan supaya tidak duduk di balik tombol. */
+            .cta::after { inset: auto -5rem -7rem auto; width: 12rem; height: 12rem; }
+
+            .cta h2 { margin-top: .8rem; font-size: clamp(1.3rem, 5.4vw, 1.7rem); }
+
+            .cta p { margin-top: .65rem; font-size: .975rem; line-height: 1.65; }
+
+            .cta__buttons { margin-top: 1.25rem; gap: .6rem; }
+        }
+
+        /* ------------------------------------------------------ kartu cabang */
+
+        @media (max-width: 47.99rem) {
+            .branch__name { margin-top: .55rem; font-size: 1.08rem; }
+
+            .branch__address { margin-top: .45rem; font-size: .925rem; line-height: 1.55; }
+
+            /* Nama sekolah yang panjang membungkus, tidak melebarkan kartunya. */
+            .access .branch__name,
+            .access p { overflow-wrap: anywhere; }
+        }
+
+        /* ------------------------------------------------------------ footer */
+
+        /*
+           Empat kelompok bertumpuk membuat footer seluler sangat tinggi. Dari
+           26rem ke atas keempatnya menjadi dua kolom; tidak satu tautan pun
+           dihapus untuk memendekkannya.
+        */
+        @media (min-width: 26rem) and (max-width: 47.99rem) {
+            .footer__grid { grid-template-columns: 1fr 1fr; }
+            .footer__grid > :first-child { grid-column: 1 / -1; }
+        }
+
+        @media (max-width: 47.99rem) {
+            .footer { padding: 2rem 0 1.25rem; }
+            .footer__grid { gap: 1.25rem; }
+            .footer__note { margin-top: .7rem; font-size: .925rem; }
+            .footer__locale { margin-top: .9rem; }
+            .footer li a { min-height: 2.5rem; font-size: .925rem; }
+            .footer__bottom { margin-top: 1.5rem; padding-top: 1rem; }
+        }
+
+        /* -------------------------------------------- tombol pada layar sempit */
+
+        /*
+           Tombol memakai `white-space: nowrap`, dan label Inggris terpanjang —
+           "Check Admission Status" — akan mendorong barisnya melebihi lebar
+           layar pada ponsel tersempit. Di bawah 30rem tombol ajakan melebar
+           penuh dan boleh membungkus; tingginya tetap ≥ 2.75rem.
+        */
+        @media (max-width: 30rem) {
+            .hero__cta .btn,
+            .cta__buttons .btn {
+                width: 100%;
+                white-space: normal;
+                text-align: center;
+            }
+
+            .cta__buttons { flex-direction: column; align-items: stretch; }
+
+            .btn--lg { min-height: 2.9rem; padding: .7rem 1rem; font-size: .975rem; }
+        }
+
 
         /* ========================================================== utilitas */
 

@@ -310,7 +310,10 @@
                     </p>
                 </div>
 
-                <div class="grid grid--4">
+                {{-- `grid--rows`: di bawah 30rem kedelapan kartu berubah menjadi
+                     baris padat, bukan kartu desktop yang dikecilkan
+                     (butir 434). --}}
+                <div class="grid grid--4 grid--rows">
                     {{-- Kuncinya ditulis sebagai pemanggilan `__()` harfiah di
                          dalam array, bukan `__($name)` atas variabel.
                          Bedanya bukan gaya: pemindai kunci pada
