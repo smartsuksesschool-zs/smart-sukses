@@ -7,12 +7,12 @@ use App\Http\Controllers\Portal\StudentReportCardController;
 use App\Http\Middleware\EnsureParentPortalAccess;
 use App\Http\Middleware\EnsureStudentPortalAccess;
 use App\Http\Middleware\EnsureTeacherPortalAccess;
+use App\Livewire\Auth\Login;
 use App\Livewire\Portal\NotificationInbox;
 use App\Livewire\Portal\ParentDashboard;
 use App\Livewire\Portal\ParentFees;
 use App\Livewire\Portal\ParentGrades;
 use App\Livewire\Portal\ParentSchedule;
-use App\Livewire\Portal\PortalLogin;
 use App\Livewire\Ppdb\RegistrationForm;
 use App\Livewire\Ppdb\SchoolList;
 use App\Livewire\Ppdb\StatusCheck;
@@ -21,7 +21,6 @@ use App\Livewire\Student\StudentExam;
 use App\Livewire\Student\StudentExamResult;
 use App\Livewire\Student\StudentExams;
 use App\Livewire\Student\StudentGrades;
-use App\Livewire\Student\StudentLogin;
 use App\Livewire\Student\StudentProfile;
 use App\Livewire\Student\StudentSchedule;
 use App\Livewire\Teacher\TeacherClasses;
@@ -66,6 +65,21 @@ Route::post('/bahasa/{locale}', LocaleController::class)
     ->name('locale.switch');
 
 /*
+ * Pintu masuk tunggal — keputusan pemilik, menggantikan tiga pintu terpisah.
+ *
+ * Pengunjung tidak lagi memilih perannya sebelum masuk: ia mengetikkan
+ * kredensial, dan server yang menentukan tujuannya dari peran yang tersimpan
+ * di akunnya (App\Support\LoginDestination, butir 437).
+ *
+ * Rutenya bernama `login`. Sebelum ini project sengaja tidak punya rute dengan
+ * nama itu, dan catatan di bawah menyebutnya sebagai alasan portal memakai
+ * middleware sendiri. Alasan itu kini tinggal separuh: nama `login` ada, tetapi
+ * setiap portal tetap perlu memeriksa **peran**, bukan sekadar "sudah masuk
+ * atau belum" (butir 442).
+ */
+Route::get('/login', Login::class)->name('login');
+
+/*
  * API 4.7 PPDB Online — Auth Level: Public.
  * Halaman-halaman berikut sengaja tidak memakai middleware auth
  * (PPDB-01 poin 1: "dapat diakses publik via URL: /ppdb/[kode_sekolah]").
@@ -86,7 +100,16 @@ Route::prefix('ppdb')->name('ppdb.')->group(function () {
  */
 Route::prefix('portal')->name('portal.')->group(function () {
     Route::middleware('guest')->group(function () {
-        Route::get('/masuk', PortalLogin::class)->name('login');
+        /*
+         * Alamat lama tetap hidup: penanda halaman yang sudah tersebar tidak
+         * boleh menjadi 404 hanya karena arsitekturnya disatukan (butir 443).
+         *
+         * `Route::get`, bukan `Route::redirect`: yang terakhir mendaftarkan
+         * **seluruh** metode, sehingga alamat masuk lama akan ikut menjawab
+         * POST dan DELETE — permukaan yang lebih lebar daripada halaman yang
+         * digantikannya, tanpa satu alasan pun (butir 448).
+         */
+        Route::get('/masuk', fn () => redirect()->route('login'))->name('login');
     });
 
     /*
@@ -161,7 +184,8 @@ Route::prefix('teacher')->name('teacher.')->middleware(EnsureTeacherPortalAccess
  */
 Route::prefix('siswa')->name('student.')->group(function () {
     Route::middleware('guest')->group(function () {
-        Route::get('/masuk', StudentLogin::class)->name('login');
+        // Alamat lama tetap hidup, dan tetap GET saja (butir 443, 448).
+        Route::get('/masuk', fn () => redirect()->route('login'))->name('login');
     });
 
     Route::middleware(EnsureStudentPortalAccess::class)->group(function () {

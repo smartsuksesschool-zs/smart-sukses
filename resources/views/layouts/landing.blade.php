@@ -34,7 +34,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="@yield('description', 'Platform manajemen sekolah terintegrasi: PPDB, akademik, keuangan, ujian online, dan portal pengguna.')">
     <meta name="theme-color" content="{{ SchoolBranding::FALLBACK_PRIMARY }}">
-    <title>@yield('title', config('app.name'))</title>
+    <title>@yield('title', $title ?? config('app.name'))</title>
     <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
 
     <style>
@@ -1364,6 +1364,109 @@
         }
 
 
+        /* ================================================ halaman masuk (UL) */
+
+        /*
+           Halaman masuk terpadu. Ia menumpang seluruh token di atas; yang
+           ditambahkan di sini hanya bentuk kartunya dan gaya field-nya
+           (butir 436).
+        */
+        .auth {
+            display: grid;
+            place-items: center;
+            min-height: 100vh;
+            min-height: 100dvh;
+            padding: 2rem var(--container-pad);
+            background:
+                radial-gradient(42rem 24rem at 82% -12%, rgba(224, 112, 32, .16), transparent 62%),
+                radial-gradient(46rem 26rem at 6% 6%, rgba(27, 58, 107, .10), transparent 60%),
+                linear-gradient(180deg, #fcfdff 0%, var(--canvas) 100%);
+        }
+
+        .auth__card {
+            width: 100%;
+            max-width: 25rem;
+            padding: 2rem;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .auth__brand { margin-bottom: 1.5rem; }
+
+        .auth__title { margin-top: .25rem; font-size: 1.6rem; letter-spacing: -.03em; }
+
+        .auth__lead { margin-top: .5rem; color: var(--muted); font-size: .975rem; }
+
+        .auth__form { display: grid; gap: 1rem; margin-top: 1.5rem; }
+
+        .field { display: grid; gap: .4rem; }
+
+        .field label { font-size: .9rem; font-weight: 600; color: var(--ink-soft); }
+
+        .field input[type="email"],
+        .field input[type="password"] {
+            width: 100%;
+            min-height: 2.75rem;
+            padding: .6rem .8rem;
+            font: inherit;
+            font-size: 1rem;
+            color: var(--ink);
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }
+
+        .field input:focus {
+            outline: none;
+            border-color: var(--brand);
+            box-shadow: 0 0 0 3px rgba(27, 58, 107, .14);
+        }
+
+        .field input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+        .field__error { margin-top: .1rem; color: #b3261e; font-size: .875rem; }
+
+        /* Sasaran sentuh utuh: yang dapat ditekan seluruh barisnya, bukan kotaknya. */
+        .field__check {
+            display: inline-flex;
+            align-items: center;
+            gap: .55rem;
+            min-height: 2.75rem;
+            font-size: .95rem;
+            color: var(--ink-soft);
+            cursor: pointer;
+        }
+
+        .field__check input { width: 1.05rem; height: 1.05rem; accent-color: var(--brand); }
+
+        .auth__note { margin-top: 1.25rem; font-size: .925rem; color: var(--muted); text-align: center; }
+
+        .auth__foot {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+            margin-top: 1.25rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--line);
+        }
+
+        .auth__back { font-size: .9rem; font-weight: 600; text-decoration: none; }
+
+        .auth__foot .locale-switch { margin: 0; padding: 0; border: 0; }
+
+        @media (max-width: 30rem) {
+            .auth { padding: 1.25rem var(--container-pad); align-items: start; }
+            .auth__card { padding: 1.35rem 1.15rem; }
+            .auth__title { font-size: 1.4rem; }
+            .auth__brand { margin-bottom: 1.15rem; }
+            .auth__form { gap: .85rem; margin-top: 1.25rem; }
+        }
+
         /* ========================================================== utilitas */
 
         /* Hanya untuk pembaca layar. */
@@ -1397,6 +1500,11 @@
 <body>
     <a class="skip" href="#konten">{{ __('Lompat ke konten utama') }}</a>
 
+    {{-- Dipakai dua cara: `@extends` oleh halaman muka, dan sebagai layout
+         Livewire oleh halaman masuk. Keduanya berbagi seluruh token dan
+         komponen di atas, sehingga tidak ada satu baris CSS pun yang
+         digandakan demi halaman kedua (butir 436). --}}
     @yield('content')
+    {{ $slot ?? '' }}
 </body>
 </html>

@@ -85,7 +85,7 @@
                 <a class="nav__link" href="#tentang">{{ __('Tentang') }}</a>
                 <a class="nav__link" href="#cabang">{{ __('Cabang') }}</a>
                 <a class="nav__link" href="{{ route('ppdb.schools') }}">{{ __('PPDB') }}</a>
-                <a href="#akses" class="btn btn--primary nav__cta">{{ __('Masuk') }}</a>
+                <a href="{{ route('login') }}" class="btn btn--primary nav__cta">{{ __('Masuk') }}</a>
                 <x-locale-switch />
             </nav>
 
@@ -115,7 +115,7 @@
             </details>
 
             {{-- Aksi utama tidak pernah ikut disembunyikan di balik menu. --}}
-            <a href="#akses" class="btn btn--primary nav__cta--bar">{{ __('Masuk') }}</a>
+            <a href="{{ route('login') }}" class="btn btn--primary nav__cta--bar">{{ __('Masuk') }}</a>
         </div>
     </header>
 
@@ -146,12 +146,11 @@
                         {{-- Tidak ada satu halaman masuk untuk semua peran, jadi tombol
                              ini mengarah ke bagian akses — bukan berpura-pura ada
                              (butir 349). --}}
-                        <a href="#akses" class="btn btn--ghost btn--lg">{{ __('Masuk ke Sistem') }}</a>
+                        <a href="{{ route('login') }}" class="btn btn--ghost btn--lg">{{ __('Masuk ke Sistem') }}</a>
                     </div>
 
                     <p class="hero__note">
-                        {{ __('Setiap peran memiliki halaman masuknya sendiri — pilih pada bagian') }}
-                        <a href="#akses">{{ __('Akses Pengguna') }}</a>.
+                        {{ __('Satu halaman masuk untuk semua — sistem mengenali peran Anda dari akun.') }}
                     </p>
                 </div>
 
@@ -235,7 +234,7 @@
                     <span class="section__kicker">{{ __('Pintu Masuk') }}</span>
                     <h2>{{ __('Akses Pengguna') }}</h2>
                     <p>
-                        {{ __('Setiap peran masuk lewat halamannya sendiri. Pilih yang sesuai dengan Anda.') }}
+                        {{ __('Masuk lewat satu halaman yang sama; sistem mengantar Anda ke bagian yang sesuai dengan akun Anda.') }}
                     </p>
                 </div>
 
@@ -254,7 +253,7 @@
                         <span class="sr-only">{{ __('Buka halaman pendaftaran PPDB') }}</span>
                     </a>
 
-                    <a class="card access" href="{{ route('student.login') }}">
+                    <a class="card access" href="{{ route('login') }}">
                         <span class="card__icon">{!! $icon('portal-siswa') !!}</span>
                         <span class="tag tag--brand">{{ __('Siswa') }}</span>
                         <h3 class="card__title">{{ __('Portal Siswa') }}</h3>
@@ -268,7 +267,7 @@
                         <span class="sr-only">{{ __('Masuk ke portal siswa') }}</span>
                     </a>
 
-                    <a class="card access" href="{{ route('portal.login') }}">
+                    <a class="card access" href="{{ route('login') }}">
                         <span class="card__icon">{!! $icon('portal-ortu') !!}</span>
                         <span class="tag tag--brand">{{ __('Orang Tua') }}</span>
                         <h3 class="card__title">{{ __('Portal Orang Tua') }}</h3>
@@ -282,7 +281,7 @@
                         <span class="sr-only">{{ __('Masuk ke portal orang tua') }}</span>
                     </a>
 
-                    <a class="card access" href="{{ route('filament.admin.auth.login') }}">
+                    <a class="card access" href="{{ route('login') }}">
                         <span class="card__icon">{!! $icon('guru') !!}</span>
                         <span class="tag tag--brand">{{ __('Sekolah') }}</span>
                         <h3 class="card__title">{{ __('Admin & Guru') }}</h3>
@@ -504,9 +503,9 @@
                 <div>
                     <h3>{{ __('Masuk') }}</h3>
                     <ul>
-                        <li><a href="{{ route('student.login') }}">{{ __('Portal Siswa') }}</a></li>
-                        <li><a href="{{ route('portal.login') }}">{{ __('Portal Orang Tua') }}</a></li>
-                        <li><a href="{{ route('filament.admin.auth.login') }}">{{ __('Admin & Guru') }}</a></li>
+                        <li><a href="{{ route('login') }}">{{ __('Portal Siswa') }}</a></li>
+                        <li><a href="{{ route('login') }}">{{ __('Portal Orang Tua') }}</a></li>
+                        <li><a href="{{ route('login') }}">{{ __('Admin & Guru') }}</a></li>
                     </ul>
                 </div>
             </div>

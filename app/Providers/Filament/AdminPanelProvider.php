@@ -42,8 +42,19 @@ class AdminPanelProvider extends PanelProvider
             ->brandName(fn () => app(SchoolBranding::class)->brandName())
             ->brandLogo(fn () => app(SchoolBranding::class)->logoUrl())
             ->brandLogoHeight('2rem')
-            // AUTH-01: login email + password (rate limit bawaan 5 percobaan/menit).
-            ->login()
+            /*
+             * AUTH-01 dilayani halaman masuk terpadu, bukan halaman masuk
+             * Filament.
+             *
+             * Rutenya **tetap didaftarkan** — sebuah Closure, bentuk yang
+             * memang diterima `Panel::login()`. Itu yang terkecil dan tetap
+             * didukung: `filament.admin.auth.login` masih resolve (tiga belas
+             * tempat merujuknya, termasuk middleware Filament sendiri yang
+             * mengalihkan tamu ke sana), `/admin/login` tetap bukan 404, dan
+             * keduanya bermuara di `/login`. Tidak ada satu pun internal
+             * autentikasi Filament yang di-fork (butir 444).
+             */
+            ->login(fn () => redirect()->route('login'))
             // AUTH-04: reset password melalui email, link berlaku 60 menit.
             ->passwordReset()
             // AUTH-05: profil pengguna (nama, dan preferensi lain).
