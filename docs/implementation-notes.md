@@ -7962,6 +7962,61 @@ saat tes berjalan lalu dihapus di `tearDown`. Berkas biner yang dikomit gemar
 berumur panjang, dan berkas biner berisi data sekolah sungguhan akan berumur
 panjang di tempat yang salah.
 
+### 459. Seeder yang membuat akun menolak produksi
+
+Sprint4DemoSeeder aman karena tidak didaftarkan di DatabaseSeeder. Itu cukup
+selama isinya data contoh, tetapi SimulationSeeder membuat **akun yang dapat
+login** untuk delapan peran sekaligus — termasuk Kepala Sekolah dan Bendahara.
+
+"Tidak didaftarkan" adalah kelalaian yang belum terjadi, bukan pagar. Karena itu
+seeder ini melempar `RuntimeException` bila `app()->environment('production')`.
+Akun demo yang lahir di produksi bukan data contoh; ia pintu masuk.
+
+### 460. Portal siswa tidak bisa didemokan tanpa akun siswa
+
+Ditemukan saat menyiapkan simulasi, dan tidak terlihat dari test mana pun:
+seluruh siswa demo ber-`user_id` NULL. Test CBT memakai fiksurnya sendiri yang
+memang menautkan akun, sehingga 260 test CBT lulus sementara **tidak ada satu
+pun cara untuk masuk sebagai siswa** di lingkungan demo.
+
+Ini justru konsekuensi yang benar dari butir 455 — master siswa memang tidak
+menuntut akun. Yang keliru adalah menganggap "data siswa ada" berarti "siswa
+bisa masuk". Keduanya dipisah skema, jadi keduanya harus disiapkan terpisah.
+
+### 461. Jendela ujian dihitung ulang setiap seeder dijalankan
+
+Ujian CBT dengan jadwal tetap akan sudah lewat saat rapatnya tiba — persis yang
+terjadi pada dua ujian yang dibuat manual di basis data lokal.
+
+Jendela ujian simulasi karenanya relatif terhadap saat seeder dijalankan: mundur
+satu jam supaya sudah terbuka, maju tujuh hari supaya tidak tutup di tengah
+rapat. Isinya tetap deterministik — soal, pilihan, dan kuncinya tidak berubah;
+yang bergerak hanya jendelanya, dan memang harus bergerak.
+
+### 462. Sambungan hanya terlihat kalau ditempuh
+
+260 test CBT menguji setiap potongan dengan teliti, dan tidak satu pun menempuh
+seluruh rangkaiannya sekali jalan: data yang disiapkan admin, autentikasi siswa,
+ujian yang terlihat, jawaban, pengumpulan, nilai.
+
+Yang gagal saat simulasi biasanya bukan potongannya melainkan sambungannya —
+akun yang tidak tertaut, jendela yang sudah lewat, kelas yang tidak aktif. Test
+perjalanan simulasi menempuhnya di atas data seeder yang **sama persis** dengan
+yang dipakai saat demonstrasi, sehingga seeder yang rusak gagal sebelum rapat,
+bukan di tengah rapat.
+
+### 463. Melepas penanda ganti sandi hanya di seeder simulasi
+
+UserSeeder membuat Super Admin dan Admin Sekolah dengan
+`must_change_password = true`. Itu pagar yang benar (butir 363) dan tidak
+disentuh.
+
+Tetapi di demonstrasi, pagar itu menghentikan semuanya di layar ganti kata sandi
+sebelum satu menu pun terbuka. Penandanya dilepas **hanya** di SimulationSeeder
+— seeder yang sudah menolak berjalan di produksi — bukan dengan melunakkan
+UserSeeder. Pagar yang dilunakkan demi kenyamanan demo akan tetap lunak saat
+tidak ada yang menonton.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
