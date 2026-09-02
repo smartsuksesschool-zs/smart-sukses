@@ -3,10 +3,15 @@
 namespace Tests\Feature\Landing;
 
 use App\Enums\RoleName;
+use App\Enums\SiteBlockType;
 use App\Models\School;
+use App\Models\SiteBlock;
+use App\Models\SiteSetting;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\PublicSite;
 use App\Support\SchoolBranding;
+use Database\Seeders\PublicSiteSeeder;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -49,9 +54,13 @@ class LandingPageTest extends TestCase
         $this->assertSame(0, School::query()->count());
         $this->assertSame(0, User::query()->count());
 
+        // V2 tidak lagi menampilkan daftar cabang, jadi yang diperiksa bukan
+        // pesan kosongnya melainkan bahwa halamannya tetap utuh: identitas
+        // sekolah dan tagline berasal dari konstanta, bukan dari basis data.
         $this->get('/')
             ->assertOk()
-            ->assertSee('Belum ada cabang yang membuka pendaftaran saat ini.');
+            ->assertSee(config('app.name'))
+            ->assertSee(PublicSite::TAGLINE);
     }
 
     public function test_the_landing_page_never_redirects_to_a_login(): void
@@ -77,10 +86,12 @@ class LandingPageTest extends TestCase
 
     public function test_the_platform_branding_is_visible(): void
     {
+        // V2 memimpin dengan identitas sekolah, bukan dengan sebutan platform:
+        // pembacanya orang tua calon siswa (butir 475).
         $this->get('/')
             ->assertOk()
             ->assertSee(config('app.name'))
-            ->assertSee('Platform Manajemen Sekolah Terintegrasi');
+            ->assertSee(PublicSite::TAGLINE);
     }
 
     /**
@@ -208,7 +219,7 @@ class LandingPageTest extends TestCase
 
         $this->assertNotNull(app('router')->getRoutes()->getByName('login'));
         $this->assertStringContainsString('href="'.url('/login').'"', $html);
-        $this->assertStringContainsString('Masuk ke Sistem', $html);
+        $this->assertStringContainsString('Akses Sistem Informasi', $html);
 
         // Tidak ada alamat masuk per peran yang dikarang.
         foreach (['/login/siswa', '/login/admin', '/login/guru', '/masuk'] as $invented) {
@@ -220,55 +231,40 @@ class LandingPageTest extends TestCase
     {
         $this->get('/')
             ->assertOk()
-            ->assertSee('Admin &amp; Guru', false)
+            ->assertSee('Guru &amp; Staf', false)
             ->assertSee('Portal Siswa')
             ->assertSee('Portal Orang Tua')
-            ->assertSee('Pendaftaran (PPDB)');
+            ->assertSee('Pendaftaran PPDB');
     }
 
     // ------------------------------------------------------------- cabang
 
-    public function test_active_branches_are_listed_with_a_registration_link(): void
+    /**
+     * V2 tidak lagi menampilkan daftar cabang di halaman muka.
+     *
+     * Arahan pemilik menyusun ulang halaman ini di seputar sekolahnya — unit
+     * pendidikan, program, kegiatan — dan daftar cabang tidak ada dalam susunan
+     * itu. Ketiga test yang dulu menjaga daftar tersebut (isi, cabang nonaktif,
+     * urutan) karena itu dihapus, bukan dilonggarkan: yang mereka jaga memang
+     * sudah tidak ada di halaman ini.
+     *
+     * Yang mereka jaga tetap diuji di tempat yang benar — halaman PPDB publik
+     * punya suite-nya sendiri, dan `School::active()` tidak berubah. Test di
+     * bawah ini menjaga sisanya: tidak ada data cabang yang bocor justru karena
+     * halaman muka tidak lagi menyentuh tabel cabang sama sekali.
+     */
+    public function test_the_landing_no_longer_lists_branches(): void
     {
         School::factory()->create(['name' => 'SMP Madani', 'code' => 'MDN']);
-        School::factory()->create(['name' => 'SMP Cinangka', 'code' => 'CNK']);
-
-        $response = $this->get('/')->assertOk();
-
-        $response->assertSee('SMP Madani');
-        $response->assertSee('SMP Cinangka');
-        $response->assertSee('href="'.route('ppdb.register', ['schoolCode' => 'mdn']).'"', false);
-        $response->assertSee('href="'.route('ppdb.register', ['schoolCode' => 'cnk']).'"', false);
-    }
-
-    /**
-     * Perlakuan cabang nonaktif harus sama persis dengan halaman PPDB publik
-     * yang sudah ada — keduanya memakai `School::active()` (butir 352).
-     */
-    public function test_an_inactive_branch_is_hidden_exactly_as_on_the_ppdb_page(): void
-    {
-        School::factory()->create(['name' => 'SMP Aktif', 'code' => 'AKT', 'is_active' => true]);
-        School::factory()->create(['name' => 'SMP Nonaktif', 'code' => 'NON', 'is_active' => false]);
-
-        $landing = $this->get('/')->assertOk();
-        $landing->assertSee('SMP Aktif');
-        $landing->assertDontSee('SMP Nonaktif');
-
-        $ppdb = $this->get(route('ppdb.schools'))->assertOk();
-        $ppdb->assertSee('SMP Aktif');
-        $ppdb->assertDontSee('SMP Nonaktif');
-    }
-
-    public function test_branch_ordering_follows_the_ppdb_page(): void
-    {
-        foreach (['Zeta', 'Alfa', 'Mega'] as $name) {
-            School::factory()->create(['name' => 'SMP '.$name]);
-        }
 
         $html = $this->get('/')->assertOk()->getContent();
 
-        $this->assertLessThan(strpos($html, 'SMP Mega'), strpos($html, 'SMP Alfa'));
-        $this->assertLessThan(strpos($html, 'SMP Zeta'), strpos($html, 'SMP Mega'));
+        $this->assertStringNotContainsString('SMP Madani', $html);
+        $this->assertStringNotContainsString('id="cabang"', $html);
+
+        // Halaman PPDB publik tidak ikut berubah: di sana cabangnya justru
+        // memang harus tampil.
+        $this->get(route('ppdb.schools'))->assertOk()->assertSee('SMP Madani');
     }
 
     // ------------------------------------------------------ privasi & aman
@@ -322,12 +318,17 @@ class LandingPageTest extends TestCase
         }
     }
 
+    /**
+     * Isi halaman muka kini datang dari basis data dan dapat disunting admin,
+     * jadi pelolosan HTML-nya diuji terhadap sumber yang benar-benar dirender.
+     */
     public function test_the_page_renders_no_unescaped_database_copy(): void
     {
-        School::factory()->create([
-            'name' => 'SMP <script>alert(1)</script>',
-            'code' => 'XSS',
-            'address' => 'Jalan <b>Tebal</b> No. 1',
+        SiteBlock::create([
+            'type' => SiteBlockType::Program->value,
+            'title' => 'Program <script>alert(1)</script>',
+            'body' => 'Uraian <b>Tebal</b> No. 1',
+            'is_published' => true,
         ]);
 
         $html = $this->get('/')->assertOk()->getContent();
@@ -373,11 +374,27 @@ class LandingPageTest extends TestCase
 
     public function test_the_page_has_one_heading_one_and_the_expected_sections(): void
     {
+        // Bagian yang isinya dari basis data hanya dirender bila isinya ada
+        // (butir 482), jadi susunan penuh diuji pada halaman yang memang
+        // berisi — termasuk bagian artikel, yang bergantung alamat blog.
+        $this->seed(PublicSiteSeeder::class);
+        SiteSetting::set('blog_url', 'https://blog.contoh.test');
+
         $html = $this->get('/')->assertOk()->getContent();
 
         $this->assertSame(1, substr_count($html, '<h1>'), 'Halaman harus punya tepat satu <h1>.');
 
-        foreach (['id="tentang"', 'id="fitur"', 'id="akses"', 'id="cabang"', 'id="konten"'] as $anchor) {
+        foreach ([
+            'id="konten"',
+            'id="tentang"',
+            'id="unit"',
+            'id="program"',
+            'id="kegiatan"',
+            'id="artikel"',
+            'id="ppdb"',
+            'id="akses"',
+            'id="kontak"',
+        ] as $anchor) {
             $this->assertStringContainsString($anchor, $html, "Bagian {$anchor} tidak ada.");
         }
     }
@@ -413,24 +430,33 @@ class LandingPageTest extends TestCase
 
     public function test_the_page_costs_a_bounded_number_of_queries(): void
     {
-        School::factory()->count(1)->create();
+        $this->seed(PublicSiteSeeder::class);
 
         $this->get('/');
 
-        $withOne = $this->countQueries(fn () => $this->get('/')->assertOk());
+        $seeded = $this->countQueries(fn () => $this->get('/')->assertOk());
 
-        School::factory()->count(5)->create();
+        // Isi tambahan pada keempat jenis sekaligus.
+        foreach (SiteBlockType::cases() as $index => $type) {
+            SiteBlock::create([
+                'type' => $type->value,
+                'title' => 'Tambahan '.$index,
+                'position' => 90 + $index,
+                'is_published' => true,
+            ]);
+        }
 
-        $withSix = $this->countQueries(fn () => $this->get('/')->assertOk());
+        $more = $this->countQueries(fn () => $this->get('/')->assertOk());
 
         $this->assertSame(
-            $withOne,
-            $withSix,
-            "Halaman muka membayar query tambahan per cabang: {$withOne} untuk satu, {$withSix} untuk enam.",
+            $seeded,
+            $more,
+            "Halaman muka membayar query tambahan per blok isi: {$seeded} lalu {$more}.",
         );
 
-        // Dan jumlahnya memang kecil: satu query untuk daftar cabang.
-        $this->assertLessThanOrEqual(2, $withSix, "Halaman muka menjalankan {$withSix} query.");
+        // Kecil, dan tetap kecil ketika jenis blok bertambah: satu query untuk
+        // seluruh blok, satu untuk pengaturan (butir 478).
+        $this->assertLessThanOrEqual(2, $more, "Halaman muka menjalankan {$more} query.");
     }
 
     // -------------------------------------------- permukaan lain tak berubah
@@ -501,20 +527,37 @@ class LandingPageTest extends TestCase
      * Pengguna berada tepat di bawah hero, sebelum daftar fitur maupun daftar
      * cabang — dan urutannya diuji, bukan sekadar disepakati.
      */
-    public function test_the_access_section_comes_before_features_and_branches(): void
+    public function test_the_school_story_comes_before_the_system_access(): void
     {
+        $this->seed(PublicSiteSeeder::class);
+
         $html = $this->get('/')->assertOk()->getContent();
 
-        $akses = strpos($html, 'id="akses"');
-        $fitur = strpos($html, 'id="fitur"');
-        $cabang = strpos($html, 'id="cabang"');
+        $urutan = ['id="tentang"', 'id="unit"', 'id="program"', 'id="kegiatan"', 'id="ppdb"', 'id="akses"'];
 
-        $this->assertIsInt($akses, 'Bagian akses tidak ada.');
-        $this->assertIsInt($fitur, 'Bagian fitur tidak ada.');
-        $this->assertIsInt($cabang, 'Bagian cabang tidak ada.');
+        $posisi = [];
 
-        $this->assertLessThan($fitur, $akses, 'Akses Pengguna harus mendahului daftar fitur.');
-        $this->assertLessThan($cabang, $akses, 'Akses Pengguna harus mendahului daftar cabang.');
+        foreach ($urutan as $anchor) {
+            $at = strpos($html, $anchor);
+
+            $this->assertIsInt($at, "Bagian {$anchor} tidak ada.");
+
+            $posisi[$anchor] = $at;
+        }
+
+        $sebelumnya = null;
+
+        foreach ($posisi as $anchor => $at) {
+            if ($sebelumnya !== null) {
+                $this->assertGreaterThan(
+                    $posisi[$sebelumnya],
+                    $at,
+                    "Urutan bagian salah: {$anchor} harus setelah {$sebelumnya}.",
+                );
+            }
+
+            $sebelumnya = $anchor;
+        }
     }
 
     /**
@@ -525,12 +568,12 @@ class LandingPageTest extends TestCase
     {
         $html = $this->get('/')->assertOk()->getContent();
 
-        $hero = substr($html, 0, strpos($html, 'id="akses"'));
+        $hero = substr($html, 0, strpos($html, 'id="tentang"'));
 
         $this->assertStringContainsString(config('app.name'), $hero);
-        $this->assertStringContainsString('Platform Manajemen Sekolah Terintegrasi', $hero);
+        $this->assertStringContainsString(PublicSite::TAGLINE, $hero);
         $this->assertStringContainsString(route('ppdb.schools'), $hero);
-        $this->assertStringContainsString('Masuk ke Sistem', $hero);
+        $this->assertStringContainsString('Kenali Smart Sukses School', $hero);
     }
 
     // ------------------------------------------------------------------- PPDB
@@ -544,7 +587,10 @@ class LandingPageTest extends TestCase
         $html = $this->get('/')->assertOk()->getContent();
 
         $this->assertStringContainsString('Penerimaan Peserta Didik Baru', $html);
-        $this->assertStringContainsString('Mulai Pendaftaran', $html);
+        $this->assertStringContainsString('Daftar Sekarang', $html);
+        // Bawaan `PublicSite::ppdbUrl()` adalah halaman PPDB Laravel yang
+        // memang ada; alamat Google Form baru menggantikannya bila pemilik
+        // menyetelnya sendiri (butir 471).
         $this->assertStringContainsString('href="'.route('ppdb.schools').'"', $html);
         $this->assertStringContainsString('href="'.route('ppdb.check-status').'"', $html);
     }
@@ -623,21 +669,20 @@ class LandingPageTest extends TestCase
      * layar, dan tidak memuat satu angka pun yang mengaku data sungguhan
      * (butir 417).
      */
-    public function test_the_hero_composition_is_decorative_only(): void
+    public function test_the_hero_photo_region_is_complete_even_without_a_photo(): void
     {
         $html = $this->get('/')->assertOk()->getContent();
 
-        $this->assertStringContainsString('class="hero__visual" aria-hidden="true"', $html);
+        // Tanpa foto yang diunggah, bidangnya tetap utuh dan menyatakan
+        // keadaannya — bukan kotak kosong yang tampak seperti gambar gagal
+        // dimuat, dan bukan foto sekolah lain (butir 467).
+        $this->assertStringContainsString('class="hero__media"', $html);
+        $this->assertStringContainsString('photo__ph', $html);
+        $this->assertStringContainsString('Foto menyusul', $html);
 
-        $start = strpos($html, 'class="hero__visual"');
-        $end = strpos($html, '</section>', $start);
-        $visual = strip_tags(substr($html, $start, $end - $start));
-
-        $this->assertDoesNotMatchRegularExpression(
-            '/\d/',
-            $visual,
-            'Gubahan hiasan hero tidak boleh memuat angka yang tampak seperti data.',
-        );
+        // Rasionya dikunci, sehingga tata letak tidak bergeser saat fotonya
+        // menyusul.
+        $this->assertStringContainsString('aspect-ratio', $this->styleOf($html));
     }
 
     public function test_motion_respects_the_reduced_motion_preference(): void
@@ -682,24 +727,33 @@ class LandingPageTest extends TestCase
      */
     public function test_the_english_landing_renders_no_indonesian_implementation_copy(): void
     {
-        School::factory()->create(['name' => 'SMP Madani', 'code' => 'MDN']);
+        // Diisi lebih dulu supaya seluruh bagian benar-benar dirender; bagian
+        // yang kosong tidak tampil sama sekali (butir 482), dan naskah yang
+        // tidak tampil tidak membuktikan apa pun soal terjemahannya.
+        $this->seed(PublicSiteSeeder::class);
+        SiteSetting::set('blog_url', 'https://blog.contoh.test');
 
         $text = $this->visibleTextOf($this->inEnglish()->get('/')->assertOk()->getContent());
 
-        // Judul dan ringkasan yang benar-benar tertinggal pada tinjauan L2.
+        // Tagline resmi tetap berbahasa Indonesia di mode EN, dan itu benar:
+        // ia identitas merek yang diserahkan pemilik, bukan naskah antarmuka —
+        // sama seperti nama cabang, yang juga tidak pernah diterjemahkan
+        // (butir 479). Ia dikeluarkan lebih dulu supaya tidak mengaburkan
+        // pemeriksaan di bawahnya.
+        $text = str_replace(PublicSite::TAGLINE, '', $text);
+
+        // Naskah antarmuka V2: judul bagian, label kartu, dan teks bawaan.
         foreach ([
-            'Data Siswa & Kelas',
-            'Akademik & E-Rapor',
-            'Keuangan Sekolah',
-            'Notifikasi & Pengumuman',
-            'Formulir pendaftaran publik per cabang',
-            'Data induk siswa',
-            'Input nilai per komponen',
-            'Jenis tagihan',
-            'Ujian pilihan ganda',
-            'Pengumuman ke seluruh sekolah',
-            'Jadwal, nilai per mata pelajaran',
-            'Ringkasan anak',
+            'Belajar dengan Hati',
+            'Tumbuh dengan Aksi',
+            'Sukses untuk Masa Depan',
+            'Unit Pendidikan',
+            'Pendekatan pendidikan kami',
+            'Akses Sistem Informasi',
+            'Guru & Staf',
+            'Kenali Smart Sukses School',
+            'Foto menyusul',
+            'Kehidupan di Smart Sukses School',
         ] as $indonesian) {
             $this->assertStringNotContainsString(
                 $indonesian,
@@ -710,10 +764,14 @@ class LandingPageTest extends TestCase
 
         // Dan penggantinya memang tampil.
         foreach ([
-            'Student & Class Records',
-            'Academics & Digital Report Cards',
-            'School Finance',
-            'Notifications & Announcements',
+            'Learning with Heart',
+            'Growing through Action',
+            'Success for the Future',
+            'Education Units',
+            'Information System Access',
+            'Teachers & Staff',
+            'Photo coming soon',
+            'Life at Smart Sukses School',
         ] as $english) {
             $this->assertStringContainsString($english, $text);
         }
@@ -727,6 +785,10 @@ class LandingPageTest extends TestCase
     public function test_the_english_landing_carries_no_stray_indonesian_words(): void
     {
         $text = $this->visibleTextOf($this->inEnglish()->get('/')->assertOk()->getContent());
+
+        // Tagline resmi pemilik dikecualikan: merek, bukan naskah antarmuka
+        // (butir 479).
+        $text = str_replace(PublicSite::TAGLINE, '', $text);
 
         foreach ([' yang ', ' dan ', ' dengan ', ' untuk ', ' tidak ', ' siswa ', ' sekolah '] as $word) {
             $this->assertStringNotContainsString(
@@ -765,16 +827,25 @@ class LandingPageTest extends TestCase
 
     public function test_the_mobile_menu_carries_every_destination(): void
     {
+        $this->seed(PublicSiteSeeder::class);
+        SiteSetting::set('blog_url', 'https://blog.contoh.test');
+
         $html = $this->get('/')->assertOk()->getContent();
 
         $panel = $this->between($html, '<nav class="nav__panel"', '</details>');
 
-        foreach (['#konten', '#akses', '#fitur', '#tentang', '#cabang'] as $anchor) {
+        foreach ([
+            '#konten',
+            '#tentang',
+            '#unit',
+            '#program',
+            '#kegiatan',
+            '#artikel',
+            '#ppdb',
+            '#akses',
+            '#kontak',
+        ] as $anchor) {
             $this->assertStringContainsString('href="'.$anchor.'"', $panel, "Menu kehilangan {$anchor}.");
-        }
-
-        foreach ([route('ppdb.schools'), route('ppdb.check-status')] as $url) {
-            $this->assertStringContainsString('href="'.$url.'"', $panel, "Menu kehilangan {$url}.");
         }
 
         // Pemilih bahasa ikut di dalam panel.
@@ -798,108 +869,87 @@ class LandingPageTest extends TestCase
     // ------------------------------------------------------- aksi & bentuk
 
     /**
-     * Aksi kartu akses berbentuk pil yang terlihat dapat ditekan, dan PPDB —
-     * urutan pertama — mendapat pil terisi (butir 426).
+     * Aksi kartu akses tetap berbentuk pil yang terlihat dapat ditekan
+     * (butir 426).
+     *
+     * Kartu PPDB tidak lagi ikut di sini: pendaftaran punya bagiannya sendiri
+     * di V2, dan bagian ini khusus untuk yang sudah punya akun (butir 475).
      */
-    public function test_the_access_actions_look_pressable_with_ppdb_first(): void
+    public function test_the_access_cards_share_the_single_login_door(): void
     {
         $html = $this->get('/')->assertOk()->getContent();
 
         $this->assertStringContainsString('.access__go {', $html);
         $this->assertStringContainsString('border-radius: var(--radius-pill);', $html);
-        $this->assertStringContainsString('access--primary', $html);
 
-        $section = $this->between($html, 'id="akses"', 'id="fitur"');
+        $section = $this->between($html, 'id="akses"', 'id="kontak"');
 
-        // Urutannya dibaca dari judul kartunya: sejak ketiga peran berbagi satu
-        // alamat, URL tidak lagi dapat membedakan mereka (butir 437).
-        $order = [];
-
-        foreach ([
-            'Pendaftaran (PPDB)' => 'ppdb',
-            'Portal Siswa' => 'siswa',
-            'Portal Orang Tua' => 'ortu',
-            'Admin &amp; Guru' => 'panel',
-        ] as $title => $label) {
-            $at = strpos($section, $title);
-
-            $this->assertIsInt($at, "Kartu {$title} tidak ada.");
-
-            $order[$at] = $label;
+        foreach (['Siswa', 'Orang Tua', 'Guru &amp; Staf'] as $title) {
+            $this->assertStringContainsString($title, $section, "Kartu {$title} tidak ada.");
         }
 
-        ksort($order);
-
-        $this->assertSame(['ppdb', 'siswa', 'ortu', 'panel'], array_values($order));
-
-        // Dan ketiga kartu peran memang mengarah ke pintu yang sama.
+        // Ketiganya mengarah ke pintu yang sama — dan tidak ada pintu keempat
+        // per peran yang dikarang.
         $this->assertSame(3, substr_count($section, 'href="'.route('login').'"'));
     }
 
     /**
      * Bagian Tentang berhenti menjadi baris kartu putih ketiga (butir 427).
      */
-    public function test_the_about_section_is_not_another_card_row(): void
+    /**
+     * Bagian Tentang menjelaskan programnya, bukan perangkat lunaknya.
+     *
+     * Ketiga kartunya menguraikan tagline resmi kata demi kata — itulah janji
+     * yang diberikan pemilik, dan itulah yang harus dibaca pengunjung
+     * (butir 475).
+     */
+    public function test_the_about_section_explains_the_school_not_the_software(): void
     {
+        $this->seed(PublicSiteSeeder::class);
+
         $html = $this->get('/')->assertOk()->getContent();
 
-        $about = $this->between($html, 'id="tentang"', '</section>');
+        $about = $this->between($html, 'id="tentang"', 'id="unit"');
 
-        $this->assertStringContainsString('class="about"', $about);
-        $this->assertStringContainsString('class="about__item"', $about);
-        $this->assertStringNotContainsString('class="card"', $about);
-
-        // Ketiga alasannya tetap ada, kata demi kata.
-        foreach ([
-            'Terpadu sejak pendaftaran',
-            'Mendukung banyak cabang',
-            'Diakses lewat peramban',
-        ] as $pillar) {
+        foreach (['Belajar dengan Hati', 'Tumbuh dengan Aksi', 'Sukses untuk Masa Depan'] as $pillar) {
             $this->assertStringContainsString($pillar, $about);
         }
-    }
 
-    /**
-     * Kartu cabang menonjolkan identitasnya, dan alamatnya tetap hanya yang
-     * benar-benar tersimpan — tidak ada yang dikarang (butir 350).
-     */
-    public function test_the_branch_card_leads_with_its_identity(): void
-    {
-        School::factory()->create([
-            'name' => 'SMP Madani',
-            'code' => 'MDN',
-            'address' => 'Jalan Contoh No. 1',
-        ]);
-
-        $html = $this->get('/')->assertOk()->getContent();
-        $card = $this->between($html, 'id="cabang"', '</section>');
-
-        $this->assertStringContainsString('class="branch__name"', $card);
-        $this->assertStringContainsString('SMP Madani', $card);
-        $this->assertStringContainsString('MDN', $card);
-        $this->assertStringContainsString('class="branch__address"', $card);
-        $this->assertStringContainsString('Jalan Contoh No. 1', $card);
-
-        // Alamat kosong tidak menghasilkan baris kosong.
-        School::query()->update(['address' => null]);
-        $withoutAddress = $this->between($this->get('/')->getContent(), 'id="cabang"', '</section>');
-        $this->assertStringNotContainsString('class="branch__address"', $withoutAddress);
-    }
-
-    /**
-     * Label hero tetap hiasan: nama fitur yang benar-benar ada, tanpa angka.
-     */
-    public function test_the_hero_labels_name_real_features_without_numbers(): void
-    {
-        $html = $this->get('/')->assertOk()->getContent();
-
-        $visual = $this->between($html, 'class="hero__visual"', '</section>');
-
-        foreach (['PPDB', 'Jadwal', 'Nilai', 'Ujian', 'Portal'] as $label) {
-            $this->assertStringContainsString('>'.$label.'</span>', $visual);
+        // Istilah perangkat lunak tidak muncul di bagian yang menjelaskan
+        // sekolahnya.
+        //
+        // Dicocokkan sebagai kata utuh, bukan potongan: "API" ada di dalam
+        // "menghadapi", dan pemeriksaan substring akan menuduh kalimat
+        // Indonesia yang biasa saja.
+        foreach (['modul', 'platform', 'dashboard', 'API', 'fitur'] as $software) {
+            $this->assertDoesNotMatchRegularExpression(
+                '/\b'.preg_quote($software, '/').'\b/i',
+                strip_tags($about),
+                "Bagian Tentang menjelaskan perangkat lunak, bukan sekolahnya: {$software}",
+            );
         }
+    }
 
-        $this->assertDoesNotMatchRegularExpression('/\d/', strip_tags($visual));
+    /**
+     * Hero memimpin dengan sekolahnya: nama, tagline resmi, dan foto — bukan
+     * tiruan antarmuka, dan tetap tanpa satu angka pun yang mengaku data.
+     */
+    public function test_the_hero_leads_with_the_school_and_no_invented_numbers(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $hero = $this->between($html, '<section class="hero">', 'id="tentang"');
+
+        $this->assertStringContainsString(PublicSite::TAGLINE, $hero);
+        $this->assertStringContainsString('class="hero__media"', $hero);
+
+        // Mock antarmuka V1 sudah tidak ada.
+        $this->assertStringNotContainsString('hero__visual', $hero);
+        $this->assertStringNotContainsString('class="mock', $hero);
+
+        // Tidak ada angka yang tampak seperti data sekolah — tidak jumlah
+        // siswa, tidak jumlah alumni, tidak tahun berdiri (butir 468).
+        $this->assertDoesNotMatchRegularExpression('/\d/', strip_tags($hero));
     }
 
     // ------------------------------------------------------------- bantuan
@@ -997,18 +1047,24 @@ class LandingPageTest extends TestCase
      * Kedelapan kemampuan tetap ada; yang berubah bentuknya di layar sempit
      * (butir 434).
      */
-    public function test_the_capability_list_gets_a_compact_mobile_form(): void
+    /**
+     * Galeri kegiatan tidak boleh menjadi dinding kartu di ponsel: satu kolom
+     * lebih dulu, melebar hanya ketika layarnya memang cukup (butir 477).
+     */
+    public function test_the_activity_gallery_is_single_column_first(): void
     {
-        $html = $this->get('/')->assertOk()->getContent();
+        $this->seed(PublicSiteSeeder::class);
 
-        $features = $this->between($html, 'id="fitur"', '</section>');
+        $css = $this->styleOf($this->get('/')->assertOk()->getContent());
 
-        $this->assertStringContainsString('grid--rows', $features);
-        $this->assertSame(8, substr_count($features, '<article class="card">'));
+        $gallery = $this->between($css, '.gallery {', '.gallery__item {');
 
-        $css = $this->styleOf($html);
-        $this->assertStringContainsString('@media (max-width: 30rem) {', $css);
-        $this->assertStringContainsString('.grid--rows .card {', $css);
+        $this->assertStringContainsString('grid-template-columns: 1fr;', $gallery);
+
+        // Kolom kedua dan ketiga muncul di balik media query, bukan sebagai
+        // bawaan.
+        $this->assertStringContainsString('@media (min-width: 40rem)', $gallery);
+        $this->assertStringContainsString('@media (min-width: 64rem)', $gallery);
     }
 
     /**

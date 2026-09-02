@@ -26,6 +26,7 @@ use App\Models\StudentClass;
 use App\Models\StudentFee;
 use App\Models\User;
 use App\Support\Locale;
+use Database\Seeders\PublicSiteSeeder;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -76,28 +77,39 @@ class BilingualCoverageTest extends TestCase
 
     public function test_the_public_landing_page_reads_in_both_languages(): void
     {
+        // Bagian yang belum berisi tidak dirender sama sekali (butir 482),
+        // sehingga naskahnya harus benar-benar tampil dulu untuk dapat diuji
+        // terjemahannya.
+        $this->seed(PublicSiteSeeder::class);
+
         $this->get('/')
             ->assertOk()
-            ->assertSee('Platform Manajemen Sekolah Terintegrasi', escape: false)
-            ->assertSee('Akses Pengguna', escape: false);
+            ->assertSee('Unit Pendidikan', escape: false)
+            ->assertSee('Akses Sistem Informasi', escape: false);
 
         $this->inEnglish()
             ->get('/')
             ->assertOk()
-            ->assertSee('An Integrated School Management Platform', escape: false)
-            ->assertSee('User Access', escape: false)
-            ->assertDontSee('Platform Manajemen Sekolah Terintegrasi', escape: false);
+            ->assertSee('Education Units', escape: false)
+            ->assertSee('Information System Access', escape: false)
+            ->assertDontSee('Akses Sistem Informasi', escape: false);
     }
 
-    public function test_the_landing_feature_list_reads_in_both_languages(): void
+    /**
+     * Naskah bawaan halaman muka ikut diterjemahkan; isi yang disunting pemilik
+     * tidak (butir 479).
+     */
+    public function test_the_landing_default_copy_reads_in_both_languages(): void
     {
-        $this->get('/')->assertOk()->assertSee('Ujian Online', escape: false);
+        $this->seed(PublicSiteSeeder::class);
+
+        $this->get('/')->assertOk()->assertSee('Kehidupan di Smart Sukses School', escape: false);
 
         $this->inEnglish()
             ->get('/')
             ->assertOk()
-            ->assertSee('Online Exams', escape: false)
-            ->assertSee('Online Admissions', escape: false);
+            ->assertSee('Life at Smart Sukses School', escape: false)
+            ->assertSee('About Smart Sukses School', escape: false);
     }
 
     // ============================================== B. halaman publik PPDB
