@@ -8017,6 +8017,230 @@ sebelum satu menu pun terbuka. Penandanya dilepas **hanya** di SimulationSeeder
 UserSeeder. Pagar yang dilunakkan demi kenyamanan demo akan tetap lunak saat
 tidak ada yang menonton.
 
+### 464. Isi situs publik tidak punya kolom cabang sama sekali
+
+Halaman muka adalah situs payung Smart Sukses School, bukan situs salah satu
+cabang, dan ia dibaca tamu yang belum login. Tamu tidak punya `school_id`.
+
+`site_settings` dan `site_blocks` karena itu **tidak punya kolom `school_id`**,
+bukan punya kolom nullable yang kebetulan kosong. Kolom nullable adalah undangan
+untuk diisi nanti, dan sekali terisi halaman publik berubah menjadi milik satu
+cabang tanpa ada yang memutuskan begitu.
+
+`SchoolScope` tidak dilemahkan di mana pun; kedua model ini hanya tidak pernah
+memakainya. `SiteBlockPolicy` pun sengaja tanpa `sharesTenant()` — recordnya
+tidak punya `school_id`, sehingga pemeriksaan itu justru akan menolak semua
+orang termasuk yang berhak.
+
+### 465. Empat jenis blok, satu tabel
+
+Unit pendidikan, program, galeri kegiatan, dan pratinjau artikel berbentuk sama
+persis: judul, keterangan, gambar, tautan, urutan, terbit/tidak. Memisahnya
+menjadi empat tabel berarti menyalin skema identik empat kali beserta empat
+resource Filament yang identik pula. Yang membedakan hanya `type`.
+
+Enum aplikasi, bukan ENUM MySQL: menambah jenis kelima lewat ENUM menuntut ALTER
+TABLE pada tabel yang sedang dibaca halaman publik.
+
+### 466. Bawaan sebagai konstanta, bukan baris basis data
+
+Teks bawaan halaman muka hidup di `PublicSite::DEFAULTS`. Akibatnya instalasi
+yang belum pernah dijalankan seeder-nya tetap merender halaman utuh, dan admin
+yang mengosongkan satu field tidak meninggalkan lubang di situs publik.
+
+Form admin ikut terisi bawaan saat dibuka, sehingga yang disunting adalah teks
+yang benar-benar sedang tampil — bukan field kosong yang menyesatkan seolah
+halaman muka juga kosong.
+
+### 467. Foto yang belum ada adalah keadaan normal, bukan kegagalan
+
+Foto kegiatan Smart Sukses School yang sungguhan belum diserahkan. Selama itu,
+`image_path` NULL adalah keadaan bawaan halaman ini — bukan pengecualian langka.
+
+Komponen `<x-site-photo>` merender penanda bergaris berlabel "Foto menyusul"
+dengan rasio terkunci, sehingga bidang fotonya sudah utuh sekarang dan tata
+letak tidak bergeser saat foto aslinya menyusul.
+
+Yang tidak dilakukan: mengunduh foto sekolah atau siswa lain sebagai pengisi
+sementara. Foto anak yang bukan siswa Smart Sukses School, terpasang di halaman
+resmi Smart Sukses School, adalah klaim yang keliru sekalipun hanya dimaksudkan
+sebagai contoh — dan pengisi sementara punya kebiasaan bertahan lama.
+
+### 468. Tidak ada angka di halaman resmi sekolah
+
+Materi publik lama memuat klaim berupa angka: jumlah siswa, jumlah alumni. Tidak
+satu pun sudah disahkan sumber terkini, dan halaman resmi sekolah bukan tempat
+menebaknya.
+
+Seluruh naskah bawaan V2 karena itu tanpa satu angka pun, dan test memeriksanya
+sebagai pola — bukan sebagai daftar klaim yang harus diingat satu per satu.
+Tahun hak cipta di kaki halaman dikecualikan: ia dihasilkan jam sistem, bukan
+klaim tentang sekolahnya.
+
+### 469. `public_content` modul tersendiri, bukan menumpang `white_label`
+
+Keduanya soal tampilan, tetapi cakupannya berbeda secara mendasar: white-label
+adalah tampilan **satu cabang** setelah login; isi situs publik adalah halaman
+muka yang dilihat seluruh publik.
+
+Menumpangkannya berarti setiap Admin Sekolah yang berhak mengganti logo
+cabangnya sendiri seketika juga berhak mengubah halaman muka Smart Sukses
+School. Modul baru hanya diberikan ke Super Admin, dan hak Admin Sekolah atas
+cabangnya sendiri tidak dikurangi sedikit pun.
+
+### 470. Alamat blog dan PPDB tidak pernah ditulis di template
+
+Keduanya berpindah domain: blog ke `blog.smartsukses.sch.id`, dan PPDB kini
+Google Form yang suatu saat kembali ke Laravel.
+
+Nama host yang tersebar di berkas Blade membuat perpindahan itu menjadi
+pekerjaan menyisir alih-alih menyunting satu field. Keduanya pengaturan, dan
+test memastikan tidak ada satu nama host pun yang lolos ke template.
+
+### 471. Bawaan PPDB adalah halaman yang memang ada
+
+`ppdb_url` yang kosong jatuh ke `route('ppdb.schools')` — halaman PPDB Laravel
+yang sudah berjalan — bukan ke alamat Google Form.
+
+Menuliskan alamat formulir milik sekolah sebagai bawaan di dalam kode berarti
+mengarang alamat yang belum tentu berlaku. Pemilik menempelkan alamat yang
+sedang dipakai dari panel admin, dan fungsi PPDB Laravel tetap utuh di
+belakangnya.
+
+### 472. Seeder isi publik tidak menimpa suntingan pemilik
+
+`PublicSiteSeeder` aman di produksi — hanya teks dan struktur, tanpa akun dan
+tanpa data pribadi — sehingga ia boleh didaftarkan di DatabaseSeeder, berbeda
+dengan SimulationSeeder.
+
+Konsekuensinya ia dijalankan ulang setiap deployment, jadi ia tidak boleh
+mengembalikan teks ke bawaan. `image_path` khususnya tidak pernah ikut ditulis:
+seeder yang melepas foto yang sudah diunggah pemilik lebih buruk daripada seeder
+yang tidak berbuat apa-apa.
+
+### 473. Smart Building dan Smart Bee adalah unit, bukan mitra
+
+Penegasan langsung pemilik. Smart Building unit SMA dan Smart Bee unit SD, dan
+keduanya **bagian dari** Smart Sukses School.
+
+Materi lama sempat menampilkannya seolah lembaga sejajar. Halaman muka baru
+menyatakan hubungannya secara eksplisit di judul bagiannya, dan test menjaga
+jenjang masing-masing tetap melekat pada namanya.
+
+### 474. Unggahan halaman muka: WEBP boleh, SVG tidak
+
+Logo cabang dibatasi JPG/PNG (butir 42). Media halaman muka menambahkan WEBP —
+ini halaman publik yang memuat banyak foto sekaligus, WEBP memangkas ukurannya
+secara berarti, dan berkas merek yang diserahkan pemilik sendiri berformat WEBP.
+
+SVG tetap ditolak: ia dapat memuat skrip.
+
+Nama berkas ditamai ulang ULID oleh Filament. `preserveFilenames(false)` ditulis
+eksplisit meski itu perilaku bawaannya, supaya yang dijaga test adalah janjinya
+— bukan bawaan pustaka yang dapat berubah.
+
+Penghapusan berkas dipagari direktori: nilai `image_path` berasal dari basis
+data, dan basis data dapat berisi apa saja seiring waktu. `../../.env` dan
+`schools/logos/logo.png` ditolak, bukan dituruti.
+
+### 475. Halaman muka menjelaskan sekolahnya, bukan perangkat lunaknya
+
+Sampai V1, `/` menjual sistem: delapan kartu fitur, tiruan dasbor di hero, dan
+"Akses Pengguna" tepat di bawah hero (butir 418).
+
+Umpan balik pemilik setelah simulasi membalik premisnya — pembaca `/` adalah
+orang tua calon siswa, bukan calon pengguna sistem. Bagian akses turun ke dekat
+kaki halaman, daftar fitur dan daftar cabang hilang sama sekali, dan hero
+memimpin dengan nama sekolah, tagline, serta foto.
+
+Sistemnya tidak disembunyikan; ia hanya berhenti menjadi hal pertama yang
+dibaca orang asing.
+
+### 476. V2 memakai sistem token yang sudah ada
+
+Bagian bergambar yang ditambahkan V2 memakai token warna, skala jarak, radius,
+dan bayangan yang sudah ada di `layouts/landing.blade.php` (butir 416). Tidak
+ada skala kedua yang diperkenalkan, dan tetap tanpa Vite (butir 345).
+
+### 477. Galeri kegiatan bukan dinding kartu seragam
+
+Enam kartu berukuran sama akan terbaca sebagai daftar, bukan sebagai sekolah
+yang hidup. Kartu pertama karena itu melebar dua kolom pada ≥64rem sehingga
+bagian itu punya titik berat.
+
+Di bawah 40rem seluruhnya kembali satu kolom: efek editorial tidak boleh dibayar
+dengan dinding kartu di ponsel.
+
+### 478. Satu query untuk seluruh blok isi
+
+Query per jenis membuat halaman muka membayar empat query untuk mengambil
+belasan baris dari satu tabel yang sama — dan menambah jenis kelima berarti
+menambah query kelima, pada halaman yang justru paling sering dibuka orang
+asing.
+
+Seluruh blok terbit diambil sekali lalu dikelompokkan di PHP. Anggaran query
+halaman muka tetap dua, sama seperti sebelum V2.
+
+### 479. Naskah antarmuka diterjemahkan, isi pemilik tidak
+
+Teks bawaan dikirim bersama aplikasi, jadi ia naskah antarmuka dan
+diterjemahkan seperti label lain. Teks yang ditulis pemilik adalah isi, dan isi
+ditampilkan persis sebagaimana diketik: tidak ada kamus yang tahu terjemahan
+kalimat yang baru saja diketik seseorang.
+
+Tagline resmi tetap berbahasa Indonesia di mode EN, dan itu benar — ia identitas
+merek, sama seperti nama cabang yang juga tidak pernah diterjemahkan.
+
+### 480. Nama sekolah pindah dari `<h1>` ke eyebrow
+
+Judul hero harus dapat disunting pemilik. Nama sekolah yang terkunci di `<h1>`
+membuat judul editable itu tidak punya tempat, dan menumpuk keduanya berarti
+tiga baris teks bertumpuk sebelum satu kalimat pun terbaca.
+
+Identitas dibawa eyebrow di atas judul — dan logo di navbar sudah menyebutkannya
+lebih dulu.
+
+### 481. PublicSiteSeeder tidak didaftarkan di DatabaseSeeder
+
+Isinya aman — teks dan struktur, tanpa akun dan tanpa data pribadi — sehingga
+mendaftarkannya sempat terasa wajar. Yang membuatnya tidak wajar bukan isinya
+melainkan akibatnya: ia **menerbitkan** ke halaman yang dilihat publik,
+termasuk enam baris galeri yang belum berfoto.
+
+`php artisan db:seed` dijalankan sebagai bagian deployment, dan deployment tidak
+boleh menerbitkan apa pun ke situs sekolah tanpa ada yang memutuskan begitu.
+Menambah isi ke halaman muka adalah keputusan, bukan efek samping.
+
+Ia tetap tersedia dan tetap dipakai — hanya harus dipanggil dengan sengaja:
+
+```
+php artisan db:seed --class=PublicSiteSeeder
+```
+
+Butir 472 tetap berlaku dan kini terbukti terhadap data sungguhan: basis data
+pengembangan sudah berisi alamat PPDB, alamat blog, dan kontak yang diisi
+pemilik lewat panel admin, dan menjalankan ulang seeder tidak menyentuh satu pun
+di antaranya.
+
+### 482. Bagian tanpa isi tidak dirender sama sekali
+
+Konsekuensi langsung butir 481: "belum ada isi" menjadi keadaan awal produksi
+yang normal, bukan kejadian langka.
+
+Sebelum penjaga ini, pemasangan yang belum diisi menampilkan judul bagian
+"Unit Pendidikan", "Program", dan "Kegiatan" di atas ruang kosong — dan judul di
+atas ruang kosong terbaca sebagai kerusakan, bukan sebagai halaman yang belum
+lengkap.
+
+Keempat bagian yang isinya dari basis data karena itu hanya dirender bila
+isinya ada. Bagian artikel punya syarat kedua: alamat blog yang sudah disetel
+sudah cukup, karena tautannya sendiri yang menjadi isinya.
+
+Menu utama dan daftar "Jelajahi" di kaki halaman ikut menyusut bersamanya.
+Tautan menuju jangkar yang tidak dirender adalah tautan mati — pengunjung
+menekannya dan tidak terjadi apa-apa — dan itu diuji sebagai pola, bukan sebagai
+daftar jangkar yang harus diingat satu per satu.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
