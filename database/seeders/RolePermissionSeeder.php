@@ -43,6 +43,12 @@ class RolePermissionSeeder extends Seeder
             'parent_portal' => 'manage',
             'white_label' => 'manage',
             'user' => 'manage',
+
+            // Situs payung Smart Sukses School. Sengaja **tidak** diberikan ke
+            // Admin Sekolah: isinya bukan milik satu cabang, dan cabang yang
+            // dapat menyunting halaman muka bersama berarti perubahan satu
+            // cabang tampil sebagai identitas seluruh sekolah (butir 469).
+            'public_content' => 'manage',
         ],
 
         RoleName::SchoolAdmin->value => [

@@ -74,6 +74,19 @@ enum PermissionName: string
     case UserView = 'user.view';
     case UserManage = 'user.manage';
 
+    /*
+     * Isi Situs Publik — halaman muka `/`.
+     *
+     * Modul tersendiri, bukan menumpang `white_label`. Keduanya sama-sama soal
+     * tampilan, tetapi cakupannya berbeda secara mendasar: white-label adalah
+     * tampilan **satu cabang** setelah login, sedangkan ini adalah situs payung
+     * Smart Sukses School yang dilihat seluruh publik. Menumpangkannya berarti
+     * setiap Admin Sekolah yang berhak mengganti logo cabangnya sendiri
+     * seketika juga berhak mengubah halaman muka sekolah (butir 469).
+     */
+    case PublicContentView = 'public_content.view';
+    case PublicContentManage = 'public_content.manage';
+
     /**
      * Nama modul (segmen pertama) — dipakai untuk mengelompokkan izin di UI.
      */
@@ -100,6 +113,7 @@ enum PermissionName: string
             'parent_portal' => 'Parent Portal',
             'white_label' => 'White-label Settings',
             'user' => 'User Management',
+            'public_content' => 'Isi Situs Publik',
             default => str($this->module())->headline()->toString(),
         };
     }
