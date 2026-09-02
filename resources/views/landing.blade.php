@@ -1,53 +1,54 @@
 {{--
-    Halaman muka publik Smart Sukses School.
+    Halaman muka publik Smart Sukses School — V2.
 
-    Tambahan langsung atas permintaan pemilik; tidak ada di blueprint Phase 1
-    (docs/owner-scope-changes.md bagian A).
+    **Perubahan maksud, bukan perubahan gaya.** V1 menjelaskan perangkat
+    lunaknya: modul, fitur, portal. Umpan balik pemilik setelah simulasi
+    menyatakan pembaca `/` bukan calon pengguna sistem melainkan orang tua calon
+    siswa, dan yang harus ia pahami lebih dulu adalah sekolahnya. Sistem
+    informasi tetap ada, turun menjadi satu bagian "Akses Sistem" menjelang kaki
+    halaman (butir 475).
 
-    Seluruh teks di sini **naskah implementasi**, bukan naskah pemilik: Pak Akbar
-    belum menyerahkan teks pemasaran. Karena itu tidak ada satu pun angka,
-    testimoni, penghargaan, atau nama mitra — dan tidak ada nomor telepon, surel,
-    maupun alamat yang dikarang. Yang disebut hanya kemampuan yang benar-benar
-    sudah berjalan (butir 347).
+    Seluruh teks, tautan, dan foto dibaca lewat `App\Support\PublicSite`,
+    sehingga dapat disunting pemilik dari panel admin tanpa menyentuh berkas ini
+    (butir 466). Yang tetap ditulis di sini hanya label antarmuka — nama menu,
+    label tombol — karena itu bagian dari aplikasinya, bukan naskah pemilik.
 
-    Batch L2 menata ulang urutan dan tampilannya. Yang berubah paling menentukan:
-    bagian "Akses Pengguna" naik ke tepat bawah hero, sehingga pengunjung tidak
-    perlu menggulung untuk menemukan pintu masuknya (butir 418).
+    Tidak ada satu angka pun: jumlah siswa, jumlah alumni, tahun berdiri, dan
+    klaim sejenis dari materi publik lama tidak diulang karena belum ada sumber
+    terkini yang mengesahkannya (butir 468).
 --}}
 @extends('layouts.landing')
 
-@section('title', config('app.name').' — '.__('Platform Manajemen Sekolah Terintegrasi'))
+@section('title', config('app.name').' — '.__('Sekolah Berbasis Beasiswa, Karakter, dan Life Skills'))
 
-@section('description', 'Smart Sukses School: platform manajemen sekolah terintegrasi untuk PPDB, data siswa, akademik dan e-rapor, keuangan, ujian online, notifikasi, serta portal siswa dan orang tua.')
+@section('description', 'Smart Sukses School adalah ekosistem pendidikan berbasis beasiswa dengan dua unit: Smart Bee (SD) dan Smart Building (SMA). Pembelajaran akademik, character building, life skills, dan kepemimpinan.')
 
 @php
     /**
-     * Ikon garis, satu bentuk per maksud.
-     *
-     * Sebelum batch ini kedelapan kartu fitur memakai satu ikon centang yang
-     * sama, sehingga ikonnya tidak membedakan apa pun dan hanya menjadi hiasan
-     * berulang. Bentuknya kini berbeda per fitur, dan seluruhnya
-     * `aria-hidden` — makna tetap dibawa judul dan teksnya (butir 419).
+     * Ikon garis, satu bentuk per maksud, seluruhnya `aria-hidden` — makna
+     * dibawa judul dan teksnya (butir 419).
      *
      * @var array<string, string>
      */
     $icons = [
-        'ppdb' => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M9 15h6"/><path d="M9 11h2"/>',
-        'siswa' => '<path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1 2.7 2.5 6 2.5s6-1.5 6-2.5v-5"/>',
-        'nilai' => '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/><path d="m10 8 2 2 4-4"/>',
-        'keuangan' => '<rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.5"/><path d="M6 10v5M18 10v5"/>',
-        'ujian' => '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="m9 8 2 2 4-4"/>',
-        'notifikasi' => '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
-        'portal-siswa' => '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
-        'portal-ortu' => '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M15.5 20a4.5 4.5 0 0 1 5.5-4.4"/>',
+        'hati' => '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
+        'tumbuh' => '<path d="M12 22V9"/><path d="M12 9C12 5 9 2 5 2c0 4 3 7 7 7Z"/><path d="M12 12c0-3.31 2.69-6 6-6 0 3.31-2.69 6-6 6Z"/>',
+        'sukses' => '<circle cx="12" cy="8" r="5"/><path d="M8.5 12.5 7 22l5-3 5 3-1.5-9.5"/>',
+        'buku' => '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>',
+        'topi' => '<path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c0 1 2.7 2.5 6 2.5s6-1.5 6-2.5v-5"/>',
+        'siswa' => '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+        'ortu' => '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M15.5 20a4.5 4.5 0 0 1 5.5-4.4"/>',
         'guru' => '<rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 20h10"/><path d="M8 9h6M8 13h4"/>',
-        'cabang' => '<path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M10 21v-5h4v5"/>',
-        'kalender' => '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/>',
-        'perisai' => '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>',
+        'pin' => '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+        'telepon' => '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/>',
+        'surel' => '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/>',
         'panah' => '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+        'luar' => '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/>',
         'menu' => '<path d="M4 6h16M4 12h16M4 18h16"/>',
         'tutup' => '<path d="M6 6l12 12M18 6 6 18"/>',
-        'pin' => '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+        'instagram' => '<rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/>',
+        'facebook' => '<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3Z"/>',
+        'youtube' => '<path d="M22 12s0-3.5-.45-5.17a2.7 2.7 0 0 0-1.9-1.9C17.98 4.5 12 4.5 12 4.5s-5.98 0-7.65.43a2.7 2.7 0 0 0-1.9 1.9C2 8.5 2 12 2 12s0 3.5.45 5.17a2.7 2.7 0 0 0 1.9 1.9c1.67.43 7.65.43 7.65.43s5.98 0 7.65-.43a2.7 2.7 0 0 0 1.9-1.9C22 15.5 22 12 22 12Z"/><path d="m10 15 5-3-5-3Z"/>',
     ];
 
     /** Satu pembungkus SVG untuk seluruh ikon, supaya ukurannya konsisten. */
@@ -58,6 +59,35 @@
         $size,
         $icons[$name] ?? '',
     );
+
+    /**
+     * Menu utama, ditulis satu kali.
+     *
+     * Strip lebar dan panel seluler menampilkan daftar yang sama; menulisnya
+     * dua kali berarti keduanya berbeda diam-diam pada perubahan berikutnya.
+     *
+     * Butir menu yang bagiannya tidak dirender ikut dibuang: bagian yang belum
+     * berisi memang tidak ditampilkan (butir 482), dan tautan menuju jangkar
+     * yang tidak ada adalah tautan mati — pengunjung menekannya dan tidak
+     * terjadi apa-apa.
+     *
+     * @var array<string, string>
+     */
+    $menu = array_filter([
+        '#konten' => __('Beranda'),
+        '#tentang' => __('Tentang'),
+        '#unit' => $units->isNotEmpty() ? __('Unit Pendidikan') : null,
+        '#program' => $programs->isNotEmpty() ? __('Program') : null,
+        '#kegiatan' => $gallery->isNotEmpty() ? __('Kegiatan') : null,
+        '#artikel' => ($articles->isNotEmpty() || $site->blogUrl()) ? __('Artikel') : null,
+        '#ppdb' => __('PPDB'),
+    ]);
+
+    $socials = array_filter([
+        'instagram' => $site->social('instagram'),
+        'facebook' => $site->social('facebook'),
+        'youtube' => $site->social('youtube'),
+    ]);
 @endphp
 
 @section('content')
@@ -65,26 +95,23 @@
     <header class="nav">
         <div class="shell nav__inner">
             <a href="{{ route('landing') }}" class="brand">
-                <span class="brand__mark" aria-hidden="true">
-                    {{-- Ikon hiasan, bukan logo resmi: tidak ada berkas logo
-                         Smart Sukses School di repository, dan tidak ada yang
-                         dikarang (butir 348). --}}
-                    {!! $icon('siswa', 20) !!}
-                </span>
-                <span class="brand__text">
-                    <span class="brand__name">{{ config('app.name') }}</span>
-                    <span class="brand__tag">{{ __('Sistem Informasi Sekolah') }}</span>
-                </span>
+                {{-- Logo dibaca dari pengaturan, dengan berkas merek yang
+                     diserahkan pemilik sebagai bawaan. Tidak dipatri di Blade:
+                     pemilik harus dapat menggantinya sendiri (butir 466). --}}
+                <img
+                    src="{{ $site->logoUrl() }}"
+                    alt="{{ config('app.name') }}"
+                    class="brand__logo"
+                    width="500"
+                    height="200"
+                >
             </a>
 
-            {{-- Strip lengkap; muncul hanya ketika layarnya memang cukup lebar. --}}
             <nav class="nav__links" aria-label="{{ __('Navigasi utama') }}">
-                <a class="nav__link" href="#konten">{{ __('Beranda') }}</a>
-                <a class="nav__link" href="#akses">{{ __('Akses Pengguna') }}</a>
-                <a class="nav__link" href="#fitur">{{ __('Fitur') }}</a>
-                <a class="nav__link" href="#tentang">{{ __('Tentang') }}</a>
-                <a class="nav__link" href="#cabang">{{ __('Cabang') }}</a>
-                <a class="nav__link" href="{{ route('ppdb.schools') }}">{{ __('PPDB') }}</a>
+                @foreach ($menu as $href => $label)
+                    <a class="nav__link" href="{{ $href }}">{{ $label }}</a>
+                @endforeach
+
                 <a href="{{ route('login') }}" class="btn btn--primary nav__cta">{{ __('Masuk') }}</a>
                 <x-locale-switch />
             </nav>
@@ -99,13 +126,11 @@
                 </summary>
 
                 <nav class="nav__panel" aria-label="{{ __('Navigasi utama') }}">
-                    <a href="#konten">{{ __('Beranda') }}</a>
-                    <a href="#akses">{{ __('Akses Pengguna') }}</a>
-                    <a href="#fitur">{{ __('Fitur') }}</a>
-                    <a href="#tentang">{{ __('Tentang') }}</a>
-                    <a href="#cabang">{{ __('Cabang') }}</a>
-                    <a href="{{ route('ppdb.schools') }}">{{ __('PPDB') }}</a>
-                    <a href="{{ route('ppdb.check-status') }}">{{ __('Cek Status PPDB') }}</a>
+                    @foreach ($menu as $href => $label)
+                        <a href="{{ $href }}">{{ $label }}</a>
+                    @endforeach
+                    <a href="#akses">{{ __('Akses Sistem') }}</a>
+                    <a href="#kontak">{{ __('Kontak') }}</a>
 
                     <div class="nav__panel-locale">
                         <span>{{ __('Bahasa / Language') }}</span>
@@ -124,338 +149,368 @@
         <section class="hero">
             <div class="shell hero__inner">
                 <div class="hero__copy">
+                    {{-- Identitas sekolah dibawa eyebrow, bukan <h1>: judulnya
+                         sendiri harus dapat disunting pemilik, dan nama sekolah
+                         yang terkunci di <h1> membuat judul editable itu tidak
+                         punya tempat (butir 480). --}}
                     <span class="eyebrow">
                         <span class="eyebrow__dot" aria-hidden="true"></span>
-                        {{ __('Platform Manajemen Sekolah Terintegrasi') }}
+                        {{ config('app.name') }}
                     </span>
 
-                    {{-- Satu <h1> di seluruh halaman. Dua bagian kalimat, dua
-                         kunci terjemahan — bukan satu kalimat ber-HTML yang
-                         harus diterjemahkan berikut markupnya. --}}
-                    <h1>
-                        <span class="accentuate">{{ __('Belajar, mengelola, dan terhubung') }}</span>
-                        {{ __('dalam satu sistem sekolah') }}
-                    </h1>
+                    {{-- Satu <h1> di seluruh halaman, dan isinya dapat diubah
+                         dari panel admin. --}}
+                    <h1>{{ $site->text('hero_heading') }}</h1>
 
-                    <p class="hero__lead">
-                        {{ __('Smart Sukses School menyatukan penerimaan siswa baru, data akademik, keuangan sekolah, ujian online, dan komunikasi dengan orang tua ke dalam satu sistem yang dapat diakses dari mana saja.') }}
-                    </p>
+                    {{-- Tagline resmi pemilik, kata demi kata. Konstanta, bukan
+                         pengaturan yang dapat disunting — lihat PublicSite. --}}
+                    <p class="hero__tagline">{{ \App\Support\PublicSite::TAGLINE }}</p>
+
+                    <p class="hero__lead">{{ $site->text('hero_description') }}</p>
 
                     <div class="hero__cta">
-                        <a href="{{ route('ppdb.schools') }}" class="btn btn--accent btn--lg">{{ __('Daftar PPDB') }}</a>
-                        {{-- Tidak ada satu halaman masuk untuk semua peran, jadi tombol
-                             ini mengarah ke bagian akses — bukan berpura-pura ada
-                             (butir 349). --}}
-                        <a href="{{ route('login') }}" class="btn btn--ghost btn--lg">{{ __('Masuk ke Sistem') }}</a>
+                        <a
+                            href="{{ $site->ppdbUrl() }}"
+                            class="btn btn--accent btn--lg"
+                            @if ($site->ppdbIsExternal()) target="_blank" rel="noopener" @endif
+                        >{{ __('Daftar PPDB') }}</a>
+
+                        <a href="#tentang" class="btn btn--ghost btn--lg">{{ __('Kenali Smart Sukses School') }}</a>
                     </div>
 
                     <p class="hero__note">
-                        {{ __('Satu halaman masuk untuk semua — sistem mengenali peran Anda dari akun.') }}
+                        {{ __('Dua unit pendidikan: Smart Bee untuk jenjang SD dan Smart Building untuk jenjang SMA.') }}
                     </p>
                 </div>
 
-                {{-- Gubahan hiasan sepenuhnya: tidak ada satu angka pun yang
-                     mengaku data sungguhan, dan seluruhnya disembunyikan dari
-                     pembaca layar. --}}
-                <div class="hero__visual" aria-hidden="true">
-                    <div class="mock">
-                        <div class="mock__bar">
-                            <span class="mock__dot"></span>
-                            <span class="mock__dot"></span>
-                            <span class="mock__dot"></span>
-                            <span class="mock__title">{{ __('Portal Sekolah') }}</span>
-                        </div>
-
-                        <div class="mock__body">
-                            {{-- Label produk yang benar-benar ada, tanpa satu
-                                 angka pun (butir 428). --}}
-                            <div class="mock__chips">
-                                <span class="mock__chip">{{ __('PPDB') }}</span>
-                                <span class="mock__chip">{{ __('Jadwal') }}</span>
-                                <span class="mock__chip">{{ __('Nilai') }}</span>
-                                <span class="mock__chip">{{ __('Ujian') }}</span>
-                                <span class="mock__chip">{{ __('Portal') }}</span>
-                            </div>
-
-                            <div class="mock__tiles">
-                                <div class="mock__tile"><span class="mock__cap"></span><span class="mock__cap"></span></div>
-                                <div class="mock__tile"><span class="mock__cap"></span><span class="mock__cap"></span></div>
-                                <div class="mock__tile"><span class="mock__cap"></span><span class="mock__cap"></span></div>
-                            </div>
-
-                            <div class="mock__rows">
-                                <div class="mock__row">
-                                    <span class="mock__pill"></span>
-                                    <span class="mock__line"></span>
-                                    <span class="mock__line mock__line--short"></span>
-                                </div>
-                                <div class="mock__row">
-                                    <span class="mock__pill"></span>
-                                    <span class="mock__line"></span>
-                                    <span class="mock__line mock__line--short"></span>
-                                </div>
-                                <div class="mock__row">
-                                    <span class="mock__pill"></span>
-                                    <span class="mock__line"></span>
-                                    <span class="mock__line mock__line--short"></span>
-                                </div>
-                            </div>
-
-                            <div class="mock__chart">
-                                <span class="mock__bar-item" style="height:42%"></span>
-                                <span class="mock__bar-item" style="height:68%"></span>
-                                <span class="mock__bar-item" style="height:55%"></span>
-                                <span class="mock__bar-item" style="height:82%"></span>
-                                <span class="mock__bar-item" style="height:61%"></span>
-                                <span class="mock__bar-item" style="height:74%"></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <span class="float float--a">
-                        <span class="float__dot">{!! $icon('kalender', 14) !!}</span>
-                        {{ __('Jadwal & Nilai') }}
-                    </span>
-
-                    <span class="float float--b">
-                        <span class="float__dot">{!! $icon('perisai', 14) !!}</span>
-                        {{ __('Data per cabang terpisah') }}
-                    </span>
+                <div class="hero__media">
+                    <x-site-photo
+                        :url="$site->heroImageUrl()"
+                        :alt="__('Kegiatan siswa Smart Sukses School')"
+                        ratio="photo--wide"
+                        :eager="true"
+                    />
                 </div>
             </div>
         </section>
 
-        {{-- ============================================ akses pengguna ==== --}}
-        {{-- Sengaja bagian pertama setelah hero: pertanyaan "saya masuk lewat
-             mana" tidak boleh menuntut gulungan (butir 418). --}}
-        <section class="section section--tint" id="akses">
+        {{-- ================================================== tentang ==== --}}
+        <section class="section section--tint" id="tentang">
             <div class="shell">
                 <div class="section__head">
-                    <span class="section__kicker">{{ __('Pintu Masuk') }}</span>
-                    <h2>{{ __('Akses Pengguna') }}</h2>
-                    <p>
-                        {{ __('Masuk lewat satu halaman yang sama; sistem mengantar Anda ke bagian yang sesuai dengan akun Anda.') }}
-                    </p>
+                    <span class="section__kicker">{{ __('Tentang') }}</span>
+                    <h2>{{ $site->text('about_heading') }}</h2>
+                    <p>{{ $site->text('about_body') }}</p>
                 </div>
 
-                <div class="grid grid--4">
-                    <a class="card card--accent access access--primary" href="{{ route('ppdb.schools') }}">
-                        <span class="card__icon">{!! $icon('ppdb') !!}</span>
-                        <span class="tag tag--accent">{{ __('Calon Siswa') }}</span>
-                        <h3 class="card__title">{{ __('Pendaftaran (PPDB)') }}</h3>
-                        <p>
-                            {{ __('Mendaftar sebagai siswa baru tanpa perlu akun, lalu memeriksa status pendaftaran kapan saja.') }}
-                        </p>
-                        <span class="access__go">
-                            {{ __('Buka pendaftaran') }}
-                            <span class="access__arrow" aria-hidden="true">{!! $icon('panah', 16) !!}</span>
-                        </span>
-                        <span class="sr-only">{{ __('Buka halaman pendaftaran PPDB') }}</span>
-                    </a>
+                {{-- Tiga kata pada tagline, dijelaskan satu per satu. Bukan
+                     daftar fitur perangkat lunak: bagian ini menjelaskan
+                     programnya (butir 475). --}}
+                <div class="grid grid--3">
+                    <article class="card">
+                        <span class="card__icon" aria-hidden="true">{!! $icon('hati') !!}</span>
+                        <h3>{{ __('Belajar dengan Hati') }}</h3>
+                        <p>{{ __('Pendampingan yang mengenali setiap anak, bukan sekadar mengejar nilai.') }}</p>
+                    </article>
 
-                    <a class="card access" href="{{ route('login') }}">
-                        <span class="card__icon">{!! $icon('portal-siswa') !!}</span>
-                        <span class="tag tag--brand">{{ __('Siswa') }}</span>
-                        <h3 class="card__title">{{ __('Portal Siswa') }}</h3>
-                        <p>
-                            {{ __('Melihat jadwal, nilai, dan rapor, serta mengerjakan ujian online yang sedang dibuka.') }}
-                        </p>
-                        <span class="access__go">
-                            {{ __('Masuk portal siswa') }}
-                            <span class="access__arrow" aria-hidden="true">{!! $icon('panah', 16) !!}</span>
-                        </span>
-                        <span class="sr-only">{{ __('Masuk ke portal siswa') }}</span>
-                    </a>
+                    <article class="card">
+                        <span class="card__icon" aria-hidden="true">{!! $icon('tumbuh') !!}</span>
+                        <h3>{{ __('Tumbuh dengan Aksi') }}</h3>
+                        <p>{{ __('Karakter dan keterampilan dilatih lewat kegiatan nyata, bukan hanya dibicarakan di kelas.') }}</p>
+                    </article>
 
-                    <a class="card access" href="{{ route('login') }}">
-                        <span class="card__icon">{!! $icon('portal-ortu') !!}</span>
-                        <span class="tag tag--brand">{{ __('Orang Tua') }}</span>
-                        <h3 class="card__title">{{ __('Portal Orang Tua') }}</h3>
-                        <p>
-                            {{ __('Memantau nilai, tagihan, dan jadwal anak, serta menerima pengumuman dari sekolah.') }}
-                        </p>
-                        <span class="access__go">
-                            {{ __('Masuk portal orang tua') }}
-                            <span class="access__arrow" aria-hidden="true">{!! $icon('panah', 16) !!}</span>
-                        </span>
-                        <span class="sr-only">{{ __('Masuk ke portal orang tua') }}</span>
-                    </a>
-
-                    <a class="card access" href="{{ route('login') }}">
-                        <span class="card__icon">{!! $icon('guru') !!}</span>
-                        <span class="tag tag--brand">{{ __('Sekolah') }}</span>
-                        <h3 class="card__title">{{ __('Admin & Guru') }}</h3>
-                        <p>
-                            {{ __('Admin Sekolah, Kepala Sekolah, Guru, Wali Kelas, dan Bendahara masuk lewat panel sekolah.') }}
-                        </p>
-                        <span class="access__go">
-                            {{ __('Masuk ke panel') }}
-                            <span class="access__arrow" aria-hidden="true">{!! $icon('panah', 16) !!}</span>
-                        </span>
-                        <span class="sr-only">{{ __('Masuk ke panel sekolah') }}</span>
-                    </a>
+                    <article class="card">
+                        <span class="card__icon" aria-hidden="true">{!! $icon('sukses') !!}</span>
+                        <h3>{{ __('Sukses untuk Masa Depan') }}</h3>
+                        <p>{{ __('Bekal akademik, kemandirian, dan kepemimpinan untuk jenjang berikutnya.') }}</p>
+                    </article>
                 </div>
             </div>
         </section>
 
-        {{-- ===================================================== fitur ==== --}}
-        <section class="section" id="fitur">
+        {{-- ========================================== unit pendidikan ==== --}}
+        {{--
+            Bagian yang isinya berasal dari basis data hanya dirender bila
+            isinya memang ada.
+
+            Tanpa penjaga ini, pemasangan yang belum pernah diisi menampilkan
+            judul bagian di atas ruang kosong — lubang yang terbaca sebagai
+            kerusakan, bukan sebagai halaman yang belum lengkap. Karena
+            PublicSiteSeeder sengaja tidak berjalan otomatis di produksi
+            (butir 481), keadaan "belum ada isi" adalah keadaan awal yang
+            normal dan harus tampil rapi (butir 482).
+        --}}
+        @if ($units->isNotEmpty())
+        <section class="section" id="unit">
             <div class="shell">
                 <div class="section__head">
-                    <span class="section__kicker">{{ __('Kemampuan') }}</span>
-                    <h2>{{ __('Yang sudah dapat digunakan') }}</h2>
-                    <p>
-                        {{ __('Daftar berikut adalah kemampuan yang sudah berjalan di sistem, bukan rencana pengembangan.') }}
-                    </p>
+                    <span class="section__kicker">{{ __('Unit Pendidikan') }}</span>
+                    <h2>{{ __('Dua unit di bawah Smart Sukses School') }}</h2>
+                    <p>{{ __('Smart Bee dan Smart Building bukan lembaga terpisah dan bukan mitra — keduanya unit pendidikan Smart Sukses School untuk jenjang yang berbeda.') }}</p>
                 </div>
 
-                {{-- `grid--rows`: di bawah 30rem kedelapan kartu berubah menjadi
-                     baris padat, bukan kartu desktop yang dikecilkan
-                     (butir 434). --}}
-                <div class="grid grid--4 grid--rows">
-                    {{-- Kuncinya ditulis sebagai pemanggilan `__()` harfiah di
-                         dalam array, bukan `__($name)` atas variabel.
-                         Bedanya bukan gaya: pemindai kunci pada
-                         BilingualCoverageTest hanya melihat literal, sehingga
-                         bentuk lama membuat kedua belas kunci ini tidak terlihat
-                         olehnya — dan seluruh bagian ini tetap berbahasa
-                         Indonesia di mode EN tanpa satu tes pun gagal
-                         (butir 424). --}}
-                    @foreach ([
-                        ['ppdb', __('PPDB Online'), __('Formulir pendaftaran publik per cabang, peninjauan berkas oleh admin, pembaruan status, dan penerimaan menjadi siswa.')],
-                        ['siswa', __('Data Siswa & Kelas'), __('Data induk siswa, pembagian kelas, mata pelajaran, penugasan guru, dan jadwal pelajaran mingguan.')],
-                        ['nilai', __('Akademik & E-Rapor'), __('Input nilai per komponen, konfigurasi bobot penilaian, perhitungan nilai akhir otomatis, serta rapor yang dapat diunduh sebagai PDF.')],
-                        ['keuangan', __('Keuangan Sekolah'), __('Jenis tagihan, penerbitan tagihan massal, pencatatan pembayaran beserta buktinya, buku kas, dan laporan keuangan.')],
-                        ['ujian', __('Ujian Online'), __('Ujian pilihan ganda yang dikerjakan siswa langsung di peramban, tersimpan otomatis, dan dinilai sistem begitu dikumpulkan.')],
-                        ['notifikasi', __('Notifikasi & Pengumuman'), __('Pengumuman ke seluruh sekolah, satu kelas, atau perorangan, dengan kotak masuk di setiap portal dan tautan WhatsApp per penerima.')],
-                        ['portal-siswa', __('Portal Siswa'), __('Jadwal, nilai per mata pelajaran, ujian online, rapor, dan notifikasi — hanya milik siswa yang bersangkutan.')],
-                        ['portal-ortu', __('Portal Orang Tua'), __('Ringkasan anak, nilai, tagihan, jadwal, dan notifikasi, dengan perpindahan antar anak bila lebih dari satu.')],
-                    ] as [$glyph, $name, $summary])
-                        <article class="card">
-                            <span class="card__icon">{!! $icon($glyph) !!}</span>
-                            <h3>{{ $name }}</h3>
-                            <p>{{ $summary }}</p>
+                <div class="grid grid--2">
+                    @foreach ($units as $unit)
+                        <article class="card unit">
+                            <x-site-photo
+                                :url="$unit->imageUrl()"
+                                :alt="$unit->title"
+                                ratio="photo--wide"
+                            />
+
+                            <div class="unit__body">
+                                @if ($unit->subtitle)
+                                    <span class="unit__level">{{ $unit->subtitle }}</span>
+                                @endif
+
+                                <h3>{{ $unit->title }}</h3>
+
+                                @if ($unit->body)
+                                    <p>{{ $unit->body }}</p>
+                                @endif
+                            </div>
                         </article>
                     @endforeach
                 </div>
             </div>
         </section>
 
-        {{-- =================================================== tentang ==== --}}
-        <section class="section section--tint" id="tentang">
-            <div class="shell">
-                {{-- Bukan baris kartu ketiga: satu panel utuh dua kolom.
-                     Naskah dan ketiga alasannya persis sama dengan sebelumnya —
-                     yang berubah hanya bentuknya (butir 427). --}}
-                <div class="about">
-                    <div class="about__copy">
-                        <span class="section__kicker">{{ __('Tentang') }}</span>
-                        <h2>{{ __('Satu sistem untuk seluruh operasional sekolah') }}</h2>
-                        <p>
-                            {{ __('Pekerjaan sekolah biasanya tersebar di banyak berkas dan aplikasi terpisah: pendaftaran di satu tempat, nilai di tempat lain, tagihan di tempat ketiga. Smart Sukses School menyatukannya, sehingga data siswa cukup dimasukkan sekali dan dipakai seluruh bagian.') }}
-                        </p>
-                    </div>
+        @endif
 
-                    <ul class="about__list">
-                        <li class="about__item">
-                            <span class="about__num" aria-hidden="true">1</span>
-                            <div>
-                                <h3>{{ __('Terpadu sejak pendaftaran') }}</h3>
-                                <p>{{ __('Data calon siswa dari PPDB langsung menjadi data siswa ketika diterima, tanpa memasukkan ulang.') }}</p>
-                            </div>
-                        </li>
-
-                        <li class="about__item">
-                            <span class="about__num" aria-hidden="true">2</span>
-                            <div>
-                                <h3>{{ __('Mendukung banyak cabang') }}</h3>
-                                <p>{{ __('Setiap cabang mengelola datanya sendiri dengan tampilan dan warnanya sendiri, terpisah satu sama lain di dalam satu sistem.') }}</p>
-                            </div>
-                        </li>
-
-                        <li class="about__item">
-                            <span class="about__num" aria-hidden="true">3</span>
-                            <div>
-                                <h3>{{ __('Diakses lewat peramban') }}</h3>
-                                <p>{{ __('Tidak perlu memasang aplikasi. Tampilannya menyesuaikan layar ponsel maupun komputer.') }}</p>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </section>
-
-        {{-- =============================================== ajakan PPDB ==== --}}
-        <section class="section">
-            <div class="shell">
-                <div class="cta">
-                    <span class="eyebrow">
-                        <span class="eyebrow__dot" aria-hidden="true"></span>
-                        {{ __('Penerimaan Peserta Didik Baru') }}
-                    </span>
-
-                    <h2>{{ __('Daftar sebagai siswa baru, tanpa perlu membuat akun') }}</h2>
-                    <p>
-                        {{ __('Isi formulir pendaftaran secara online, unggah berkas pendukung, lalu pantau status pendaftaran kapan saja dengan nomor pendaftaran Anda.') }}
-                    </p>
-
-                    <div class="cta__buttons">
-                        <a href="{{ route('ppdb.schools') }}" class="btn btn--accent btn--lg">{{ __('Mulai Pendaftaran') }}</a>
-                        <a href="{{ route('ppdb.check-status') }}" class="btn btn--ghost btn--lg">{{ __('Cek Status Pendaftaran') }}</a>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        {{-- ==================================================== cabang ==== --}}
-        <section class="section" id="cabang">
+        {{-- ================================================== program ==== --}}
+        @if ($programs->isNotEmpty())
+        <section class="section section--tint" id="program">
             <div class="shell">
                 <div class="section__head">
-                    <span class="section__kicker">{{ __('Cabang') }}</span>
-                    <h2>{{ __('Cabang yang Membuka Pendaftaran') }}</h2>
-                    <p>
-                        {{ __('Pilih cabang tujuan untuk mengisi formulir pendaftaran siswa baru.') }}
-                    </p>
+                    <span class="section__kicker">{{ __('Program') }}</span>
+                    <h2>{{ __('Pendekatan pendidikan kami') }}</h2>
+                    <p>{{ __('Akademik berjalan berdampingan dengan pembentukan karakter dan keterampilan hidup.') }}</p>
                 </div>
 
-                @if ($schools->isEmpty())
-                    <div class="card">
-                        <p class="muted" style="margin:0;">
-                            {{ __('Belum ada cabang yang membuka pendaftaran saat ini.') }}
-                        </p>
-                    </div>
-                @else
+                <div class="grid grid--3">
+                    @foreach ($programs as $program)
+                        <article class="card">
+                            <span class="card__icon" aria-hidden="true">{!! $icon('buku') !!}</span>
+                            <h3>{{ $program->title }}</h3>
+
+                            @if ($program->body)
+                                <p>{{ $program->body }}</p>
+                            @endif
+                        </article>
+                    @endforeach
+                </div>
+            </div>
+        </section>
+
+        @endif
+
+        {{-- ================================================= kegiatan ==== --}}
+        @if ($gallery->isNotEmpty())
+        <section class="section" id="kegiatan">
+            <div class="shell">
+                <div class="section__head">
+                    <span class="section__kicker">{{ __('Kegiatan') }}</span>
+                    <h2>{{ $site->text('activity_heading') }}</h2>
+                    <p>{{ $site->text('activity_description') }}</p>
+                </div>
+
+                {{-- Kartu pertama melebar pada layar besar sehingga bagian ini
+                     punya titik berat; pada ponsel seluruhnya satu kolom
+                     (butir 477). --}}
+                <div class="gallery">
+                    @foreach ($gallery as $index => $activity)
+                        <figure class="gallery__item @if ($index === 0) gallery__item--lead @endif">
+                            <x-site-photo
+                                :url="$activity->imageUrl()"
+                                :alt="$activity->title"
+                                :ratio="$index === 0 ? 'photo--wide' : 'photo--square'"
+                            />
+                            <figcaption class="gallery__caption">{{ $activity->title }}</figcaption>
+                        </figure>
+                    @endforeach
+                </div>
+            </div>
+        </section>
+
+        @endif
+
+        {{-- ================================================== artikel ==== --}}
+        {{-- Bagian ini tetap berguna tanpa satu pratinjau pun, asalkan alamat
+             blognya sudah disetel: tautannya sendiri yang menjadi isinya. --}}
+        @if ($articles->isNotEmpty() || $site->blogUrl())
+        <section class="section section--tint" id="artikel">
+            <div class="shell">
+                <div class="section__head">
+                    <span class="section__kicker">{{ __('Kabar') }}</span>
+                    <h2>{{ $site->text('article_heading') }}</h2>
+                    <p>{{ $site->text('article_description') }}</p>
+                </div>
+
+                @if ($articles->isNotEmpty())
                     <div class="grid grid--3">
-                        @foreach ($schools as $school)
-                            {{-- Hanya nama, kode, dan alamat — persis yang sudah
-                                 tampil di halaman PPDB publik. Telepon, surel,
-                                 dan pengaturan cabang tidak ikut (butir 350). --}}
-                            <a class="card access access--primary" href="{{ route('ppdb.register', ['schoolCode' => strtolower($school->code)]) }}">
-                                <span class="card__icon">{!! $icon('cabang') !!}</span>
-                                <span class="tag tag--brand">
-                                    <span class="sr-only">{{ __('Kode cabang') }}: </span>{{ $school->code }}
-                                </span>
-                                <h3 class="branch__name">{{ $school->name }}</h3>
-                                @if ($school->address)
-                                    <p class="branch__address">
-                                        <span aria-hidden="true">{!! $icon('pin', 16) !!}</span>
-                                        <span><span class="sr-only">{{ __('Alamat') }}: </span>{{ $school->address }}</span>
-                                    </p>
-                                @endif
-                                <span class="access__go">
-                                    {{ __('Daftar di cabang ini') }}
-                                    <span class="access__arrow" aria-hidden="true">{!! $icon('panah', 16) !!}</span>
-                                </span>
-                                <span class="sr-only">{{ __('Daftar PPDB di :school', ['school' => $school->name]) }}</span>
-                            </a>
+                        @foreach ($articles as $article)
+                            <article class="card article">
+                                <x-site-photo
+                                    :url="$article->imageUrl()"
+                                    :alt="$article->title"
+                                    ratio="photo--wide"
+                                />
+
+                                <div class="article__body">
+                                    @if ($article->link_url)
+                                        <a href="{{ $article->link_url }}" class="article__link" target="_blank" rel="noopener">
+                                            <h3>{{ $article->title }}</h3>
+                                        </a>
+                                    @else
+                                        <h3>{{ $article->title }}</h3>
+                                    @endif
+
+                                    @if ($article->body)
+                                        <p>{{ $article->body }}</p>
+                                    @endif
+                                </div>
+                            </article>
                         @endforeach
                     </div>
                 @endif
 
-                <p class="muted" style="margin-top:1.5rem;font-size:.93rem;">
-                    {{ __('Sudah mendaftar?') }}
-                    <a href="{{ route('ppdb.check-status') }}">{{ __('Cek status pendaftaran Anda') }}</a>.
-                </p>
+                {{-- Tautan blog hanya muncul bila alamatnya memang sudah
+                     disetel; alamat blog tidak pernah ditulis di template
+                     (butir 470). --}}
+                @if ($site->blogUrl())
+                    <p style="margin-top:1.75rem;">
+                        <a href="{{ $site->blogUrl() }}" class="btn btn--ghost" target="_blank" rel="noopener">
+                            {{ __('Baca semua artikel') }}
+                            {!! $icon('luar', 16) !!}
+                        </a>
+                    </p>
+                @endif
+            </div>
+        </section>
+
+        @endif
+
+        {{-- ===================================================== ppdb ==== --}}
+        <section class="section" id="ppdb">
+            <div class="shell">
+                <div class="cta">
+                    <h2>{{ $site->text('ppdb_heading') }}</h2>
+                    <p>{{ $site->text('ppdb_description') }}</p>
+
+                    <div class="cta__buttons">
+                        <a
+                            href="{{ $site->ppdbUrl() }}"
+                            class="btn btn--accent btn--lg"
+                            @if ($site->ppdbIsExternal()) target="_blank" rel="noopener" @endif
+                        >{{ __('Daftar Sekarang') }}</a>
+
+                        <a href="{{ route('ppdb.check-status') }}" class="btn btn--ghost btn--lg">
+                            {{ __('Cek Status Pendaftaran') }}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {{-- ============================================ akses sistem ==== --}}
+        {{--
+            Turun ke sini dari posisinya di V1, tepat di bawah hero.
+
+            Pembacanya berbeda dari pembaca seluruh halaman di atas: ini untuk
+            siswa, orang tua, dan guru yang sudah punya akun. Menempatkannya di
+            atas berarti pengunjung pertama kali disambut pintu masuk sistem
+            sebelum ia tahu sekolahnya apa (butir 475).
+        --}}
+        <section class="section section--tint" id="akses">
+            <div class="shell">
+                <div class="section__head">
+                    <span class="section__kicker">{{ __('Untuk Warga Sekolah') }}</span>
+                    <h2>{{ __('Akses Sistem Informasi') }}</h2>
+                    <p>{{ __('Siswa, orang tua, guru, dan staf masuk lewat satu halaman yang sama. Sistem mengenali peran Anda dari akun.') }}</p>
+                </div>
+
+                <div class="grid grid--3">
+                    <a href="{{ route('login') }}" class="card access">
+                        <span class="card__icon" aria-hidden="true">{!! $icon('siswa') !!}</span>
+                        <h3>{{ __('Siswa') }}</h3>
+                        <p>{{ __('Jadwal pelajaran, nilai, dan ujian online.') }}</p>
+                        <span class="access__go">{{ __('Masuk') }} {!! $icon('panah', 16) !!}</span>
+                    </a>
+
+                    <a href="{{ route('login') }}" class="card access">
+                        <span class="card__icon" aria-hidden="true">{!! $icon('ortu') !!}</span>
+                        <h3>{{ __('Orang Tua') }}</h3>
+                        <p>{{ __('Perkembangan belajar dan tagihan anak.') }}</p>
+                        <span class="access__go">{{ __('Masuk') }} {!! $icon('panah', 16) !!}</span>
+                    </a>
+
+                    <a href="{{ route('login') }}" class="card access">
+                        <span class="card__icon" aria-hidden="true">{!! $icon('guru') !!}</span>
+                        <h3>{{ __('Guru & Staf') }}</h3>
+                        <p>{{ __('Kelas ajar, input nilai, dan administrasi sekolah.') }}</p>
+                        <span class="access__go">{{ __('Masuk') }} {!! $icon('panah', 16) !!}</span>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        {{-- =================================================== kontak ==== --}}
+        <section class="section" id="kontak">
+            <div class="shell">
+                <div class="section__head">
+                    <span class="section__kicker">{{ __('Kontak') }}</span>
+                    <h2>{{ __('Hubungi Smart Sukses School') }}</h2>
+                </div>
+
+                {{-- Setiap baris hanya dirender bila datanya memang ada. Alamat,
+                     nomor, dan surel sekolah tidak pernah dikarang. --}}
+                <div class="grid grid--3">
+                    @if ($site->contact('address'))
+                        <div class="contact__item">
+                            {!! $icon('pin') !!}
+                            <div>
+                                <div class="contact__label">{{ __('Alamat') }}</div>
+                                <div class="contact__value">{{ $site->contact('address') }}</div>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if ($site->contact('phone'))
+                        <div class="contact__item">
+                            {!! $icon('telepon') !!}
+                            <div>
+                                <div class="contact__label">{{ __('Telepon') }}</div>
+                                <div class="contact__value">
+                                    <a href="tel:{{ preg_replace('/[^0-9+]/', '', $site->contact('phone')) }}">
+                                        {{ $site->contact('phone') }}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if ($site->contact('email'))
+                        <div class="contact__item">
+                            {!! $icon('surel') !!}
+                            <div>
+                                <div class="contact__label">{{ __('Surel') }}</div>
+                                <div class="contact__value">
+                                    <a href="mailto:{{ $site->contact('email') }}">{{ $site->contact('email') }}</a>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+
+                @if ($socials !== [])
+                    <div class="socials">
+                        @foreach ($socials as $name => $url)
+                            <a href="{{ $url }}" target="_blank" rel="noopener" aria-label="{{ ucfirst($name) }}">
+                                {!! $icon($name) !!}
+                            </a>
+                        @endforeach
+                    </div>
+                @endif
             </div>
         </section>
     </main>
@@ -465,17 +520,15 @@
         <div class="shell">
             <div class="footer__grid">
                 <div>
-                    <span class="footer__brand">
-                        <span class="brand__mark" aria-hidden="true">{!! $icon('siswa', 20) !!}</span>
-                        <span class="brand__text">
-                            <span class="brand__name">{{ config('app.name') }}</span>
-                            <span class="brand__tag">{{ __('Sistem Informasi Sekolah') }}</span>
-                        </span>
-                    </span>
+                    <img
+                        src="{{ $site->logoUrl() }}"
+                        alt="{{ config('app.name') }}"
+                        class="footer__logo"
+                        width="500"
+                        height="200"
+                    >
 
-                    <p class="footer__note">
-                        {{ __('Platform manajemen sekolah terintegrasi: PPDB, akademik, keuangan, ujian online, dan portal untuk siswa serta orang tua.') }}
-                    </p>
+                    <p class="footer__note">{{ \App\Support\PublicSite::TAGLINE }}</p>
 
                     <div class="footer__locale">
                         <x-locale-switch />
@@ -484,19 +537,30 @@
 
                 <div>
                     <h3>{{ __('Jelajahi') }}</h3>
+                    {{-- Daftar yang sama dengan menu utama, jadi ia ikut
+                         menyusut bersama bagian yang tidak dirender. --}}
                     <ul>
-                        <li><a href="#akses">{{ __('Akses Pengguna') }}</a></li>
-                        <li><a href="#fitur">{{ __('Fitur') }}</a></li>
-                        <li><a href="#tentang">{{ __('Tentang') }}</a></li>
-                        <li><a href="#cabang">{{ __('Cabang') }}</a></li>
+                        @foreach ($menu as $href => $label)
+                            @if ($href !== '#konten' && $href !== '#ppdb')
+                                <li><a href="{{ $href }}">{{ $label }}</a></li>
+                            @endif
+                        @endforeach
                     </ul>
                 </div>
 
                 <div>
                     <h3>{{ __('Pendaftaran') }}</h3>
                     <ul>
-                        <li><a href="{{ route('ppdb.schools') }}">{{ __('Pendaftaran PPDB') }}</a></li>
+                        <li>
+                            <a
+                                href="{{ $site->ppdbUrl() }}"
+                                @if ($site->ppdbIsExternal()) target="_blank" rel="noopener" @endif
+                            >{{ __('Pendaftaran PPDB') }}</a>
+                        </li>
                         <li><a href="{{ route('ppdb.check-status') }}">{{ __('Cek Status PPDB') }}</a></li>
+                        @if ($site->blogUrl())
+                            <li><a href="{{ $site->blogUrl() }}" target="_blank" rel="noopener">{{ __('Artikel') }}</a></li>
+                        @endif
                     </ul>
                 </div>
 
@@ -505,7 +569,7 @@
                     <ul>
                         <li><a href="{{ route('login') }}">{{ __('Portal Siswa') }}</a></li>
                         <li><a href="{{ route('login') }}">{{ __('Portal Orang Tua') }}</a></li>
-                        <li><a href="{{ route('login') }}">{{ __('Admin & Guru') }}</a></li>
+                        <li><a href="{{ route('login') }}">{{ __('Guru & Staf') }}</a></li>
                     </ul>
                 </div>
             </div>

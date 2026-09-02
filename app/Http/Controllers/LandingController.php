@@ -2,37 +2,38 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\School;
+use App\Enums\SiteBlockType;
+use App\Support\PublicSite;
 use Illuminate\Contracts\View\View;
 
 /**
  * Halaman muka publik Smart Sukses School.
  *
- * Tambahan langsung atas permintaan pemilik, di luar blueprint Phase 1
- * (docs/owner-scope-changes.md bagian A). Menggantikan halaman bawaan Laravel
- * yang sampai batch ini masih terpasang di `/`.
+ * **V2 mengubah maksud halamannya.** Sampai batch ini `/` menjelaskan
+ * perangkat lunaknya — modul, fitur, portal — dan itu masuk akal selama
+ * pembacanya calon pengguna sistem. Umpan balik pemilik setelah simulasi
+ * menyatakan sebaliknya: pembaca `/` adalah orang tua calon siswa, dan yang
+ * harus ia pahami dalam sepuluh detik pertama adalah sekolahnya, bukan sistem
+ * informasinya. Sistem informasi tetap ada, turun menjadi satu bagian
+ * "Akses Sistem" di dekat kaki halaman (butir 475).
  *
- * Controller biasa, bukan komponen Livewire: halamannya statis, dan satu-satunya
- * data yang dibacanya adalah daftar cabang. Menjadikannya Livewire berarti
- * memuat runtime-nya pada halaman yang tidak punya satu pun interaksi
- * (butir 351).
+ * Controller biasa, bukan komponen Livewire: halamannya tetap statis, dan
+ * seluruh isinya dibaca sekali saat render (butir 351).
  *
  * Publik sepenuhnya — tanpa middleware, tanpa sesi, tanpa konteks tenant.
+ * Isinya global; tidak ada satu query pun yang menyaring menurut cabang
+ * (butir 464).
  */
 class LandingController extends Controller
 {
-    public function __invoke(): View
+    public function __invoke(PublicSite $site): View
     {
         return view('landing', [
-            // Semantik yang sama persis dengan halaman PPDB publik
-            // (`App\Livewire\Ppdb\SchoolList`): cabang aktif saja, diurutkan
-            // menurut nama. `School` tidak memakai SchoolScope — ia justru
-            // tabel tenantnya — sehingga query ini berlaku sama bagi tamu
-            // maupun bagi siapa pun yang kebetulan sedang login (butir 352).
-            'schools' => School::query()
-                ->active()
-                ->orderBy('name')
-                ->get(['id', 'name', 'code', 'address']),
+            'site' => $site,
+            'units' => $site->blocks(SiteBlockType::Unit),
+            'programs' => $site->blocks(SiteBlockType::Program),
+            'gallery' => $site->blocks(SiteBlockType::Gallery),
+            'articles' => $site->blocks(SiteBlockType::Article),
         ]);
     }
 }

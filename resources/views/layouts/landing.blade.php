@@ -1495,6 +1495,220 @@
         }
 
         .skip:focus { top: 1rem; }
+
+        /* ==================================================== halaman muka V2
+
+           Bagian bergambar yang ditambahkan batch Public Landing V2. Token,
+           jarak, radius, dan bayangannya memakai sistem yang sudah ada di atas
+           — tidak ada skala kedua yang diperkenalkan di sini (butir 476).
+        */
+
+        /* ------------------------------------------------------------ logo */
+
+        .brand__logo {
+            display: block;
+            height: 2.5rem;
+            width: auto;
+            /* Lockup gabungan cukup lebar; pada ponsel ia tidak boleh mendesak
+               tombol Masuk keluar dari bar. */
+            max-width: 11.5rem;
+            object-fit: contain;
+        }
+
+        @media (max-width: 30rem) { .brand__logo { height: 2.1rem; max-width: 9rem; } }
+
+        .footer__logo { height: 2.75rem; width: auto; max-width: 13rem; object-fit: contain; }
+
+        /* ----------------------------------------------------------- media
+
+           Satu bingkai untuk seluruh foto halaman muka. Rasionya dikunci lewat
+           `aspect-ratio`, sehingga tata letak tidak bergeser saat gambar
+           selesai dimuat — dan tetap utuh ketika gambarnya memang belum ada.
+        */
+
+        .photo {
+            position: relative;
+            overflow: hidden;
+            border-radius: var(--radius-lg);
+            background: var(--brand-tint);
+            border: 1px solid var(--line);
+            aspect-ratio: 4 / 3;
+        }
+
+        .photo img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .photo--wide { aspect-ratio: 16 / 10; }
+        .photo--tall { aspect-ratio: 3 / 4; }
+        .photo--square { aspect-ratio: 1 / 1; }
+
+        /*
+           Penanda "foto menyusul".
+
+           Foto kegiatan Smart Sukses School yang sungguhan belum diserahkan.
+           Keadaan ini dirender sebagai bidang bergaris yang jelas disengaja —
+           bukan kotak abu-abu yang tampak seperti gambar gagal dimuat, dan
+           terutama bukan foto sekolah lain yang diunduh lalu dipasang seolah
+           siswa Smart Sukses School (butir 467).
+        */
+        .photo__ph {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-content: center;
+            gap: .55rem;
+            justify-items: center;
+            padding: 1rem;
+            text-align: center;
+            background-image: repeating-linear-gradient(
+                135deg,
+                var(--brand-tint) 0 10px,
+                #fff 10px 20px
+            );
+            color: var(--brand);
+        }
+
+        .photo__ph svg { opacity: .55; }
+
+        .photo__ph span {
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            opacity: .8;
+        }
+
+        /* ------------------------------------------------------------ hero */
+
+        /*
+           Hero V2 dipimpin gambar, bukan mock antarmuka.
+
+           Sampai V1 kolom kanan hero menampilkan tiruan dasbor — masuk akal
+           ketika halamannya menjual perangkat lunak, menyesatkan ketika
+           pembacanya orang tua calon siswa (butir 475).
+        */
+        .hero__media { margin-top: 2rem; }
+
+        @media (min-width: 62rem) {
+            .hero__media { margin-top: 0; }
+        }
+
+        .hero__tagline {
+            margin-top: 1rem;
+            font-size: clamp(1.02rem, 2.2vw, 1.2rem);
+            font-weight: 600;
+            font-style: italic;
+            line-height: 1.6;
+            color: var(--brand);
+        }
+
+        /* ------------------------------------------------- unit pendidikan */
+
+        .unit { display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
+
+        .unit .photo { border: 0; border-radius: 0; }
+
+        .unit__body { padding: var(--card-pad); }
+
+        .unit__level {
+            display: inline-block;
+            margin-bottom: .6rem;
+            padding: .25rem .65rem;
+            border-radius: var(--radius-pill);
+            background: var(--accent-tint);
+            color: var(--accent-dark);
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        /* ---------------------------------------------------------- galeri
+
+           Editorial, bukan dinding kartu seragam: kartu pertama melebar pada
+           layar besar sehingga bagian ini punya titik berat, dan pada ponsel
+           seluruhnya kembali menjadi satu kolom (butir 477).
+        */
+        .gallery { display: grid; gap: var(--grid-gap); grid-template-columns: 1fr; }
+
+        @media (min-width: 40rem) {
+            .gallery { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (min-width: 64rem) {
+            .gallery { grid-template-columns: repeat(3, 1fr); }
+            .gallery__item--lead { grid-column: span 2; grid-row: span 2; }
+            .gallery__item--lead .photo { aspect-ratio: auto; height: 100%; min-height: 22rem; }
+        }
+
+        .gallery__item { position: relative; }
+
+        .gallery__caption {
+            position: absolute;
+            inset-inline: 0;
+            bottom: 0;
+            padding: 1.4rem 1rem .9rem;
+            /* Gradasi, bukan bilah pekat: keterbacaan tanpa menutup fotonya. */
+            background: linear-gradient(to top, rgba(13, 30, 58, .82), rgba(13, 30, 58, 0));
+            color: #fff;
+            font-weight: 600;
+            font-size: .95rem;
+            border-end-start-radius: var(--radius-lg);
+            border-end-end-radius: var(--radius-lg);
+        }
+
+        /* --------------------------------------------------------- artikel */
+
+        .article { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+
+        .article .photo { border: 0; border-radius: 0; }
+
+        .article__body { padding: var(--card-pad); }
+
+        .article__link { color: inherit; text-decoration: none; }
+
+        .article__link:hover h3 { color: var(--brand); }
+
+        /* ---------------------------------------------------------- kontak */
+
+        .contact__item { display: flex; gap: .85rem; align-items: flex-start; }
+
+        .contact__item svg { flex: 0 0 auto; margin-top: .2rem; color: var(--brand); }
+
+        .contact__label {
+            font-size: .78rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .contact__value { margin-top: .2rem; color: var(--ink); line-height: 1.65; }
+
+        .contact__value a { color: var(--brand); text-decoration: none; }
+
+        .contact__value a:hover { text-decoration: underline; }
+
+        .socials { display: flex; flex-wrap: wrap; gap: .55rem; margin-top: 1.25rem; }
+
+        .socials a {
+            display: inline-grid;
+            place-items: center;
+            /* 2.75rem: sasaran sentuh yang sama dengan `.nav__link`. */
+            width: 2.75rem;
+            height: 2.75rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--line);
+            background: var(--surface);
+            color: var(--brand);
+            transition: border-color .15s ease, color .15s ease;
+        }
+
+        .socials a:hover { border-color: var(--brand); color: var(--brand-dark); }
     </style>
 </head>
 <body>
