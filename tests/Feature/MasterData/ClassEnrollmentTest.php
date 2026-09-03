@@ -3,6 +3,7 @@
 namespace Tests\Feature\MasterData;
 
 use App\Enums\RoleName;
+use App\Filament\Resources\SchoolClassResource\Pages\CreateSchoolClass;
 use App\Models\AcademicYear;
 use App\Models\School;
 use App\Models\SchoolClass;
@@ -12,6 +13,7 @@ use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -36,6 +38,60 @@ class ClassEnrollmentTest extends TestCase
             'school_id' => $this->school->id,
             'is_active' => true,
         ]);
+    }
+
+    /**
+     * Dua rombel bernama sama pada satu cabang dan tahun ajaran adalah data
+     * yang keliru, dan akibatnya tidak terlihat di layar kelas: pencocokan
+     * kelas saat impor siswa memilih salah satu di antaranya tanpa memberi
+     * tahu siapa pun (butir 516).
+     *
+     * `classes` tidak punya indeks unik untuk itu, jadi pagarnya di form —
+     * mengikuti pola yang sudah dipakai kolom wali kelas.
+     */
+    public function test_two_classes_cannot_share_a_name_in_one_year(): void
+    {
+        $admin = User::factory()->forSchool($this->school)->withRole(RoleName::SchoolAdmin)->create();
+
+        $this->makeClass(['name' => 'X Terbuka - 2', 'grade_level' => 10]);
+
+        Livewire::actingAs($admin)
+            ->test(CreateSchoolClass::class)
+            ->fillForm([
+                'academic_year_id' => $this->year->id,
+                'name' => 'X Terbuka - 2',
+                'grade_level' => 10,
+                'capacity' => 35,
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['name']);
+
+        $this->assertSame(1, SchoolClass::query()->where('name', 'X Terbuka - 2')->count());
+    }
+
+    public function test_the_same_class_name_is_allowed_in_another_year(): void
+    {
+        $admin = User::factory()->forSchool($this->school)->withRole(RoleName::SchoolAdmin)->create();
+
+        $this->makeClass(['name' => 'X Terbuka - 2', 'grade_level' => 10]);
+
+        $next = AcademicYear::factory()->create([
+            'school_id' => $this->school->id,
+            'is_active' => false,
+        ]);
+
+        Livewire::actingAs($admin)
+            ->test(CreateSchoolClass::class)
+            ->fillForm([
+                'academic_year_id' => $next->id,
+                'name' => 'X Terbuka - 2',
+                'grade_level' => 10,
+                'capacity' => 35,
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(2, SchoolClass::query()->where('name', 'X Terbuka - 2')->count());
     }
 
     public function test_a_teacher_cannot_be_homeroom_of_two_classes_in_one_year(): void
