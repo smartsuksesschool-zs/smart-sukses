@@ -160,8 +160,17 @@ class ProductionCheckCommandTest extends TestCase
     {
         $source = file_get_contents(database_path('seeders/DatabaseSeeder.php'));
 
-        $this->assertStringNotContainsString('Sprint4DemoSeeder', $source);
-        $this->assertStringContainsString('UserSeeder', $source);
+        // Yang diperiksa daftar `call()`-nya, bukan seluruh berkas: sejak
+        // butir 513 docblock-nya menyebut seeder demo justru untuk menjelaskan
+        // mengapa keduanya TIDAK didaftarkan, dan penjelasan itu tidak boleh
+        // membuat tes ini gagal.
+        preg_match('/\$this->call\(\[(.*?)\]\);/s', $source, $matches);
+
+        $registered = $matches[1] ?? '';
+
+        $this->assertStringNotContainsString('Sprint4DemoSeeder', $registered);
+        $this->assertStringNotContainsString('SimulationSeeder', $registered);
+        $this->assertStringContainsString('UserSeeder', $registered);
     }
 
     protected function withProductionConfig(): void
@@ -178,7 +187,10 @@ class ProductionCheckCommandTest extends TestCase
             'mail.default' => 'smtp',
         ]);
 
-        putenv('SEED_ADMIN_PASSWORD=cukup-panjang-untuk-produksi');
+        // Lewat config, bukan `putenv`: perintah ini dijalankan sesudah
+        // `config:cache`, dan sejak butir 511 ia membaca config — persis
+        // seperti nilainya sampai ke aplikasi di server sungguhan.
+        config(['seeding.admin_password' => 'cukup-panjang-untuk-produksi']);
 
         app()->detectEnvironment(fn () => 'production');
     }
