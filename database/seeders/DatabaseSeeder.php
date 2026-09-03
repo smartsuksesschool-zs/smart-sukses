@@ -8,6 +8,24 @@ class DatabaseSeeder extends Seeder
 {
     /**
      * Seed the application's database.
+     *
+     * Yang dipanggil otomatis hanya tiga, dan ketiganya adalah **prasyarat
+     * struktural**: tanpa mereka aplikasi tidak dapat dipakai siapa pun.
+     *
+     *   RolePermissionSeeder — peran dan izin; tanpa ini setiap policy menolak
+     *                          semua orang, termasuk Super Admin.
+     *   SchoolSeeder         — cabang PUSAT; seluruh data lain menggantung
+     *                          padanya lewat school_id.
+     *   UserSeeder           — akun awal; tanpa satu akun pun, panel tidak
+     *                          dapat dimasuki untuk membuat akun berikutnya.
+     *
+     * Tidak ada data contoh di antaranya. `php artisan db:seed` karena itu aman
+     * dijalankan di lingkungan mana pun yang memang sedang disiapkan — termasuk
+     * staging — tanpa menerbitkan isi halaman muka maupun membuat akun demo
+     * (butir 513).
+     *
+     * Seeder demo tetap harus dipanggil dengan sengaja, satu per satu; lihat
+     * docs/deployment/staging-uat.md.
      */
     public function run(): void
     {
@@ -32,6 +50,12 @@ class DatabaseSeeder extends Seeder
          * Isi awal ditambahkan dengan sengaja, lewat panel admin atau:
          *
          *     php artisan db:seed --class=PublicSiteSeeder
+         *
+         * SimulationSeeder dan Sprint4DemoSeeder juga sengaja tidak di sini.
+         * Keduanya membuat akun yang dapat login, dan akun demo yang lahir
+         * tanpa diminta adalah pintu masuk — bukan data contoh (butir 459).
+         * Adanya staging tidak mengubah itu: staging pun harus memintanya
+         * dengan sengaja.
          */
     }
 }

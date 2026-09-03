@@ -13,6 +13,7 @@ use App\Models\Schedule;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\SeedPassword;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use RuntimeException;
@@ -59,6 +60,20 @@ class SimulationSeeder extends Seeder
                 'SimulationSeeder membuat akun yang dapat login dan tidak boleh berjalan di produksi.'
             );
         }
+
+        /*
+         * Kata sandi dipastikan **sebelum** satu baris pun ditulis.
+         *
+         * Sebelumnya ia diselesaikan di tengah jalan, saat akun pertama hendak
+         * dibuat. Di lingkungan yang menolak kata sandi bawaan, seeder karena
+         * itu berhenti setelah sebagian tabel terisi — meninggalkan jadwal,
+         * ujian, atau kelas tanpa akun yang memilikinya, dan operator harus
+         * menebak seberapa jauh ia sempat berjalan.
+         *
+         * Gagal di langkah pertama jauh lebih mudah dipahami daripada gagal di
+         * tengah (butir 512).
+         */
+        SeedPassword::resolve();
 
         $this->call(UserSeeder::class);
         $this->call(Sprint4DemoSeeder::class);
@@ -281,7 +296,7 @@ class SimulationSeeder extends Seeder
             [
                 'school_id' => $this->school->id,
                 'name' => $name,
-                'password' => Hash::make(env('SEED_ADMIN_PASSWORD', 'Password123')),
+                'password' => Hash::make(SeedPassword::resolve()),
                 'locale' => 'id',
                 'is_active' => true,
                 // Akun demo langsung dapat dipakai tanpa layar ganti sandi —

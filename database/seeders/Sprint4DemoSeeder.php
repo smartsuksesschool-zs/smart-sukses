@@ -20,6 +20,7 @@ use App\Models\StudentClass;
 use App\Models\Subject;
 use App\Models\User;
 use App\Services\Grading\GradeConfigVersionManager;
+use App\Support\SeedPassword;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -63,6 +64,20 @@ class Sprint4DemoSeeder extends Seeder
 
     public function run(): void
     {
+        /*
+         * Kata sandi dipastikan **sebelum** satu baris pun ditulis.
+         *
+         * Sebelumnya ia diselesaikan di tengah jalan, saat akun pertama hendak
+         * dibuat. Di lingkungan yang menolak kata sandi bawaan, seeder karena
+         * itu berhenti setelah sebagian tabel terisi — meninggalkan jadwal,
+         * ujian, atau kelas tanpa akun yang memilikinya, dan operator harus
+         * menebak seberapa jauh ia sempat berjalan.
+         *
+         * Gagal di langkah pertama jauh lebih mudah dipahami daripada gagal di
+         * tengah (butir 512).
+         */
+        SeedPassword::resolve();
+
         $school = School::query()->where('code', 'PUSAT')->first();
 
         if ($school === null) {
@@ -109,7 +124,7 @@ class Sprint4DemoSeeder extends Seeder
 
     protected function seedUsers(): void
     {
-        $password = env('SEED_ADMIN_PASSWORD', 'Password123');
+        $password = SeedPassword::resolve();
 
         $this->teacher = $this->seedUser(
             'guru.pusat@smartsukses.sch.id',

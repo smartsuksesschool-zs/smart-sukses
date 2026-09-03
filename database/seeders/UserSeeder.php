@@ -5,9 +5,9 @@ namespace Database\Seeders;
 use App\Enums\RoleName;
 use App\Models\School;
 use App\Models\User;
+use App\Support\SeedPassword;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use RuntimeException;
 
 /**
  * Akun awal: satu Super Administrator (school_id = NULL) dan satu Admin
@@ -17,28 +17,21 @@ class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        $password = env('SEED_ADMIN_PASSWORD', 'Password123');
-
         /*
-         * Pagar produksi.
+         * Pagar kata sandi seeding ada di App\Support\SeedPassword.
          *
-         * Nilai cadangan di atas ada di repository, jadi ia diketahui siapa pun
-         * yang dapat membaca kode ini. Di lokal itu memang kenyamanan yang
-         * disengaja. Di produksi ia berarti akun Super Administrator lahir
-         * dengan kata sandi yang tercetak di repository — dan walaupun
-         * `must_change_password` menutupnya pada login pertama, jendela antara
-         * seeding dan login pertama itu nyata (butir 363).
+         * Semula pagar itu tertulis di sini dan hanya menyebut `production`.
+         * Itu cukup selama satu-satunya lingkungan ber-hostname adalah
+         * produksi; begitu staging.smartsukses.sch.id direncanakan,
+         * `APP_ENV=staging` melewatinya begitu saja dan seluruh akun awal lahir
+         * dengan kata sandi yang ada di dalam repository, di alamat yang dapat
+         * dibuka siapa pun.
          *
-         * Yang dilempar RuntimeException, bukan peringatan: seeding yang
-         * "berhasil dengan catatan" akan terlewat di tengah keluaran deployment.
-         * Kata sandinya sendiri tidak pernah ikut dicetak.
+         * Staging bukan lokal: ia sama terbukanya dengan produksi, hanya isinya
+         * yang berbeda (butir 509).
          */
-        if (app()->environment('production') && blank(env('SEED_ADMIN_PASSWORD'))) {
-            throw new RuntimeException(
-                'SEED_ADMIN_PASSWORD wajib disetel sebelum seeding di produksi. '
-                .'Tanpa itu akun awal memakai kata sandi bawaan yang ada di dalam repository.'
-            );
-        }
+        $password = SeedPassword::resolve();
+
         $school = School::where('code', 'PUSAT')->first();
 
         $superAdmin = User::updateOrCreate(

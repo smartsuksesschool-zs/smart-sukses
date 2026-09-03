@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\SeedPassword;
 use Illuminate\Console\Command;
 
 /**
@@ -134,7 +135,12 @@ class ProductionCheck extends Command
             ),
             $this->check(
                 'Kata sandi seeder disetel',
-                filled(env('SEED_ADMIN_PASSWORD')),
+                // Lewat config, bukan `env()` langsung. Perintah ini dijalankan
+                // **sesudah** `config:cache` — persis keadaan yang membuat
+                // `env()` mengembalikan NULL, sehingga pemeriksaan lama
+                // melaporkan "belum disetel" pada server yang justru sudah
+                // benar (butir 511).
+                SeedPassword::isConfigured(),
                 'Setel SEED_ADMIN_PASSWORD sebelum menjalankan db:seed.',
             ),
         ];
