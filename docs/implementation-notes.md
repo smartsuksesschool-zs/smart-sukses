@@ -8635,6 +8635,120 @@ sungguhan:
 Yang diuji bukan lagi "apakah importer benar", melainkan "apakah yang dikatakan
 sama dengan yang dikerjakan".
 
+### 509. Staging bukan lokal
+
+Kata sandi akun hasil seeding punya nilai cadangan yang tertulis di dalam
+repositori. Pagarnya berbunyi:
+
+```php
+if (app()->environment('production') && blank(env('SEED_ADMIN_PASSWORD'))) {
+```
+
+Itu benar selama satu-satunya lingkungan ber-hostname adalah produksi. Begitu
+`staging.smartsukses.sch.id` direncanakan, kalimat itu menjadi salah:
+`APP_ENV=staging` melewatinya begitu saja, dan seluruh akun awal — termasuk
+Super Administrator — lahir dengan kata sandi yang diketahui siapa pun yang
+dapat membaca repositori, di alamat yang dapat dibuka siapa pun.
+
+Celah kedua lebih halus: `SimulationSeeder` dan `Sprint4DemoSeeder` membaca env
+yang sama **tanpa pagar apa pun**, dan keduanya dapat dijalankan sendiri tanpa
+`UserSeeder`. Menambal `UserSeeder` saja karena itu tidak menutup apa pun.
+
+Keduanya sekarang memanggil satu tempat, `App\Support\SeedPassword`. Yang
+dipagari adalah **"bukan lokal"**, bukan daftar nama lingkungan — sehingga
+`uat`, `demo`, atau nama berikutnya ikut terlindungi tanpa perlu diingat
+menambahkannya. Nama lingkungan yang belum dikenal ditolak, bukan diloloskan;
+itu arah gagal yang benar untuk sebuah kredensial.
+
+Pelajaran yang lebih umum: pagar yang menyebut satu nama lingkungan diam-diam
+berasumsi hanya ada dua dunia, lokal dan produksi. Asumsi itu berumur pendek.
+
+### 510. Penanda lingkungan ada karena alamat berhenti dibaca
+
+Staging memakai nama host sungguhan, data yang mirip sungguhan, dan tampilan
+yang identik dengan produksi. Satu-satunya yang membedakannya di mata staf
+adalah alamat di bilah URL — dan alamat adalah hal pertama yang berhenti dibaca
+orang setelah hari kedua.
+
+Yang dicegah bukan ketidaknyamanan, melainkan kekeliruan yang mahal: menghapus
+siswa, menerbitkan nilai, atau membuat tagihan di tempat yang dikira staging
+padahal produksi. Panel admin justru permukaan paling berisiko, karena di
+sanalah perubahan yang paling sulit dibatalkan dilakukan.
+
+Penandanya kecil, `position: fixed`, dan `pointer-events: none` supaya tidak
+pernah menghalangi tombol di bawahnya — sebuah penanda yang menutupi kontrol
+akan dicari cara mematikannya, dan penanda yang dimatikan tidak menandai apa
+pun.
+
+Di produksi ia **tidak dirender sama sekali**, bukan disembunyikan lewat CSS.
+Elemen yang ada di DOM produksi hanya menunggu satu galat CSS untuk muncul di
+hadapan orang tua siswa.
+
+Satu komponen dipakai empat permukaan (halaman muka, PPDB, portal, panel),
+sehingga hanya ada satu tempat yang menentukan kapan ia muncul.
+
+### 511. Pagar yang membaca `env()` mati sendiri di server
+
+`SeedPassword` yang baru ditulis membaca `env('SEED_ADMIN_PASSWORD')` langsung
+dari kode aplikasi. Itu melanggar butir 357, yang sudah dicatat proyek ini
+setahun sebelumnya: `env()` di luar berkas config mengembalikan NULL begitu
+`config:cache` dijalankan.
+
+Arah kegagalannya yang membuatnya berbahaya. Pagar itu tidak menjadi longgar —
+ia menjadi **terlalu ketat**, dan menolak seeding di server yang justru sudah
+benar konfigurasinya. Operator yang sudah mengisi `.env` akan melihat pesan
+"SEED_ADMIN_PASSWORD wajib disetel", memeriksa `.env`-nya, menemukan nilainya
+ada di sana, dan tidak punya petunjuk apa pun tentang apa yang salah.
+
+Celah kedua sudah ada sebelum batch ini dan baru terlihat sekarang:
+`app:production-check` memakai `filled(env('SEED_ADMIN_PASSWORD'))`. Perintah
+itu dijalankan **sesudah** `config:cache` — begitu bunyi runbook-nya sendiri —
+sehingga ia selalu melaporkan "kata sandi seeder belum disetel" pada server yang
+sudah benar. Sebuah pemeriksaan kesiapan yang gagal pada konfigurasi yang benar
+lebih buruk daripada tidak ada pemeriksaan: ia mengajari orang mengabaikannya.
+
+Keduanya kini membaca `config('seeding.admin_password')`. Dibuktikan dengan
+membangun `config:cache` sungguhan lalu memanggil resolver dari proses yang
+tidak punya variabel env sama sekali.
+
+### 512. Gagal di langkah pertama, bukan di tengah
+
+Pagar kata sandi diselesaikan di tempat kata sandinya dipakai — yaitu saat akun
+pertama hendak dibuat. Di `SimulationSeeder` itu berarti jadwal, ujian, soal,
+dan pilihan jawaban sudah tertulis lebih dulu; di `Sprint4DemoSeeder`, tahun
+ajaran, kelas, dan siswa.
+
+Akibatnya penolakan meninggalkan basis data separuh terisi: baris yang menunjuk
+akun yang tidak pernah ada. Operator lalu harus menebak seberapa jauh seeder
+sempat berjalan sebelum berhenti, dan jawabannya tidak tertulis di mana pun.
+
+Sekarang `SeedPassword::resolve()` dipanggil di baris pertama `run()` ketiga
+seeder, sebelum satu query pun. Nilainya dibuang di dua di antaranya — yang
+dipakai hanya efek sampingnya, yaitu melempar. Itu disengaja dan diberi
+komentar, supaya tidak ada yang menghapusnya sebagai baris tak terpakai.
+
+Tesnya memeriksa akibatnya, bukan pesannya: sesudah penolakan, jumlah baris
+`users`, `students`, `schedules`, dan `exams` harus persis sama seperti sebelum.
+
+### 513. Staging tidak mengubah apa yang otomatis
+
+Godaan yang wajar ketika menyiapkan staging: daftarkan saja seluruh seeder di
+`DatabaseSeeder` supaya operator cukup menjalankan satu perintah.
+
+Yang hilang bersamanya adalah keputusan butir 459 dan butir 481. Seeder demo
+membuat akun yang dapat login; `PublicSiteSeeder` menerbitkan isi ke halaman
+yang dilihat publik. Keduanya menjadi otomatis berarti `php artisan db:seed` —
+perintah yang sama yang dijalankan di produksi — mulai membuat akun dan
+menerbitkan konten. Kemudahan di staging dibayar dengan risiko di produksi.
+
+Yang otomatis tetap tiga, dan ketiganya prasyarat struktural tanpa data contoh
+sama sekali: peran/izin, cabang, akun awal. Alasan masing-masing kini tertulis
+di `DatabaseSeeder` sendiri, dan ada tes yang gagal bila daftarnya berubah —
+supaya penambahan berikutnya menjadi keputusan sadar, bukan kebiasaan.
+
+Sebagai gantinya, runbook staging menyebut **perintah seed yang persis**, satu
+per satu. Tidak ada kalimat "jalankan semua seeder" di mana pun.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
