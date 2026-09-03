@@ -6,6 +6,8 @@ use App\Models\AcademicYear;
 use App\Models\School;
 use App\Support\Migration\LegacyDryRun;
 use App\Support\Migration\LegacyWorkbook;
+use App\Support\Migration\NisnNormalizer;
+use App\Support\Migration\StudentImportPlan;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -18,9 +20,11 @@ use Throwable;
  *
  * 1. Satu berkas memuat siswa **dan** guru pada dua lembar, jadi satu perintah
  *    untuk keduanya lebih jujur daripada dua perintah atas berkas yang sama.
- * 2. `--terapkan` sengaja **tidak** dibuat. Menulis siswa menuntut NIS, dan NIS
- *    belum diputuskan sekolah (keputusan M-3). Menyediakan tombol terap yang
- *    pasti menolak setiap baris hanya akan menyesatkan (butir 457).
+ * 2. `--terapkan` sengaja **tidak** dibuat di sini. Sejak M3 mode terap ada,
+ *    tetapi sebagai perintah tersendiri yang berpagar basis data uji —
+ *    `migrasi:terapkan-uji`. Memasangnya sebagai opsi pada perintah analisis
+ *    akan membuat satu salah ketik memisahkan "melihat" dari "menulis"
+ *    (butir 457, diperbarui butir 491).
  *
  * Kode keluar: 0 analisis bersih, 1 ada penghambat, 2 gagal dijalankan.
  */
@@ -30,8 +34,8 @@ class MigrasiDryRun extends Command
         {berkas : Jalur berkas .xlsx sekolah (di luar repositori)}
         {--school=PUSAT : Kode cabang, bukan id numerik}
         {--tahun-ajaran= : Nama tahun ajaran tujuan; bawaan: yang sedang aktif}
-        {--sheet-siswa=Data Siswa}
-        {--sheet-guru=Data Guru}';
+        {--sheet-siswa= : Nama lembar siswa, boleh lebih dari satu dipisah koma; kosong = deteksi otomatis}
+        {--sheet-guru= : Nama lembar guru; kosong = deteksi otomatis}';
 
     protected $description = 'Menganalisis berkas siswa/guru sekolah terhadap skema, tanpa menulis apa pun.';
 
@@ -55,9 +59,13 @@ class MigrasiDryRun extends Command
 
         try {
             $workbook = new LegacyWorkbook((string) $this->argument('berkas'));
-            $run = new LegacyDryRun($workbook, $school, $year);
+            $studentSheets = $this->resolveSheets($workbook, 'sheet-siswa', 'Data Siswa');
+            $teacherSheets = $this->resolveSheets($workbook, 'sheet-guru', 'Data Guru');
+
+            $run = new LegacyDryRun($workbook, $school, $year, $studentSheets, $teacherSheets);
             $students = $run->students();
             $teachers = $run->teachers();
+            $plan = $run->plan();
         } catch (Throwable $e) {
             // Pesan pengecualian boleh menyebut lembar yang hilang, tidak pernah
             // isi barisnya.
@@ -69,14 +77,23 @@ class MigrasiDryRun extends Command
         $this->line('');
         $this->components->twoColumnDetail('<fg=gray>Cabang</>', $school->code.' — '.$school->name);
         $this->components->twoColumnDetail('<fg=gray>Tahun ajaran tujuan</>', $year?->name ?? '<fg=red>belum ada</>');
+        $this->components->twoColumnDetail(
+            '<fg=gray>Lembar siswa</>',
+            $studentSheets === [] ? '<fg=red>tidak ada</>' : implode(', ', $studentSheets),
+        );
+        $this->components->twoColumnDetail(
+            '<fg=gray>Lembar guru</>',
+            $teacherSheets === [] ? '<fg=gray>tidak ada di berkas ini</>' : implode(', ', $teacherSheets),
+        );
 
         $this->renderStudents($students);
+        $this->renderPlan($plan);
         $this->renderTeachers($teachers);
 
-        $blockers = $this->blockers($students, $teachers);
+        $blockers = $this->blockers($plan, $teachers);
 
         $this->line('');
-        $this->components->info('PENGHAMBAT SEBELUM IMPOR UJI (M3)');
+        $this->components->info('PERLU DIPUTUSKAN SEBELUM IMPOR UJI (M3) — baris siap tetap boleh masuk');
 
         if ($blockers === []) {
             $this->components->twoColumnDetail('tidak ada', '<fg=green>siap</>');
@@ -85,7 +102,7 @@ class MigrasiDryRun extends Command
         }
 
         foreach ($blockers as $blocker) {
-            $this->components->twoColumnDetail($blocker, '<fg=red>blokir</>');
+            $this->components->twoColumnDetail($blocker, '<fg=yellow>tertunda</>');
         }
 
         return 1;
@@ -259,26 +276,117 @@ class MigrasiDryRun extends Command
     }
 
     /**
-     * @param  array<string, mixed>  $s
+     * Lembar mana yang dibaca.
+     *
+     * Opsi yang diisi tangan selalu menang, dan nama lembar yang salah ketik
+     * tetap melempar galat di pembacanya — supaya "lembarnya tidak ada" tidak
+     * pernah menyamar sebagai "isinya nol". Bila opsinya kosong: lembar dengan
+     * nama baku dipakai bila ada, selebihnya dideteksi dari isi headingnya
+     * (butir 484).
+     *
+     * @return array<int, string>
+     */
+    protected function resolveSheets(LegacyWorkbook $workbook, string $option, string $default): array
+    {
+        $explicit = trim((string) $this->option($option));
+
+        if ($explicit !== '') {
+            return array_values(array_filter(array_map('trim', explode(',', $explicit))));
+        }
+
+        if ($workbook->hasSheet($default)) {
+            return [$default];
+        }
+
+        return $option === 'sheet-siswa'
+            ? $workbook->detectStudentSheets()
+            : $workbook->detectTeacherSheets();
+    }
+
+    /**
+     * @param  array<string, mixed>  $plan
+     */
+    protected function renderPlan(array $plan): void
+    {
+        $this->line('');
+        $this->components->info('RENCANA IMPOR M3 — keputusan per baris');
+
+        foreach ($plan['outcomes'] as $outcome => $count) {
+            $colour = str_starts_with($outcome, 'READY') ? 'green' : 'yellow';
+            $this->components->twoColumnDetail($outcome, "<fg={$colour}>{$count}</>");
+        }
+
+        $this->line('');
+        $this->components->info('NISN');
+
+        foreach ($plan['nisn'] as $state => $count) {
+            $colour = $state === NisnNormalizer::INVALID && $count > 0 ? 'red' : 'gray';
+            $this->components->twoColumnDetail($state, "<fg={$colour}>{$count}</>");
+        }
+
+        $this->line('');
+        $this->components->info('Penempatan kelas untuk baris yang siap');
+
+        foreach ($plan['placements'] as $state => $count) {
+            $colour = str_starts_with($state, 'PLACEMENT') ? 'green' : 'red';
+            $this->components->twoColumnDetail($state, "<fg={$colour}>{$count}</>");
+        }
+
+        foreach ($plan['classes'] as $class) {
+            // Koreksi data terkonfirmasi selalu ditampilkan bersama label
+            // aslinya: yang membaca laporan berhak tahu nilai mana yang diubah
+            // dan menjadi apa (butir 506).
+            $name = $class['corrected']
+                ? "  label \"{$class['source_label']}\" → \"{$class['label']}\" (koreksi data terkonfirmasi)"
+                : "  label \"{$class['label']}\"";
+
+            $this->components->twoColumnDetail(
+                $name.' (tingkat '.($class['grade_level'] ?? '?').", {$class['students']} siswa)",
+                $class['class_id'] === null ? '<fg=red>rombel belum ada</>' : '<fg=green>cocok</>',
+            );
+        }
+
+        $r = $plan['reconciliation'];
+
+        $this->line('');
+        $this->components->info('Rekonsiliasi');
+        $this->components->twoColumnDetail('baris sumber', (string) $r['source']);
+        $this->components->twoColumnDetail('siap', "<fg=green>{$r['ready']}</>");
+        $this->components->twoColumnDetail('tertunda', "<fg=yellow>{$r['pending']}</>");
+        $this->components->twoColumnDetail('ditolak', "<fg=red>{$r['rejected']}</>");
+        $this->components->twoColumnDetail(
+            'sumber = siap + tertunda + ditolak',
+            $r['balanced'] ? '<fg=green>seimbang</>' : '<fg=red>TIDAK seimbang</>',
+        );
+    }
+
+    /**
+     * Yang menuntut keputusan manusia sebelum impor uji.
+     *
+     * Sejak M3 daftar ini **bukan** lagi daftar "tidak ada yang boleh masuk".
+     * Baris yang siap tetap boleh ditulis sekalipun daftar ini terisi; yang
+     * dikatakannya hanya bahwa ada baris yang tidak akan ikut (butir 487).
+     *
+     * @param  array<string, mixed>  $plan
      * @param  array<string, mixed>  $t
      * @return array<int, string>
      */
-    protected function blockers(array $s, array $t): array
+    protected function blockers(array $plan, array $t): array
     {
         $out = [];
 
-        foreach ($s['missing_required'] as $field => $count) {
-            $out[] = "students.{$field} kosong pada {$count} baris — kolom NOT NULL";
-        }
-
-        foreach ($s['class_placement'] as $c) {
-            if ($c['blocker'] !== null) {
-                $out[] = "kelas \"{$c['label']}\": {$c['blocker']}";
+        foreach ($plan['outcomes'] as $outcome => $count) {
+            if (in_array($outcome, StudentImportPlan::WRITABLE, true)) {
+                continue;
             }
+
+            $out[] = "{$outcome}: {$count} baris — tidak ikut impor";
         }
 
-        if (($s['duplicates'] ?? []) !== []) {
-            $out[] = 'NIS ganda di dalam berkas: '.count($s['duplicates']).' baris';
+        foreach ($plan['classes'] as $class) {
+            if ($class['class_id'] === null) {
+                $out[] = "kelas \"{$class['label']}\": rombel belum ada di tahun ajaran tujuan";
+            }
         }
 
         if ($t['ambiguous_tokens'] !== []) {

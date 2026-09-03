@@ -5,6 +5,7 @@ namespace App\Support\Migration;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use RuntimeException;
 
 /**
@@ -57,6 +58,25 @@ class LegacyWorkbook
     ];
 
     /**
+     * Heading yang hanya muncul di lembar siswa. Dipakai untuk membedakan
+     * lembar siswa dari lembar guru: keduanya sama-sama punya "No" dan
+     * "Nama", sehingga dua kecocokan saja tidak cukup untuk memutuskan
+     * lembar mana yang berisi siswa (butir 484).
+     *
+     * @var array<int, string>
+     */
+    protected const STUDENT_DISTINCTIVE = [
+        'nis', 'nisn', 'kelas', 'jenis kelamin', 'l p', 'tempat lahir', 'tanggal lahir', 'nama siswa',
+    ];
+
+    /**
+     * @var array<int, string>
+     */
+    protected const TEACHER_DISTINCTIVE = [
+        'pelajaran', 'mata pelajaran', 'mapel', 'nama guru', 'email guru',
+    ];
+
+    /**
      * @var array<string, string>
      */
     protected const TEACHER_HEADINGS = [
@@ -83,19 +103,21 @@ class LegacyWorkbook
     }
 
     /**
+     * @param  string|array<int, string>  $sheet
      * @return array<string, mixed>
      */
-    public function students(string $sheet = 'Data Siswa'): array
+    public function students(string|array $sheet = 'Data Siswa'): array
     {
-        return $this->readSectioned($sheet, self::STUDENT_HEADINGS);
+        return $this->readAcross((array) $sheet, self::STUDENT_HEADINGS);
     }
 
     /**
+     * @param  string|array<int, string>  $sheet
      * @return array<string, mixed>
      */
-    public function teachers(string $sheet = 'Data Guru'): array
+    public function teachers(string|array $sheet = 'Data Guru'): array
     {
-        return $this->readSectioned($sheet, self::TEACHER_HEADINGS);
+        return $this->readAcross((array) $sheet, self::TEACHER_HEADINGS);
     }
 
     /**
@@ -104,6 +126,107 @@ class LegacyWorkbook
     public function sheetNames(): array
     {
         return $this->spreadsheet()->getSheetNames();
+    }
+
+    public function hasSheet(string $name): bool
+    {
+        return $this->spreadsheet()->getSheetByName($name) !== null;
+    }
+
+    /**
+     * Lembar mana yang berisi siswa.
+     *
+     * Berkas 2026/2027 tidak lagi memakai satu lembar "Data Siswa" berseksi,
+     * melainkan satu lembar per tingkat ("Kelas 10", "Kelas 11", "Kelas 12").
+     * Menuntut sekolah menggabungkannya lebih dulu hanya memindahkan pekerjaan
+     * dan membuka kesempatan salah ketik baru pada data identitas, jadi bentuk
+     * itu dikenali apa adanya (butir 484).
+     *
+     * @return array<int, string>
+     */
+    public function detectStudentSheets(): array
+    {
+        return $this->detectSheets(self::STUDENT_HEADINGS, self::STUDENT_DISTINCTIVE);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function detectTeacherSheets(): array
+    {
+        return $this->detectSheets(self::TEACHER_HEADINGS, self::TEACHER_DISTINCTIVE);
+    }
+
+    /**
+     * @param  array<string, string>  $headings
+     * @param  array<int, string>  $distinctive
+     * @return array<int, string>
+     */
+    protected function detectSheets(array $headings, array $distinctive): array
+    {
+        $found = [];
+
+        foreach ($this->sheetNames() as $name) {
+            $worksheet = $this->spreadsheet()->getSheetByName($name);
+
+            if ($worksheet === null) {
+                continue;
+            }
+
+            foreach ($this->grid($worksheet) as $cells) {
+                if (! $this->looksLikeHeading($cells, $headings)) {
+                    continue;
+                }
+
+                foreach ($cells as $value) {
+                    if (in_array($this->headingKey($value), $distinctive, true)) {
+                        $found[] = $name;
+
+                        continue 3;
+                    }
+                }
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * Beberapa lembar dibaca menjadi satu hasil. Nomor barisnya tetap nomor
+     * baris di lembarnya masing-masing, jadi setiap baris membawa nama lembar
+     * supaya laporan dapat menunjuk letak sebuah baris tanpa menyebut isinya.
+     *
+     * @param  array<int, string>  $sheets
+     * @param  array<string, string>  $headings
+     * @return array<string, mixed>
+     */
+    protected function readAcross(array $sheets, array $headings): array
+    {
+        $merged = [
+            'rows' => [],
+            'declared_totals' => [],
+            'ignored_rows' => 0,
+            'unknown_headings' => [],
+            'heading_rows' => 0,
+            'sheets' => array_values($sheets),
+        ];
+
+        foreach ($sheets as $sheet) {
+            $read = $this->readSectioned($sheet, $headings);
+
+            foreach ($read['rows'] as $row) {
+                $merged['rows'][] = ['sheet' => $sheet] + $row;
+            }
+
+            $merged['declared_totals'] = array_merge($merged['declared_totals'], $read['declared_totals']);
+            $merged['ignored_rows'] += $read['ignored_rows'];
+            $merged['heading_rows'] += $read['heading_rows'];
+            $merged['unknown_headings'] = array_values(array_unique(
+                array_merge($merged['unknown_headings'], $read['unknown_headings']),
+            ));
+        }
+
+        return $merged;
     }
 
     /**
@@ -121,12 +244,7 @@ class LegacyWorkbook
             throw new RuntimeException("Lembar \"{$sheet}\" tidak ada di berkas sumber.");
         }
 
-        $grid = $worksheet->rangeToArray(
-            'A1:'.$worksheet->getHighestDataColumn().$worksheet->getHighestDataRow(),
-            null,
-            false,
-            false,
-        );
+        $grid = $this->grid($worksheet);
 
         $map = [];
         $unknown = [];
@@ -184,6 +302,19 @@ class LegacyWorkbook
     }
 
     /**
+     * @return array<int, array<int, mixed>>
+     */
+    protected function grid(Worksheet $worksheet): array
+    {
+        return $worksheet->rangeToArray(
+            'A1:'.$worksheet->getHighestDataColumn().$worksheet->getHighestDataRow(),
+            null,
+            false,
+            false,
+        );
+    }
+
+    /**
      * Baris data adalah baris yang nomor urutnya angka **dan** namanya terisi.
      * Keduanya bersama-sama, karena masing-masing sendirian juga cocok dengan
      * baris judul maupun baris rekap.
@@ -230,6 +361,20 @@ class LegacyWorkbook
 
             if (isset($headings[$key])) {
                 $map[$index] = $headings[$key];
+
+                continue;
+            }
+
+            // "Kelas di SMAN 11" adalah satu-satunya keterangan kelas di berkas
+            // 2026/2027. Judulnya menyebut sekolah mitra, jadi isinya dibaca
+            // sebagai label kelas **sumber** — bukan sebagai nama rombel Smart
+            // Sukses School. Pencocokannya ke `classes.name` tetap harus persis,
+            // dan tidak ada rombel yang dibuat dari label ini (butir 485).
+            //
+            // Aturan awalan ini hanya berlaku pada peta heading siswa; peta guru
+            // tidak mengenal kolom kelas sama sekali.
+            if (isset($headings['kelas']) && preg_match('/^kelas\\b/', $key) === 1) {
+                $map[$index] = 'class_label';
 
                 continue;
             }

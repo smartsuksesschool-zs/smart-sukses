@@ -39,12 +39,34 @@ class LegacyDryRun
 
     protected AssignmentClassifier $classifier;
 
+    /**
+     * @param  array<int, string>  $studentSheets
+     * @param  array<int, string>  $teacherSheets
+     */
     public function __construct(
         protected LegacyWorkbook $workbook,
         protected School $school,
         protected ?AcademicYear $year = null,
+        protected array $studentSheets = ['Data Siswa'],
+        protected array $teacherSheets = ['Data Guru'],
     ) {
         $this->classifier = new AssignmentClassifier;
+    }
+
+    /**
+     * M3 — keputusan per baris menurut kontrak impor sebagian.
+     *
+     * Terpisah dari `students()` dengan sengaja. `students()` menjawab
+     * "seperti apa berkas ini" dan itu tidak berubah; `plan()` menjawab "baris
+     * mana yang boleh ditulis", dan jawabannya baru ada setelah pemilik
+     * memutuskan aturan NIS dan NISN (butir 494).
+     *
+     * @return array<string, mixed>
+     */
+    public function plan(): array
+    {
+        return (new StudentImportPlan($this->school, $this->year))
+            ->build($this->workbook->students($this->studentSheets)['rows']);
     }
 
     /**
@@ -52,7 +74,7 @@ class LegacyDryRun
      */
     public function students(): array
     {
-        $read = $this->workbook->students();
+        $read = $this->workbook->students($this->studentSheets);
 
         $rejected = [];
         $missing = [];
@@ -164,7 +186,11 @@ class LegacyDryRun
      */
     public function teachers(): array
     {
-        $read = $this->workbook->teachers();
+        if ($this->teacherSheets === []) {
+            return self::emptyTeacherReport();
+        }
+
+        $read = $this->workbook->teachers($this->teacherSheets);
 
         $people = [];
         $roles = [];
@@ -244,6 +270,34 @@ class LegacyDryRun
             'match_candidates' => count(array_filter($people, fn ($p) => $p['matched'])),
             'create_candidates' => count(array_filter($people, fn ($p) => ! $p['matched'])),
             'unknown_headings' => $read['unknown_headings'],
+        ];
+    }
+
+    /**
+     * Berkas 2026/2027 hanya memuat siswa. Lembar guru yang memang tidak ada
+     * dilaporkan sebagai nol, bukan sebagai galat — tetapi hanya bila
+     * pemanggilnya sudah memastikan lembarnya benar-benar tidak ada. Nama lembar
+     * yang salah ketik tetap melempar pengecualian seperti sebelumnya, karena
+     * "nol guru" dan "lembarnya tidak ketemu" adalah dua fakta yang berbeda.
+     *
+     * @return array<string, mixed>
+     */
+    public static function emptyTeacherReport(): array
+    {
+        return [
+            'source_rows' => 0,
+            'people' => 0,
+            'distinct_people' => 0,
+            'name_collisions' => [],
+            'roles' => [],
+            'subject_candidates' => [],
+            'non_academic_tokens' => [],
+            'ambiguous_tokens' => [],
+            'readiness' => [self::ACCOUNT_READY => 0, self::ACCOUNT_BLOCKED => 0],
+            'account_blockers' => [],
+            'match_candidates' => 0,
+            'create_candidates' => 0,
+            'unknown_headings' => [],
         ];
     }
 
@@ -352,17 +406,15 @@ class LegacyDryRun
         return $out;
     }
 
+    /**
+     * Satu pembaca tingkat untuk kedua bagian laporan. Sebelumnya bagian M2
+     * memakai pencocokan persis sementara rencana M3 membaca token depan label,
+     * sehingga satu laporan yang sama bisa menyebut "XII Terbuka - 2" sekaligus
+     * terbaca dan tidak terbaca (butir 502).
+     */
     protected function gradeLevel(string $label): ?int
     {
-        $key = mb_strtoupper(trim($label));
-        $key = preg_replace('/^KELAS\s+/', '', $key) ?? $key;
-
-        return match ($key) {
-            '10', 'X' => 10,
-            '11', 'XI' => 11,
-            '12', 'XII' => 12,
-            default => null,
-        };
+        return StudentImportPlan::gradeLevel($label);
     }
 
     protected function normaliseGender(string $value): string
