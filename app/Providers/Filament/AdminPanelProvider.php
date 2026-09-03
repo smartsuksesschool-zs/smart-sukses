@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Http\Controllers\Admin\PpdbDocumentController;
+use App\Http\Controllers\Admin\StudentTemplateController;
 use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\RecordAuditIpAddress;
 use App\Http\Middleware\SetUserLocale;
@@ -127,6 +128,10 @@ class AdminPanelProvider extends PanelProvider
             ->authenticatedRoutes(fn () => Route::get(
                 'ppdb/{registration}/dokumen/{documentKey}',
                 PpdbDocumentController::class,
-            )->whereNumber(['registration', 'documentKey'])->name('ppdb.document'));
+            )->whereNumber(['registration', 'documentKey'])->name('ppdb.document'))
+            ->authenticatedRoutes(fn () => Route::get(
+                'siswa/template-import',
+                StudentTemplateController::class,
+            )->name('students.import-template'));
     }
 }
