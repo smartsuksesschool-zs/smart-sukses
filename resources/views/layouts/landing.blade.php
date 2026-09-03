@@ -1720,5 +1720,6 @@
          digandakan demi halaman kedua (butir 436). --}}
     @yield('content')
     {{ $slot ?? '' }}
+    <x-env-banner />
 </body>
 </html>

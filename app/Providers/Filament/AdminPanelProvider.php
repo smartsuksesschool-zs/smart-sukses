@@ -86,6 +86,17 @@ class AdminPanelProvider extends PanelProvider
                 PanelsRenderHook::USER_MENU_BEFORE,
                 fn (): View => view('filament.locale-switch'),
             )
+            // Penanda lingkungan non-produksi. Panel adalah tempat perubahan
+            // yang paling sulit dibatalkan dilakukan — menghapus siswa,
+            // menerbitkan nilai, membuat tagihan — jadi justru di sinilah staf
+            // paling perlu tahu server mana yang sedang dibuka (butir 510).
+            //
+            // Komponen yang sama dipakai halaman publik dan portal, sehingga
+            // hanya ada satu tempat yang menentukan kapan penanda muncul.
+            ->renderHook(
+                PanelsRenderHook::BODY_END,
+                fn (): View => view('components.env-banner'),
+            )
             ->navigationGroups([
                 NavigationGroup::make()->label(fn (): string => __('Manajemen Akses')),
             ])

@@ -649,5 +649,6 @@
     </main>
 
     @livewireScripts
+    <x-env-banner />
 </body>
 </html>
