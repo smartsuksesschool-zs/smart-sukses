@@ -173,7 +173,7 @@ Label yang ditemukan di berkas:
 bukan kesimpulan yang ditarik importer sendiri.
 
 Koreksinya ditulis sebagai alias satu per satu di
-`StudentImportPlan::CLASS_LABEL_ALIASES`, bukan sebagai aturan umum yang
+`CanonicalRombel::ALIASES`, bukan sebagai aturan umum yang
 mengubah angka Romawi di mana pun ia muncul. Aturan umum semacam itu akan
 mengubah label yang belum pernah ditinjau siapa pun — termasuk label di berkas
 yang belum ada. `XI Terbuka - I` dan `X Terbuka - II` karena itu **tidak**
@@ -199,9 +199,12 @@ Tidak satu pun dari empat rombel itu ada di basis data. Seluruh 39 baris siap
 berhenti di `CLASS_NOT_FOUND`, dan itu benar.
 
 Koreksi salah ketik di atas **tidak** dengan sendirinya memberi izin membuat
-rombel. Ia hanya menentukan label mana yang dicari. Rombel tetap tidak dibuat
-otomatis sampai keputusan dan penyiapan rombel Smart Sukses School dilakukan
-secara eksplisit dan terpisah.
+rombel. Ia hanya menentukan label mana yang dicari, dan importer tetap tidak
+pernah membuat kelas.
+
+Penyiapannya kini ada sebagai perintah tersendiri — lihat
+[`m4-rombel-readiness.md`](m4-rombel-readiness.md). Sesudah dijalankan,
+`CLASS_NOT_FOUND` pada berkas 2026/2027 menjadi **0**.
 
 ---
 
@@ -330,10 +333,11 @@ terisi.
 
 1. **NIS satu siswa belum terbit.** Ia tetap tertunda sampai sekolah
    menerbitkannya. Tidak ada jalan pintas.
-2. **Empat rombel tujuan belum ada.** Namanya kini kanonis setelah koreksi
-   pemilik (§4), tetapi rombelnya belum dibuat, dan pembuatannya menunggu
-   persetujuan terpisah. Yang juga belum diputuskan: apakah nama rombel di
-   sistem harus mengikuti label `Kelas di SMAN 11`.
+2. ~~**Empat rombel tujuan belum ada.**~~ **Selesai di M4.** Keempat rombel kini
+   disiapkan lewat `php artisan migrasi:siapkan-rombel`, dan pertanyaan tentang
+   nama rombel sudah dijawab: label `Kelas di SMAN 11` dipakai apa adanya
+   sebagai nama rombel di sistem. Lihat
+   [`m4-rombel-readiness.md`](m4-rombel-readiness.md).
 3. **Belum ada keputusan impor produksi.** Yang sudah dibuktikan hanya bahwa
    impor uji berjalan benar dan berulang. Pagar `_test` harus dilonggarkan
    secara sadar, bukan dengan menambah opsi.

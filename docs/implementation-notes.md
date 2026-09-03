@@ -8749,6 +8749,114 @@ supaya penambahan berikutnya menjadi keputusan sadar, bukan kebiasaan.
 Sebagai gantinya, runbook staging menyebut **perintah seed yang persis**, satu
 per satu. Tidak ada kalimat "jalankan semua seeder" di mana pun.
 
+### 514. Daftar rombel dan daftar alias tinggal bersama
+
+Alias `XII Terbuka - I` ada di StudentImportPlan, sementara daftar rombel resmi
+tidak tertulis di mana pun kecuali di kepala orang dan di satu tabel dokumen.
+
+Keduanya selalu berubah bersama. Menambah rombel tanpa memperbarui aliasnya —
+atau sebaliknya — menghasilkan perintah penyiapan dan pembaca berkas yang
+berbeda pendapat tentang rombel mana yang ada, dan perbedaan itu baru terlihat
+sebagai `CLASS_NOT_FOUND` yang membingungkan di tengah impor.
+
+`CanonicalRombel` memuat keduanya: empat nama beserta tingkatnya, dan satu
+alias. StudentImportPlan meneruskan ke sana, sehingga tidak ada lagi dua
+pemahaman tentang hal yang sama.
+
+### 515. Penyiapan rombel tidak dipagari basis data uji
+
+`migrasi:terapkan-uji` dipagari ketat: lingkungan bukan produksi, nama basis
+data berpola basis data uji, dan `--konfirmasi`. Godaannya memakai pagar yang
+sama untuk perintah penyiapan rombel, karena tampak lebih aman.
+
+Itu akan salah, dan salahnya baru terasa nanti. Yang ditulis perintah rombel
+bukan data pribadi siapa pun, melainkan empat baris struktur yang memang harus
+ada di produksi. Memagarinya ke basis data uji berarti sekolah tidak punya jalan
+resmi menyiapkan rombelnya sendiri — dan jalan yang tidak resmi adalah mengedit
+baris basis data dengan tangan, yang jauh lebih berbahaya daripada perintah yang
+mencetak rencananya lebih dulu.
+
+Pagar harus sepadan dengan apa yang dilindungi. Impor identitas siswa dan
+pembuatan empat rombel bukan risiko yang sama, dan memperlakukannya sama hanya
+memindahkan risikonya ke tempat yang tidak terlihat.
+
+Yang tetap: mode kering sebagai bawaan, `--konfirmasi` untuk menulis, cabang dan
+tahun ajaran eksplisit, dan `MigrationWriteGuard` tidak dilemahkan sedikit pun
+untuk impor siswa.
+
+### 516. Nama rombel kembar memilih diam-diam
+
+`classes` tidak punya indeks unik pada `(school_id, academic_year_id, name)`,
+dan form kelas pun tidak memeriksanya. Dua rombel bernama sama pada satu tahun
+ajaran karena itu dapat dibuat lewat panel.
+
+Yang membuatnya lebih dari sekadar data berantakan: pencocokan kelas saat impor
+siswa memakai `->value('id')`. Dengan dua baris bernama sama, ia memilih salah
+satu tanpa memberi tahu siapa pun, dan siswa mendarat di rombel yang bukan
+tujuannya. Kekeliruannya tidak muncul sebagai galat mana pun — hanya sebagai
+daftar kelas yang isinya salah, berbulan-bulan kemudian.
+
+Pagarnya ditambahkan di form, mengikuti pola yang sudah dipakai kolom wali
+kelas. Indeks unik di basis data **tidak** ditambahkan: migrasi semacam itu akan
+gagal pada pemasangan yang terlanjur punya duplikat, dan tidak ada bukti bahwa
+keadaan itu tidak ada di mana pun. Celah di level basis data dicatat apa adanya
+di dokumen M4, bukan ditutup diam-diam dengan migrasi yang bisa menggagalkan
+deployment.
+
+### 517. "Ganda" bukan varian dari "ada"
+
+Butir 516 menutup jalur pembuatan rombel kembar lewat form. Yang belum tertutup
+adalah barisnya yang sudah terlanjur ada — dari data lama, atau dari dua
+permintaan yang bersamaan.
+
+Pencocokan kelas memakai `->value('id')`, yang mengambil baris pertama. Dengan
+dua rombel bernama sama, ia memilih salah satu **tanpa memberi tahu siapa pun**.
+Siswa mendarat di rombel yang belum tentu tujuannya, dan tidak ada galat apa pun
+yang menandainya — hanya daftar kelas yang isinya salah, berbulan-bulan
+kemudian.
+
+Yang berubah: pencocokan mengembalikan **seluruh** id yang cocok, dan hasilnya
+dibedakan menjadi tiga, bukan dua — nol, satu, lebih dari satu. Lebih dari satu
+punya namanya sendiri, `CLASS_AMBIGUOUS`, karena tindakannya berbeda dari
+`CLASS_NOT_FOUND`: yang satu menuntut rombel dibuat, yang lain menuntut
+duplikatnya dibereskan. Melaporkan keduanya sebagai hal yang sama akan
+mengirim operator ke arah yang salah.
+
+`resolveClassId()` sengaja mengembalikan null pada **nol maupun lebih dari
+satu**. Pemanggilnya tidak boleh dapat membedakan keduanya lewat nilai itu,
+karena keduanya sama-sama berarti tidak ada yang boleh ditulis; yang
+membedakannya untuk laporan adalah `placement()`. Nilai kembalian yang tidak
+dapat disalahgunakan lebih baik daripada nilai kembalian yang benar tetapi
+menunggu dipakai keliru.
+
+Importer tidak memilih, tidak menggabungkan, tidak menghapus, tidak mengganti
+nama. Data induk siswa tetap masuk — ambiguitas rombel bukan alasan menahan data
+induk yang sudah benar — dan satu baris ambigu tidak menahan baris lain yang
+sehat.
+
+Indeks unik di basis data tetap tidak ditambahkan (butir 516). Yang ditambahkan
+adalah kemampuan gagal dengan aman hari ini, tanpa migrasi yang bisa
+menggagalkan deployment pada pemasangan yang sudah punya duplikat.
+
+### 518. Perintah tanpa pagar menggantinya dengan kejelasan
+
+`migrasi:siapkan-rombel` sengaja dapat berjalan di luar basis data uji (butir
+515). Itu keputusan yang benar, tetapi ia menghapus satu lapis pengaman, dan
+lapis yang hilang harus diganti — bukan dibiarkan kosong.
+
+Penggantinya kejelasan sebelum menulis. Perintah menampilkan lingkungan, nama
+basis data, kode cabang, tahun ajaran beserta semesternya, dan keempat nama
+rombel yang akan dikelola — semuanya sebelum baris pertama ditulis, dan mode
+kering tetap bawaan. Lingkungan di luar `local`/`testing` ditandai kuning
+dengan ajakan memeriksa sekali lagi.
+
+Tidak ada kredensial maupun data pribadi yang ikut tercetak: yang ditampilkan
+hanya nama-nama yang sudah tertulis di `.env` dan di repositori.
+
+Prinsipnya: perintah yang boleh menyentuh produksi harus membuat operatornya
+melihat sasaran sebelum menekan enter. Pagar yang dilepas karena alasan yang
+sah tetap menuntut sesuatu di tempatnya.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
