@@ -8241,6 +8241,400 @@ Tautan menuju jangkar yang tidak dirender adalah tautan mati — pengunjung
 menekannya dan tidak terjadi apa-apa — dan itu diuji sebagai pola, bukan sebagai
 daftar jangkar yang harus diingat satu per satu.
 
+### 483. NISN dinormalisasi, bukan diminta ulang
+
+Berkas 2026/2027 menyimpan NISN di sel bertipe angka, sehingga Excel membuang
+nol di depannya: 25 dari 40 baris tersimpan 8 digit dan 12 baris 9 digit. Itu
+bukan kelalaian tata usaha melainkan akibat wajar dari menaruh identitas di
+kolom numerik.
+
+Dua jalan yang tersedia: meminta seluruh berkas dikirim ulang dengan kolom teks,
+atau memperbaikinya saat migrasi. Yang pertama memindahkan pekerjaan dan, lebih
+buruk, membuka kesempatan salah ketik baru pada data identitas — setiap
+pengetikan ulang NIS/NISN adalah risiko yang tidak ada sebelumnya. Keputusan
+pemilik: normalisasi di sisi migrasi.
+
+Kontraknya sengaja sempit dan deterministik: kosong/`-` menjadi NULL, 10 digit
+disalin apa adanya, 1–9 digit diberi nol di depan hingga 10, bukan-digit dan
+lebih-dari-10-digit ditolak nilainya.
+
+Yang **tidak** dilakukan adalah memotong. NISN 11 digit bukan NISN 10 digit yang
+kelebihan satu karakter; ia data yang salah, dan memotongnya menghasilkan
+identitas yang tampak sah padahal milik orang lain.
+
+Akibat yang perlu diketahui: aturan pemberian nol berlaku juga pada NISN salah
+ketik yang pendek — `123` menjadi `0000000123`, bukan galat. Itu konsekuensi
+langsung dari aturan yang diputuskan. Yang menjaganya tetap terlihat adalah
+laporan: jumlah `NISN_NORMALIZED` selalu dicetak sebelum apa pun ditulis.
+
+Berkas sumbernya sendiri tidak pernah diubah, dan ada tesnya.
+
+### 484. Satu lembar per tingkat dibaca apa adanya
+
+Berkas M1/M2 satu lembar `Data Siswa` berseksi per angkatan. Berkas 2026/2027
+berbentuk lain: tiga lembar `Kelas 12`, `Kelas 11`, `Kelas 10`, masing-masing
+dengan satu baris heading yang rapi.
+
+Menuntut sekolah menggabungkannya lebih dulu adalah kesalahan yang sama dengan
+butir 449 — memindahkan pekerjaan, lalu membayar salah ketiknya. Pembacanya
+menerima daftar lembar dan menggabungkannya menjadi satu hasil; setiap baris
+membawa nama lembarnya supaya laporan tetap bisa menunjuk letak sebuah baris
+tanpa menyebut isinya.
+
+Deteksi lembar tidak bisa hanya menghitung dua judul yang dikenali: lembar guru
+pun punya "No" dan "Nama". Karena itu satu lembar baru dianggap lembar siswa
+bila ia juga memuat judul yang **khas** siswa — NIS, NISN, kelas, jenis kelamin.
+
+Nama lembar yang ditulis tangan tetap melempar galat bila tidak ada. "Lembarnya
+tidak ketemu" dan "isinya nol" adalah dua fakta berbeda, dan yang pertama tidak
+boleh menyamar sebagai yang kedua.
+
+### 485. "Kelas di SMAN 11" dibaca sebagai label, bukan sebagai rombel
+
+Satu-satunya keterangan kelas di berkas 2026/2027 ada di kolom berjudul
+`Kelas di SMAN 11` — judul yang menyebut sekolah mitra, bukan rombel Smart
+Sukses School.
+
+Mengabaikannya berarti membuang satu-satunya informasi kelas yang ada.
+Memperlakukannya sebagai nama rombel berarti mengarang rombel atas nama sekolah.
+Jalan tengahnya: isinya dibaca sebagai label kelas **sumber**, dan pencocokannya
+ke `classes.name` harus persis. Label yang tidak punya padanan dilaporkan
+`CLASS_NOT_FOUND`; tidak ada rombel yang dibuat darinya.
+
+Aturan awalan "kelas ..." hanya berlaku pada peta heading siswa. Peta heading
+guru tidak mengenal kolom kelas sama sekali, jadi aturannya tidak bisa bocor ke
+sana.
+
+### 486. Satu rencana untuk analisis kering dan mode terap
+
+`StudentImportPlan` adalah satu-satunya tempat baris sumber dinilai. Kedua
+perintah membacanya, sehingga yang diperagakan `migrasi:dry-run` persis yang
+dikerjakan `migrasi:terapkan-uji`.
+
+Mode kering yang menghitung sendiri dan mode terap yang menghitung sendiri
+adalah dua pemahaman atas berkas yang sama, dan keduanya akan menyimpang —
+biasanya diam-diam, biasanya ketahuan setelah menulis.
+
+### 487. Kontrak impor sebagian
+
+Analisis M2 menolak seluruh berkas begitu ada satu penghambat. Sikap itu benar
+ketika belum ada keputusan apa pun; ia menjadi salah begitu ada 40 siswa yang
+39-nya siap, karena ia memaksa memilih antara menunda semuanya atau mengarang
+satu NIS.
+
+Sejak M3 setiap baris dinilai sendiri-sendiri: baris tertunda tidak pernah
+menghalangi baris siap, dan rekonsiliasinya selalu tertutup —
+`sumber = siap + tertunda + ditolak`, diperiksa setiap kali.
+
+Daftar "penghambat" di laporan karena itu berubah arti dan berubah nama. Ia
+bukan lagi daftar "tidak ada yang boleh masuk", melainkan daftar "ada yang tidak
+akan ikut". Kode keluar 1 tetap, tetapi maknanya kini "ada yang perlu diputuskan
+manusia".
+
+### 488. Tidak ada NIS sementara
+
+Satu siswa belum punya NIS resmi. Memberinya nomor sementara adalah godaan yang
+kuat: ia menyelesaikan impor hari ini.
+
+Yang mahal bukan membuat identitas sementara, melainkan menukarnya kemudian.
+Begitu ada nilai, tagihan, penempatan kelas, dan rapor yang menggantung padanya,
+nomor sementara itu sudah menjadi nomor tetap — dan menukarnya menjadi migrasi
+tersendiri yang jauh lebih besar daripada menunggu.
+
+Ia tertunda, terhitung, dan terlihat di setiap laporan. Itu cukup.
+
+### 489. Nama boleh menimbulkan pertanyaan, tidak pernah menjawabnya
+
+`ppdb_registrations` tidak menyimpan NIS maupun NISN. Kolom identitasnya hanya
+nama, jenis kelamin, tanggal lahir, dan data orang tua — sementara berkas siswa
+tidak memuat tanggal lahir. Tidak ada satu pun kunci rekonsiliasi yang aman.
+
+Karena itu nama tidak pernah dipakai untuk mencocokkan. Yang dilakukan justru
+kebalikannya: untuk baris tingkat X, nama yang sama dengan pendaftar PPDB yang
+belum dikonversi **menahan** barisnya sebagai `PPDB_RECONCILIATION_REQUIRED`.
+
+Perbedaannya menentukan. Mencocokkan berdasarkan nama menggabungkan dua orang
+berbeda tanpa ada yang tahu; menahan berdasarkan nama paling buruk hanya
+memperlambat satu baris sampai manusia melihatnya.
+
+Pendaftar yang `converted_student_id`-nya terisi tidak menahan apa pun: siswanya
+sudah ada dengan NIS, dan pencocokan NIS yang menanganinya.
+
+### 490. Importer tidak pernah membuat prasyaratnya sendiri
+
+Keempat rombel tujuan belum ada di basis data. Importer yang membuatnya sendiri
+akan menuliskan nama rombel yang belum pernah dinyatakan sekolah — dan salah
+satunya, `XII Terbuka - I` dengan angka Romawi berdampingan dengan
+`XII Terbuka - 2` berangka Arab, jelas menuntut keputusan manusia lebih dulu.
+
+Penempatan kelas karena itu dinilai terpisah dari data induk. Induk siswa yang
+sudah benar tidak ditahan hanya karena rombelnya belum dibuat, dan rombelnya
+tidak dibuat hanya karena ada siswa yang menunggu.
+
+Hal yang sama berlaku untuk tahun ajaran: tidak pernah dibuat importer, dan
+invarian satu tahun ajaran aktif tidak disentuh.
+
+### 491. Pagar tulis impor uji
+
+Perintah yang bisa diarahkan ke basis data mana pun cepat atau lambat akan
+diarahkan ke yang salah — biasanya larut malam, biasanya dengan opsi yang
+disalin dari catatan lama.
+
+Tiga pagar harus terbuka bersamaan: lingkungan bukan `production`, nama basis
+data berpola basis data uji (`_test`, `testing`, `:memory:`), dan `--konfirmasi`
+ditulis di baris perintah.
+
+Pagar kedua yang paling menentukan, dan ia yang tidak ada di rancangan awal.
+`APP_ENV=local` di mesin pengembang tetap menunjuk `smartsukses` — basis data
+kerja yang berisi data pemilik sungguhan. Memeriksa lingkungan saja tidak
+melindungi apa pun di sini.
+
+Perintahnya bernama `migrasi:terapkan-uji`, bukan `migrasi:terapkan`. Nama yang
+tidak menyebut batasnya akan dipakai di luar batasnya.
+
+Mode terap juga tidak dipasang sebagai opsi pada perintah analisis. Satu salah
+ketik tidak boleh memisahkan "melihat" dari "menulis" — memperbarui sikap butir
+457, yang menolak `--terapkan` ketika mode terap memang belum ada.
+
+### 492. Mode terap tidak menilai apa pun
+
+`StudentImportApply` tidak memutuskan; ia hanya menuliskan baris yang rencananya
+sudah menyatakan siap. Baris tertunda dan ditolak dilewati tanpa disentuh.
+
+Pemisahan ini yang membuat "yang diperagakan = yang dikerjakan" bisa diuji, dan
+yang membuat mode terap tidak punya jalan sendiri untuk melonggarkan aturan.
+
+### 493. Berkas lama bukan sumber yang lebih benar
+
+Untuk siswa yang NIS-nya sudah ada, yang boleh berubah hanya `nisn`, dan hanya
+bila kolomnya masih kosong.
+
+Nama dan jenis kelamin tidak pernah ditimpa dari berkas. Data yang sudah masuk
+sistem sudah melewati mata manusia — mungkin justru diperbaiki di sana — dan
+menimpanya dari berkas lama akan menghapus perbaikan itu tanpa jejak.
+
+NISN tersimpan yang berbeda dari NISN sumber dilaporkan sebagai konflik dan
+dibiarkan apa adanya. Itu bukan perkara importer.
+
+### 494. `plan()` terpisah dari `students()`
+
+`LegacyDryRun::students()` menjawab "seperti apa berkas ini", dan jawabannya
+tidak berubah oleh keputusan pemilik. `plan()` menjawab "baris mana yang boleh
+ditulis", dan jawabannya baru ada setelah aturan NIS dan NISN diputuskan.
+
+Menggabungkannya akan membuat analisis M2 ikut berubah setiap kali aturan
+migrasi berubah, padahal keduanya menjawab pertanyaan yang berbeda.
+
+### 495. Induk siswa dan akun tetap dua pekerjaan
+
+Impor uji tidak membuat satu pun `users`, tidak mengarang satu pun alamat surel,
+dan meninggalkan `students.user_id` null. Login terpadu tidak disentuh.
+
+Laporan memisahkan `MASTER_IMPORTED`, `ACCOUNT_READY`, dan `ACCOUNT_PENDING`
+supaya keduanya tidak pernah terbaca sebagai satu angka. Data akun dari Google
+Form tetap aliran masukan tersendiri.
+
+### 496. Berkas contoh menghapus tebakan, bukan memindahkannya
+
+Umpan balik pemilik: modal import menuntut admin menebak format berkasnya.
+Menebak format adalah cara paling mahal untuk mengetahui bahwa sebuah kolom
+salah nama — kesalahannya baru terlihat setelah unggahan menghasilkan "0 siswa
+diimport" tanpa keterangan.
+
+Tautan unduh diletakkan **di atas** kolom unggah, pada urutan pemakaiannya:
+Langkah 1 unduh, Langkah 2 unggah.
+
+### 497. Judul kolom berkas contoh dibangkitkan, bukan disalin
+
+Judul kolom di berkas contoh dibaca dari `StudentsImport::COLUMNS`, satu-satunya
+tempat kontrak kolom ditulis. Naskah modal import membacanya dari sana juga.
+
+Berkas contoh yang disalin tangan akan menyimpang begitu importer berubah, dan
+berkas contoh yang menyimpang lebih buruk daripada tidak ada berkas contoh sama
+sekali: ia membuat orang percaya pada format yang salah.
+
+Lembar Petunjuk pun dibangkitkan dari daftar yang sama, sehingga kolom baru
+tidak dapat masuk ke importer tanpa muncul penjelasannya.
+
+### 498. Contoh pengisian tidak diletakkan di lembar yang diimpor
+
+Baris contoh di lembar "Data Siswa" akan ikut terbaca sebagai data begitu
+berkasnya diunggah kembali, dan yang lahir adalah seorang siswa bernama contoh —
+lengkap dengan NIS karangan yang lalu dipakai nilai dan tagihan.
+
+Contohnya karena itu ada di lembar "Petunjuk", yang tidak pernah dibaca
+importer. Sikap yang sama dengan butir 38 pada berkas contoh nilai, hanya di
+sini contohnya tetap disediakan karena memang diminta — cuma diletakkan di
+tempat yang tidak berbahaya.
+
+### 499. Kolom identitas diformat sebagai teks di berkas contoh
+
+Kolom `nis` dan `nisn` di berkas contoh diformat teks. Inilah sebab nol pembuka
+NISN hilang pada berkas sekolah, dan memperbaikinya di berkas contoh mencegah
+kehilangan yang sama terulang pada berkas berikutnya.
+
+Normalisasi di butir 483 menangani berkas yang sudah terlanjur; format ini
+menangani berkas yang belum dibuat.
+
+### 500. "0 siswa diimport" bukan sebab
+
+Kalimat itu jawaban yang benar untuk tiga keadaan yang sangat berbeda: berkasnya
+kosong, judul kolomnya tidak dikenali, atau setiap barisnya ditolak. Tanpa
+dibedakan, admin tidak punya langkah berikutnya.
+
+Yang paling sering terjadi — judul kolom yang salah — justru yang paling mudah
+diperbaiki, dan sebelumnya justru yang paling tidak terlihat: importer melewati
+setiap baris karena kuncinya tidak cocok, lalu melapor sukses dengan nol.
+
+Kini judul kolom diperiksa lebih dulu, dan kolom wajib yang hilang disebut
+namanya.
+
+### 501. Berkas contoh tidak menyentuh basis data
+
+Ia dibangkitkan dari konstanta setiap kali diminta. Tidak ada query, tidak ada
+data siswa yang ikut, dan ada tesnya — siswa sungguhan dibuat di basis data uji
+lalu berkasnya diperiksa tidak memuatnya.
+
+Kewenangannya menumpang `StudentPolicy::import`: yang boleh mengunduh berkas
+contoh adalah yang memang sudah boleh mengimpor. Tidak ada matriks peran baru.
+
+### 502. Satu pembaca tingkat untuk satu laporan
+
+Bagian M2 laporan memakai pencocokan label persis (`10`, `X`) sementara rencana
+M3 membaca token tingkat di depan label. Akibatnya satu laporan yang sama bisa
+menyebut `XII Terbuka - 2` sekaligus terbaca dan tidak terbaca.
+
+Laporan yang membantah dirinya sendiri lebih buruk daripada laporan yang salah
+konsisten: yang membacanya berhenti mempercayai keduanya. Keduanya kini memakai
+pembaca yang sama.
+
+### 503. Normalisasi bisa mempertemukan dua nilai yang berbeda
+
+`12345678` dan `0012345678` menjadi NISN yang sama setelah normalisasi. Dua
+siswa dengan NISN sama adalah kesalahan data, dan menormalkannya diam-diam
+justru menyembunyikan kesalahan itu.
+
+Baris keduanya ditahan sebagai `PENDING_DUPLICATE_NISN`, tidak pernah digabung —
+cara yang sama dengan NIS ganda. Pada berkas 2026/2027 tidak ada satu pun
+tabrakan, tetapi pemeriksaannya harus ada sebelum berkas berikutnya, bukan
+sesudah.
+
+### 504. `collection()` dipanggil sekali per lembar, bukan sekali per berkas
+
+Cacat yang ditemukan uji manual, dan seluruhnya berasal dari batch ini:
+berkas contoh resmi yang diisi tanpa mengubah satu judul kolom pun ditolak
+dengan "Judul kolom tidak dikenali".
+
+Pemeriksaan judul kolom di butir 500 ditulis dengan anggapan `collection()`
+dipanggil sekali untuk satu berkas. Maatwebsite memanggilnya **sekali untuk
+setiap lembar**. Berkas contoh yang dibuat di butir 497 berlembar dua, jadi:
+
+| Panggilan | Lembar | Kunci heading | Hasil |
+| --- | --- | --- | --- |
+| #1 | `Data Siswa` | 13 kolom yang benar | cocok — barisnya diimpor |
+| #2 | `Petunjuk` | `kolom, wajib, keterangan, 3…12` | tidak cocok — menimpa |
+
+Kesimpulan disimpan di satu properti, jadi lembar kedua menghapus jawaban
+lembar pertama.
+
+Akibatnya lebih buruk daripada penolakan keliru. Barisnya **tetap ditulis ke
+basis data** sementara antarmuka melaporkan kegagalan — kombinasi terburuk,
+karena orang yang membaca layar akan mencoba lagi, atau menyerah, tanpa tahu
+datanya sudah masuk. Uji manual itu memang meninggalkan satu baris siswa di
+basis data pengembangan.
+
+Dua kekeliruan yang saling menutupi: pemeriksaan yang berasumsi salah, dan
+berkas contoh berlembar dua yang membuktikan asumsi itu salah. Keduanya
+ditambahkan di batch yang sama, dan tes yang ada memanggil `collection()`
+langsung sekali sehingga tidak pernah menempuh bentuk berkas yang sebenarnya.
+
+Perbaikannya: menilai **per lembar**. Setiap lembar dicatat sendiri; lembar
+yang judul kolomnya tidak cocok dilewati, bukan menggagalkan berkasnya; berkas
+ditolak hanya bila tidak ada satu lembar pun yang cocok.
+
+Nama lembar didapat dari event `BeforeSheet` — `collection()` sendiri tidak
+menerimanya. Nama lembar data menjadi satu konstanta, `StudentsImport::SHEET`,
+dan berkas contoh membacanya dari sana: kontrak berkas dimiliki importer,
+berkas contoh yang mengikuti.
+
+Pelajarannya untuk tes: tes yang memanggil `collection()` langsung menguji
+metodenya, bukan importernya. Regresi ini hanya bisa tertangkap oleh berkas
+sungguhan yang dibangkitkan berkas contohnya sendiri, lalu dibaca lewat
+`Excel::import`.
+
+### 505. "Belum diisi" berbeda dari "judul kolomnya salah"
+
+Penjaga di butir 504 belum cukup. Berkas contoh yang diunduh lalu diunggah
+**tanpa diisi** juga tidak punya lembar yang cocok — lembar `Data Siswa`-nya
+kosong sehingga judul kolomnya tak terbaca sama sekali, sementara lembar
+`Petunjuk` terbaca dan tidak cocok. Tanpa pembedaan, jawabannya kembali menjadi
+"Judul kolom tidak dikenali": penolakan keliru yang sama sekali lagi, hanya
+lewat jalan lain.
+
+Karena itu ketika tidak ada lembar yang cocok, yang dinilai adalah lembar
+bernama `Data Siswa` bila ada, selebihnya lembar pertama. Lembar data yang ada
+tetapi kosong menghasilkan "tidak ada baris data", yang memang benar.
+
+### 506. Koreksi label kelas adalah alias, bukan aturan
+
+Koreksi data terkonfirmasi: `XII Terbuka - I` di berkas sumber adalah salah
+ketik dari `XII Terbuka - 1`.
+
+Godaannya menulis aturan umum: normalkan angka Romawi di belakang label. Aturan
+itu akan bekerja untuk kasus ini dan diam-diam mengubah label lain yang belum
+pernah ditinjau siapa pun — `XI Terbuka - I`, `X Terbuka - II`, dan label di
+berkas yang belum ada. Yang dikonfirmasi adalah satu nilai, bukan sebuah kaidah.
+
+Koreksinya karena itu ditulis satu per satu sebagai alias yang bisa dibaca dan
+dibantah, dicocokkan sebagai label penuh yang persis. Label yang tidak terdaftar
+dikembalikan apa adanya.
+
+Laporan selalu menampilkan keduanya —
+`label "XII Terbuka - I" → "XII Terbuka - 1" (koreksi data terkonfirmasi)`.
+Koreksi yang tidak terlihat di laporan adalah koreksi yang tidak bisa dibantah.
+
+Empat label kanonis: `X Terbuka - 2`, `XI Terbuka - 1`, `XII Terbuka - 1`,
+`XII Terbuka - 2`. Koreksi ini menentukan label mana yang **dicari**, dan tidak
+memberi izin membuat rombel: rombelnya tetap tidak dibuat otomatis.
+
+### 507. Angka di kolom status tidak ditafsirkan ulang
+
+Nilai keliru yang paling mungkin di kolom `status` adalah angka tingkat kelas —
+`10`, `11`, `12` — karena kolom itu bersebelahan dengan kebiasaan lama menulis
+kelas di mana saja.
+
+Angka itu tidak pernah ditafsirkan ulang: bukan sebagai status, dan bukan
+sebagai penempatan kelas. Penempatan kelas tidak diatur lewat berkas contoh ini
+sama sekali, dan menebaknya dari kolom yang salah akan menempatkan siswa ke
+rombel berdasarkan sel yang jelas-jelas salah isi.
+
+Barisnya ditolak, dengan pesan yang menyebut nilai yang diterima. "Pilihan
+status tidak sah" tidak memberi tahu apa pun tentang apa yang harus ditulis.
+
+### 508. Notifikasi dan basis data diuji bersama, bukan sendiri-sendiri
+
+Cacat butir 504 punya bentuk yang khas: bukan "gagal", melainkan **dua jawaban
+yang berbeda dari satu peristiwa**. Barisnya tertulis; layarnya bilang gagal.
+
+Yang membuatnya lolos adalah tesnya sendiri. Ada tes yang memeriksa barisnya
+masuk, dan ada tes yang memeriksa pesan galat muncul untuk berkas yang salah.
+Tidak ada satu pun yang memeriksa **keduanya atas berkas yang sama** — sehingga
+kombinasi "menulis sekaligus melaporkan gagal" tidak punya tempat untuk
+tertangkap.
+
+Sejak sekarang keduanya diperiksa berpasangan lewat aksi import Filament yang
+sungguhan:
+
+- berkas sah -> barisnya ada, jumlahnya benar, tidak ada galat judul kolom;
+- berkas tak kompatibel -> nol baris, galat judul kolom muncul;
+- campuran sah/ditolak -> yang tertulis sama persis dengan yang dilaporkan;
+- galat judul kolom tidak pernah menyertai baris yang masuk, dan sebaliknya;
+- lembar `Petunjuk` tidak pernah menyumbang satu baris siswa pun, bahkan ketika
+  ia satu-satunya lembar berisi.
+
+Yang diuji bukan lagi "apakah importer benar", melainkan "apakah yang dikatakan
+sama dengan yang dikerjakan".
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
