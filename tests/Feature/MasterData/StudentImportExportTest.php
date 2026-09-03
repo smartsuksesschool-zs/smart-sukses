@@ -94,7 +94,7 @@ class StudentImportExportTest extends TestCase
         $path = $this->makeSheet([
             ['nis', 'nisn', 'nama_lengkap', 'jenis_kelamin', 'status'],
             ['3011', '3333333333', 'Siswa Benar', 'L', 'ACTIVE'],
-            ['3012', '123', 'NISN Pendek', 'P', 'ACTIVE'],
+            ['3012', 'BUKAN-ANGKA', 'NISN Rusak', 'P', 'ACTIVE'],
             ['3010', '4444444444', 'NIS Duplikat', 'L', 'ACTIVE'],
             ['3013', '5555555555', 'Gender Salah', 'X', 'ACTIVE'],
         ]);
@@ -109,6 +109,34 @@ class StudentImportExportTest extends TestCase
         $this->assertStringStartsWith('Baris 3:', $import->errors[0]);
         $this->assertStringStartsWith('Baris 4:', $import->errors[1]);
         $this->assertStringStartsWith('Baris 5:', $import->errors[2]);
+    }
+
+    /**
+     * Sejak M3, NISN yang kehilangan angka nol di depannya **tidak** lagi
+     * ditolak: ia diberi nol pembuka hingga 10 digit. Yang berubah adalah
+     * keputusan pemiliknya, bukan kelonggaran importer — NISN yang bukan angka
+     * atau lebih dari 10 digit tetap ditolak (butir 483).
+     */
+    public function test_a_short_nisn_is_padded_instead_of_rejected(): void
+    {
+        $path = $this->makeSheet([
+            ['nis', 'nisn', 'nama_lengkap', 'jenis_kelamin', 'status'],
+            ['3020', '88888888', 'Siswa Delapan Digit', 'L', 'ACTIVE'],
+            ['3021', '', 'Siswa Tanpa NISN', 'P', 'ACTIVE'],
+            ['3022', '12345678901', 'NISN Kepanjangan', 'L', 'ACTIVE'],
+        ]);
+
+        $import = new StudentsImport($this->school->id);
+        Excel::import($import, $path);
+
+        $this->assertSame(2, $import->imported);
+        $this->assertDatabaseHas('students', ['nis' => '3020', 'nisn' => '0088888888']);
+        $this->assertDatabaseHas('students', ['nis' => '3021', 'nisn' => null]);
+
+        // Kepanjangan tidak pernah dipotong menjadi 10 digit.
+        $this->assertDatabaseMissing('students', ['nis' => '3022']);
+        $this->assertCount(1, $import->errors);
+        $this->assertStringContainsString('10 digit', $import->errors[0]);
     }
 
     public function test_import_is_scoped_to_the_given_school(): void
