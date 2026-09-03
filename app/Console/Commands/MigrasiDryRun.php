@@ -342,7 +342,7 @@ class MigrasiDryRun extends Command
 
             $this->components->twoColumnDetail(
                 $name.' (tingkat '.($class['grade_level'] ?? '?').", {$class['students']} siswa)",
-                $class['class_id'] === null ? '<fg=red>rombel belum ada</>' : '<fg=green>cocok</>',
+                $this->classVerdict($class),
             );
         }
 
@@ -358,6 +358,27 @@ class MigrasiDryRun extends Command
             'sumber = siap + tertunda + ditolak',
             $r['balanced'] ? '<fg=green>seimbang</>' : '<fg=red>TIDAK seimbang</>',
         );
+    }
+
+    /**
+     * Keadaan sebuah label kelas dalam satu kalimat.
+     *
+     * Rombel ganda dibedakan dari rombel yang belum ada: keduanya sama-sama
+     * berarti tidak ada siswa yang ditempatkan, tetapi tindakannya berlawanan —
+     * yang satu menuntut rombel dibuat, yang lain menuntut duplikatnya
+     * dibereskan (butir 517).
+     *
+     * @param  array<string, mixed>  $class
+     */
+    protected function classVerdict(array $class): string
+    {
+        $matches = $class['matches'] ?? ($class['class_id'] === null ? 0 : 1);
+
+        return match (true) {
+            $matches > 1 => "<fg=red>GANDA — {$matches} rombel bernama sama</>",
+            $matches === 0 => '<fg=red>rombel belum ada</>',
+            default => '<fg=green>cocok</>',
+        };
     }
 
     /**
@@ -384,6 +405,13 @@ class MigrasiDryRun extends Command
         }
 
         foreach ($plan['classes'] as $class) {
+            if (($class['matches'] ?? 0) > 1) {
+                $out[] = "kelas \"{$class['label']}\": {$class['matches']} rombel bernama sama di tahun ajaran "
+                    .'tujuan — tidak satu pun dipakai sampai duplikatnya dibereskan';
+
+                continue;
+            }
+
             if ($class['class_id'] === null) {
                 $out[] = "kelas \"{$class['label']}\": rombel belum ada di tahun ajaran tujuan";
             }

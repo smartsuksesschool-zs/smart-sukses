@@ -55,6 +55,8 @@ class StudentImportPlan
 
     public const CLASS_NOT_FOUND = 'CLASS_NOT_FOUND';
 
+    public const CLASS_AMBIGUOUS = 'CLASS_AMBIGUOUS';
+
     public const CLASS_LABEL_MISSING = 'CLASS_LABEL_MISSING';
 
     public const ACADEMIC_YEAR_MISSING = 'ACADEMIC_YEAR_MISSING';
@@ -79,34 +81,14 @@ class StudentImportPlan
     protected const PPDB_GRADE = 10;
 
     /**
-     * Koreksi data terkonfirmasi atas label kelas — bukan hasil tebakan
-     * importer.
+     * Label kelas -> **seluruh** id yang cocok, bukan satu id.
      *
-     * `XII Terbuka - I` di berkas sumber adalah salah ketik; nilai yang
-     * dimaksud `XII Terbuka - 1`. Koreksinya ditulis satu per satu di sini,
-     * sebagai alias yang bisa dibaca dan dibantah, bukan sebagai aturan umum
-     * yang mengubah angka Romawi di mana pun ia muncul. Aturan umum semacam itu
-     * akan mengubah label yang belum pernah ditinjau siapa pun — termasuk label
-     * di berkas yang belum ada (butir 506).
+     * Menyimpan satu id akan menyembunyikan keadaan yang justru paling
+     * berbahaya: dua rombel bernama sama pada cabang dan tahun ajaran yang
+     * sama. Satu label dipakai berkali-kali dalam satu berkas, dan jawabannya
+     * tidak berubah di tengah satu rencana (butir 517).
      *
-     * Daftar ini **tidak** memberi izin membuat rombel. Ia hanya menentukan
-     * label mana yang dicari; rombel yang tidak ada tetap `CLASS_NOT_FOUND`.
-     *
-     * Label kanonis setelah koreksi: `X Terbuka - 2`, `XI Terbuka - 1`,
-     * `XII Terbuka - 1`, `XII Terbuka - 2`.
-     *
-     * @var array<string, string>
-     */
-    public const CLASS_LABEL_ALIASES = [
-        'XII TERBUKA - I' => 'XII Terbuka - 1',
-    ];
-
-    /**
-     * Label kelas -> id, atau null bila rombelnya belum ada. Satu label dipakai
-     * berkali-kali dalam satu berkas, dan jawabannya tidak berubah di tengah
-     * satu rencana.
-     *
-     * @var array<string, int|null>
+     * @var array<string, array<int, int>>
      */
     protected array $classCache = [];
 
@@ -143,13 +125,16 @@ class StudentImportPlan
             $label = $decision['class_label'];
 
             if ($label !== '') {
+                $matches = $this->matchingClassIds($label);
+
                 $classes[$label] ??= [
                     'label' => $label,
                     'source_label' => $decision['class_label_source'],
                     'corrected' => $decision['class_label_source'] !== $label,
                     'students' => 0,
                     'grade_level' => self::gradeLevel($label),
-                    'class_id' => $this->resolveClassId($label),
+                    'class_id' => count($matches) === 1 ? $matches[0] : null,
+                    'matches' => count($matches),
                 ];
                 $classes[$label]['students']++;
             }
@@ -305,10 +290,18 @@ class StudentImportPlan
             return self::ACADEMIC_YEAR_MISSING;
         }
 
-        $classId = $this->resolveClassId($decision['class_label']);
+        $matches = $this->matchingClassIds($decision['class_label']);
 
-        if ($classId === null) {
+        if ($matches === []) {
             return self::CLASS_NOT_FOUND;
+        }
+
+        // Dua rombel bernama sama adalah data yang keliru, dan importer bukan
+        // tempat memutuskan mana yang benar. Memilih salah satunya menempatkan
+        // siswa di rombel yang belum tentu tujuannya, tanpa galat apa pun yang
+        // menandainya (butir 517).
+        if (count($matches) > 1) {
+            return self::CLASS_AMBIGUOUS;
         }
 
         if ($decision['student_id'] === null) {
@@ -326,21 +319,45 @@ class StudentImportPlan
     }
 
     /**
-     * Pencocokan nama kelas **persis**. Label sumber berasal dari kolom "Kelas
-     * di SMAN 11" milik sekolah mitra; menebak padanannya di `classes` akan
-     * mengarang rombel yang belum pernah dinyatakan sekolah.
+     * Seluruh rombel yang namanya **persis** sama, pada cabang dan tahun ajaran
+     * tujuan.
+     *
+     * Batas pencariannya sengaja bertiga: cabang, tahun ajaran, dan nama
+     * kanonis yang persis. Label sumber berasal dari kolom "Kelas di SMAN 11"
+     * milik sekolah mitra; menebak padanannya di `classes` akan mengarang
+     * rombel yang belum pernah dinyatakan sekolah.
+     *
+     * @return array<int, int>
      */
-    protected function resolveClassId(string $label): ?int
+    protected function matchingClassIds(string $label): array
     {
         if ($label === '' || $this->year === null) {
-            return null;
+            return [];
         }
 
         return $this->classCache[$label] ??= SchoolClass::query()
             ->where('school_id', $this->school->id)
             ->where('academic_year_id', $this->year->id)
             ->where('name', $label)
-            ->value('id');
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn (int|string $id): int => (int) $id)
+            ->all();
+    }
+
+    /**
+     * Id rombel tujuan, **hanya** bila jawabannya tunggal.
+     *
+     * Sengaja mengembalikan null pada nol maupun lebih dari satu kecocokan:
+     * pemanggilnya tidak boleh dapat membedakan "belum ada" dari "ganda" lewat
+     * nilai ini, karena keduanya sama-sama berarti tidak ada yang boleh
+     * ditulis. Yang membedakan keduanya untuk laporan adalah `placement()`.
+     */
+    protected function resolveClassId(string $label): ?int
+    {
+        $matches = $this->matchingClassIds($label);
+
+        return count($matches) === 1 ? $matches[0] : null;
     }
 
     protected function ppdbNameOverlap(string $name): bool
@@ -430,12 +447,13 @@ class StudentImportPlan
     /**
      * Label sumber setelah koreksi data terkonfirmasi.
      *
-     * Pencocokannya **persis satu label penuh** (tanpa memandang besar-kecil
-     * huruf), bukan pola. Label yang tidak terdaftar dikembalikan apa adanya.
+     * Daftarnya ada di CanonicalRombel bersama daftar rombel resmi: rombel mana
+     * yang ada dan label mana yang menunjuk ke sana selalu berubah bersama,
+     * jadi keduanya tinggal di satu tempat (butir 514).
      */
     public static function canonicalClassLabel(string $label): string
     {
-        return self::CLASS_LABEL_ALIASES[mb_strtoupper(trim($label))] ?? $label;
+        return CanonicalRombel::canonicalLabel($label);
     }
 
     protected function identifier(mixed $value): ?string

@@ -14,6 +14,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rules\Unique;
 
 /**
@@ -52,7 +53,25 @@ class SchoolClassResource extends Resource
                 ->label(__('Nama Kelas'))
                 ->required()
                 ->maxLength(50)
-                ->placeholder('X-A'),
+                ->placeholder('X-A')
+                // Dua rombel bernama sama pada satu cabang dan tahun ajaran
+                // adalah data yang keliru, dan akibatnya tidak terlihat di
+                // layar ini: pencocokan kelas saat impor siswa memilih salah
+                // satu di antaranya tanpa memberi tahu siapa pun, sehingga
+                // siswa dapat mendarat di rombel yang bukan tujuannya
+                // (butir 516).
+                //
+                // `classes` tidak punya indeks unik untuk itu, jadi pagarnya di
+                // sini — mengikuti pola yang sudah dipakai kolom wali kelas.
+                ->unique(
+                    ignoreRecord: true,
+                    modifyRuleUsing: fn (Unique $rule, Forms\Get $get) => $rule
+                        ->where('academic_year_id', $get('academic_year_id'))
+                        ->where('school_id', Auth::user()?->school_id ?? $get('school_id')),
+                )
+                ->validationMessages([
+                    'unique' => __('Nama rombel ini sudah dipakai pada tahun ajaran tersebut.'),
+                ]),
 
             Forms\Components\Select::make('grade_level')
                 ->label(__('Tingkat'))

@@ -190,9 +190,15 @@ class MigrasiTerapkanUji extends Command
                 ? "kelas \"{$class['source_label']}\" → \"{$class['label']}\" (koreksi data terkonfirmasi)"
                 : "kelas \"{$class['label']}\"";
 
+            $matches = $class['matches'] ?? ($class['class_id'] === null ? 0 : 1);
+
             $this->components->twoColumnDetail(
                 $name." ({$class['students']} siswa)",
-                $class['class_id'] === null ? '<fg=red>CLASS_NOT_FOUND</>' : '<fg=green>cocok</>',
+                match (true) {
+                    $matches > 1 => "<fg=red>CLASS_AMBIGUOUS — {$matches} rombel bernama sama</>",
+                    $matches === 0 => '<fg=red>CLASS_NOT_FOUND</>',
+                    default => '<fg=green>cocok</>',
+                },
             );
         }
 
