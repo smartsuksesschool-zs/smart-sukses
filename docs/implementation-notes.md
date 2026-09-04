@@ -8857,6 +8857,114 @@ Prinsipnya: perintah yang boleh menyentuh produksi harus membuat operatornya
 melihat sasaran sebelum menekan enter. Pagar yang dilepas karena alasan yang
 sah tetap menuntut sesuatu di tempatnya.
 
+### 519. Sidik jari menutup empat hal, bukan satu
+
+Analisis kering atas berkas A, mode terap atas berkas B. Keduanya mencetak
+angka yang meyakinkan, dan yang masuk ke basis data bukan yang ditinjau siapa
+pun. Kekeliruan ini sangat mungkin terjadi — dua terminal, dua nama berkas yang
+mirip, satu panah atas di riwayat shell — dan hampir mustahil terlihat sesudahnya.
+
+Sidik jari yang hanya mem-hash berkasnya tidak cukup. Berkas yang sama dapat
+menghasilkan rencana yang berbeda bila basis datanya berubah di antara kedua
+perintah: rombel dihapus, siswa ditambahkan dengan tangan, tahun ajaran diganti.
+Hash berkas akan menyatakan keduanya sama padahal yang akan ditulis sudah
+berbeda.
+
+Karena itu sidik jarinya menutup empat hal sekaligus — isi berkas, cabang, tahun
+ajaran, dan seluruh angka rekonsiliasi yang sudah dinormalkan. Yang disahkan
+bukan "berkas ini" melainkan "rencana ini terhadap basis data seperti ini".
+
+Tidak ada berkas persetujuan yang disimpan: sidik jarinya dihitung ulang setiap
+kali, jadi tidak ada artefak berisi metadata impor yang tertinggal di disk.
+
+### 520. Otorisasi berupa objek, bukan bendera
+
+`StudentImportApply` bisa saja menerima `bool $izinProduksi = false`. Bendera
+seperti itu punya satu sifat buruk yang tidak terlihat sampai terlambat: ia dapat
+tersalin dari contoh kode, tertinggal dari eksperimen, atau diteruskan dari
+variabel yang namanya kebetulan cocok.
+
+Yang diterima karena itu objek `ProductionImportAuthorization` dengan konstruktor
+privat. Ia hanya lahir lewat `grant()`, dan `grant()` memeriksa ulang setiap
+pagar — tidak memercayai kata pemanggilnya, karena bukti yang menerima kata
+pemanggilnya bukan bukti.
+
+Objeknya juga membawa rencana yang disahkannya, dan `StudentImportApply`
+memeriksa bahwa rencana yang hendak ditulis memang rencana yang sama. Otorisasi
+yang dapat dipakai ulang untuk berkas lain sama saja dengan tidak ada otorisasi.
+
+`MigrationWriteGuard` tidak dilemahkan sedikit pun. Yang ditambahkan jalur kedua
+yang jauh lebih sempit, bukan lubang di jalur pertama.
+
+### 521. Kalimat konfirmasi yang berubah
+
+Kalimat konfirmasi yang selalu sama akan dihafal, lalu diketik tanpa dibaca.
+Pada titik itu ia berhenti menjadi pagar dan berubah menjadi upacara.
+
+Kalimatnya karena itu diturunkan dari rencana: `IMPOR 39 SISWA PUSAT 2026/2027
+Ganjil`. Jumlahnya berubah setiap kali sumbernya berubah, sehingga operator
+harus membaca angka yang sedang disetujuinya untuk dapat mengetiknya. Kalau
+angkanya bukan yang ia harapkan, ia akan berhenti — dan berhenti pada saat itu
+persis gunanya pagar ini.
+
+Spasi berlebih dan besar-kecil huruf dimaafkan. Yang diperiksa perhatiannya,
+bukan ketelitian mengetiknya.
+
+### 522. Dua nama perintah, bukan satu bendera
+
+`migrasi:terapkan-uji --produksi` akan salah dalam cara yang paling mahal: satu
+karakter yang tertinggal atau terhapus memisahkan basis data uji dari basis data
+sekolah, dan riwayat shell membuat kesalahan itu dapat diulang dengan satu panah
+atas.
+
+Perintahnya karena itu terpisah dan namanya menyebut apa adanya:
+`migrasi:terapkan-produksi`. Dua nama yang berbeda tidak dapat tertukar oleh
+kelalaian; keduanya harus diketik dengan sengaja.
+
+Nama perintah uji juga tidak diubah menjadi nama generik. Perintah yang namanya
+tidak menyebut batasnya akan dipakai di luar batasnya (butir 491).
+
+### 523. Bendera backup tidak membuktikan backup
+
+`--backup-terverifikasi` tidak memeriksa apa pun, dan tidak berpura-pura bisa.
+Perintah artisan tidak dapat mengetahui apakah ada salinan basis data di mesin
+lain, apakah salinan itu lengkap, dan — yang paling menentukan — apakah salinan
+itu benar-benar dapat dipulihkan.
+
+Yang dilakukan bendera itu memindahkan pernyataannya kepada orang yang memang
+dapat memikulnya, dan mengatakannya terang-terangan di teks penolakannya. Pagar
+yang berpura-pura memverifikasi sesuatu lebih berbahaya daripada tidak ada pagar:
+ia menumbuhkan kepercayaan yang tidak berdasar.
+
+### 524. Baris yang tidak ikut ditampilkan menonjol
+
+Satu siswa yang tertunda mudah tenggelam di antara belasan angka lain yang
+semuanya terlihat sehat. Ia ditampilkan dengan warna dan kata "TIDAK IKUT"
+beserta sebabnya, tepat di atas kalimat konfirmasi.
+
+Bukan karena ia menghalangi — ia memang tidak boleh menghalangi 39 yang lain
+(butir 487) — melainkan karena "39 dari 40" adalah hal yang harus disadari
+sebelum menekan enter, bukan ditemukan sebulan kemudian saat seseorang mencari
+siswa yang tidak ada di sistem.
+
+### 525. Jejak agregat tidak masuk audit_logs
+
+`audit_logs` sengaja tidak punya kolom bebas: menyimpan salinan setiap perubahan
+data berarti menyimpan salinan data pribadi siswa tanpa dasar requirement
+(butir 45). Keputusan itu tidak dibatalkan untuk M5.
+
+Barisnya juga selalu menunjuk satu model lewat `auditable_type`/`auditable_id`,
+sementara "sebuah impor" bukan model — dan mengaitkannya ke `School` hanya akan
+menghasilkan baris audit yang mengaku sesuatu yang tidak terjadi.
+
+Yang dipakai log aplikasi lewat `Log::info`, mengikuti pola yang sudah ada di
+`Login.php` untuk peristiwa yang bukan CUD model. Itu bukan kerangka pencatatan
+kedua; itu kerangka yang sudah dipakai project ini untuk hal semacam ini.
+
+Baris CUD per siswa sendiri tetap tercatat otomatis di `audit_logs` lewat
+listener Eloquent, tanpa perlu ditambahkan apa pun — jadi jejaknya dua lapis:
+per baris di tabel audit, agregat di log.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
