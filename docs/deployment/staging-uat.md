@@ -263,8 +263,14 @@ sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
 php artisan db:seed --force
 
 #    8b. dataset demo sintetis: cabang, kelas, siswa, nilai, jadwal, ujian,
-#        dan akun untuk ketujuh peran. Memanggil UserSeeder dan
-#        Sprint4DemoSeeder sendiri, jadi keduanya tidak perlu disebut lagi.
+#        bekal keuangan, dan akun untuk kedelapan peran. Memanggil UserSeeder
+#        dan Sprint4DemoSeeder sendiri, jadi keduanya tidak perlu disebut lagi.
+#
+#        WAJIB SESUDAH 8a, tidak pernah menggantikannya. Pada basis data yang
+#        masih kosong, perintah ini gagal dengan "There is no role named
+#        'SUPER_ADMIN' for guard 'web'" karena peran, cabang, dan akun awal
+#        dibuat 8a. Kegagalan itu bukan kerusakan, melainkan urutan yang
+#        terlewat.
 php artisan db:seed --class=SimulationSeeder --force
 
 #    8c. isi awal halaman muka publik. OPSIONAL — lewati bila pemilik akan
@@ -364,16 +370,25 @@ yang tidak sengaja membuka percakapan ke nomor sungguhan.
 ## 11. Akses penguji
 
 Peran yang perlu dicoba: Super Admin, Admin Sekolah, Kepala Sekolah,
-Guru / Wali Kelas, Bendahara, Siswa, Orang Tua.
+Guru Mata Pelajaran, Wali Kelas, Bendahara, Siswa, Orang Tua — delapan, satu
+untuk setiap case pada `RoleName`.
 
-`SimulationSeeder` membuat akun untuk ketujuhnya. Seluruhnya memakai
-`SEED_ADMIN_PASSWORD` yang disetel operator, dan seluruhnya wajib mengganti kata
-sandi pada login pertama.
+`SimulationSeeder` membuat akun untuk kedelapannya, seluruhnya memakai
+`SEED_ADMIN_PASSWORD` yang disetel operator.
+
+Akun-akun itu **tidak** wajib mengganti kata sandi pada login pertama.
+Penandanya sengaja dilepas — hanya di seeder yang sudah menolak berjalan di
+produksi — karena layar ganti kata sandi menghentikan pengujian sebelum satu
+menu pun terbuka (butir 463). Pagar `must_change_password` milik `UserSeeder`
+sendiri tetap utuh untuk produksi.
 
 **Kata sandi tidak ditulis di repositori ini, tidak di dokumen ini, dan tidak
 dikirim lewat chat.** Operator menyebarkannya lewat jalur yang aman, satu per
-penguji bila memungkinkan. Daftar alamat surel akun dapat dilihat di
-`database/seeders/SimulationSeeder.php`.
+penguji bila memungkinkan.
+
+Daftar surel akun beserta perannya, urutan perintah penyiapan, dan daftar
+periksa per peran ada di **`docs/uat/role-testing.md`**. Sumber tunggalnya
+konstanta `SimulationSeeder::UAT_ACCOUNTS`.
 
 Satu pintu masuk tetap `/login` untuk semua peran; tidak ada halaman login
 per-peran, dan itu tidak diubah.

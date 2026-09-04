@@ -8965,6 +8965,69 @@ Baris CUD per siswa sendiri tetap tercatat otomatis di `audit_logs` lewat
 listener Eloquent, tanpa perlu ditambahkan apa pun — jadi jejaknya dua lapis:
 per baris di tabel audit, agregat di log.
 
+### 526. Satu daftar akun penguji, bukan tiga salinan
+
+Akun UAT lahir di tiga seeder yang berbeda — `UserSeeder` (Super Admin, Admin
+Sekolah), `Sprint4DemoSeeder` (Guru, Wali Kelas), `SimulationSeeder` (Kepala
+Sekolah, Bendahara, Siswa, Orang Tua) — karena masing-masing perlu penyambungan
+yang berbeda. Itu tidak dapat disatukan tanpa mengarang.
+
+Yang **dapat** disatukan adalah daftarnya. Sebelum batch ini daftar delapan surel
+itu ditulis ulang di tiga tempat: tabel yang dicetak seeder, test simulasi, dan
+dokumen penyiapan staging. Ketiganya sudah mulai berbeda — dokumen staging masih
+menyebut "ketujuhnya" dan mengklaim seluruh akun wajib ganti kata sandi pada
+login pertama, dua-duanya tidak benar.
+
+Sekarang ada `SimulationSeeder::UAT_ACCOUNTS`, dan sebuah test yang mengulang
+`RoleName::cases()` dan menuntut setiap peran punya tepat satu barisnya. Peran
+baru pada enum karena itu tidak dapat lolos ke staging tanpa akun penguji: yang
+menahannya build, bukan ingatan seseorang.
+
+### 527. Halaman kosong adalah kegagalan UAT yang paling mahal
+
+Bendahara adalah satu-satunya peran yang, sesudah masuk, menemukan setiap
+halamannya kosong: tidak ada jenis tagihan, tidak ada tagihan, tidak ada
+pembayaran, tidak ada buku kas. Peran lain punya bekal dari `Sprint4DemoSeeder`.
+
+Halaman kosong tidak dapat dibedakan dari halaman yang rusak. Penguji yang
+melihatnya akan melaporkan cacat yang tidak ada, atau — lebih mahal — berhenti
+melaporkan apa pun karena mengira modulnya memang belum jadi. Keduanya membuang
+waktu orang yang sedang meminjamkan waktunya.
+
+Bekalnya sengaja sedikit: dua jenis tagihan, satu angkatan tagihan untuk tiga
+siswa, dua pembayaran, dua baris buku kas. Cukup untuk memberi halaman sebuah
+bentuk, tidak cukup untuk menyembunyikan apa pun.
+
+Tiga keadaan tagihan — LUNAS, SEBAGIAN, BELUM BAYAR — bukan kelengkapan yang
+dibuat-buat: daftar yang seragam tidak menguji satu pun filter status, dan tidak
+pernah memperlihatkan sisa tagihan yang berjalan.
+
+Statusnya diturunkan lewat `PaymentRecorder::statusFor()`, rumus yang sama yang
+dipakai pencatat pembayaran sungguhan. Data demo yang statusnya tidak konsisten
+dengan angkanya akan membuat penguji melaporkan cacat perhitungan yang tidak
+ada.
+
+### 528. Yang sengaja dibiarkan kosong untuk UAT
+
+Tiga hal tidak diisi seeder, dan ketiganya disengaja:
+
+  * **rapor** — menerbitkannya dari UI justru inti pengujian wali kelas;
+  * **tagihan periode berjalan** — bila seeder sudah menerbitkannya, halaman
+    Generate Tagihan hanya akan menjawab "semua sudah punya" dan alur intinya
+    tidak pernah teruji;
+  * **pengerjaan ujian** — itu pekerjaan siswa.
+
+Periode yang diisi diambil dari bulan mulai tahun ajaran, bukan dari bulan
+berjalan. Bulan berjalan berubah sendiri, sehingga seeder yang dijalankan
+Agustus lalu September akan meninggalkan dua angkatan tagihan yang keduanya
+"hasil seeding" — idempoten pada hari yang sama saja bukan idempoten.
+
+Tagihannya juga ditulis langsung, bukan lewat `StudentFeeGenerator`. Generator
+itu menerbitkan pemberitahuan "tagihan baru terbit" kepada orang tua dan
+menyentuh antrean; seeder yang memanggilnya akan mengirim pemberitahuan setiap
+kali dijalankan — di lingkungan yang, kalau surelnya salah konfigurasi, punya
+alamat orang tua sungguhan.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
