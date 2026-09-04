@@ -3,9 +3,12 @@
 namespace Tests\Feature\Ops;
 
 use App\Models\Exam;
+use App\Models\Payment;
 use App\Models\Schedule;
 use App\Models\SiteBlock;
 use App\Models\Student;
+use App\Models\StudentFee;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Support\EnvironmentBanner;
 use App\Support\SeedPassword;
@@ -196,12 +199,7 @@ class StagingReadinessTest extends TestCase
         $this->seed(RolePermissionSeeder::class);
         $this->seed(SchoolSeeder::class);
 
-        $before = [
-            'users' => User::query()->count(),
-            'students' => Student::query()->count(),
-            'schedules' => Schedule::query()->count(),
-            'exams' => Exam::query()->count(),
-        ];
+        $before = $this->rowCounts();
 
         $this->asEnvironment('staging');
         config([SeedPassword::CONFIG_KEY => null]);
@@ -213,12 +211,34 @@ class StagingReadinessTest extends TestCase
             // yang diperiksa akibatnya, bukan pesannya
         }
 
-        $this->assertSame($before, [
+        $this->assertSame(
+            $before,
+            $this->rowCounts(),
+            "{$seeder} menulis baris walaupun kata sandinya ditolak",
+        );
+    }
+
+    /**
+     * Tabel yang seharusnya tetap kosong ketika seeding ditolak.
+     *
+     * Keuangan ikut dihitung sejak SimulationSeeder membawa bekal tagihan untuk
+     * UAT (butir 527): jaminannya "tidak satu baris pun", dan jaminan itu tidak
+     * boleh diam-diam menyempit menjadi "tidak satu baris pun di tabel yang
+     * kebetulan disebut waktu test ini ditulis".
+     *
+     * @return array<string, int>
+     */
+    protected function rowCounts(): array
+    {
+        return [
             'users' => User::query()->count(),
             'students' => Student::query()->count(),
             'schedules' => Schedule::query()->count(),
             'exams' => Exam::query()->count(),
-        ], "{$seeder} menulis baris walaupun kata sandinya ditolak");
+            'student_fees' => StudentFee::query()->count(),
+            'payments' => Payment::query()->count(),
+            'transactions' => Transaction::query()->count(),
+        ];
     }
 
     /**
