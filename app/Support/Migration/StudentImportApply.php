@@ -35,10 +35,36 @@ use RuntimeException;
  */
 class StudentImportApply
 {
+    /**
+     * Otorisasi impor produksi, bila ada.
+     *
+     * Sengaja objek, bukan boolean. Bendera `true` dapat tersalin dari contoh
+     * kode atau tertinggal dari eksperimen; objek ini hanya bisa lahir lewat
+     * ProductionImportAuthorization::grant() yang memeriksa ulang setiap pagar
+     * (butir 520).
+     */
+    protected ?ProductionImportAuthorization $authorization = null;
+
     public function __construct(
         protected School $school,
         protected ?AcademicYear $year = null,
     ) {}
+
+    /**
+     * Jalur kedua: impor produksi yang sudah diotorisasi.
+     *
+     * MigrationWriteGuard **tidak dilemahkan** — ia tetap utuh dan tetap menolak
+     * `migrasi:terapkan-uji` di luar basis data uji. Yang ada di sini jalur
+     * terpisah yang jauh lebih sempit: hanya terbuka di `production`, hanya
+     * dengan otorisasi yang membawa rencananya sendiri, dan hanya lewat
+     * `migrasi:terapkan-produksi`.
+     */
+    public function authorizedForProduction(ProductionImportAuthorization $authorization): self
+    {
+        $this->authorization = $authorization;
+
+        return $this;
+    }
 
     /**
      * @param  array<string, mixed>  $plan
@@ -46,11 +72,7 @@ class StudentImportApply
      */
     public function run(array $plan): array
     {
-        $refusal = MigrationWriteGuard::refusal();
-
-        if ($refusal !== null) {
-            throw new RuntimeException($refusal);
-        }
+        $this->assertMayWrite($plan);
 
         $result = [
             'created' => 0,
@@ -79,6 +101,50 @@ class StudentImportApply
         }
 
         return $result;
+    }
+
+    /**
+     * Dua jalur tulis, dan tidak ada jalur ketiga.
+     *
+     * Tanpa otorisasi produksi: pagar basis data uji seperti sebelumnya.
+     * Dengan otorisasi: diperiksa ulang bahwa otorisasinya memang menyahkan
+     * rencana **ini** — bukan rencana lain yang kebetulan lewat. Otorisasi yang
+     * dapat dipakai ulang untuk berkas berbeda sama saja dengan tidak ada
+     * otorisasi.
+     *
+     * @param  array<string, mixed>  $plan
+     */
+    protected function assertMayWrite(array $plan): void
+    {
+        if ($this->authorization === null) {
+            $refusal = MigrationWriteGuard::refusal();
+
+            if ($refusal !== null) {
+                throw new RuntimeException($refusal);
+            }
+
+            return;
+        }
+
+        if (! app()->environment('production')) {
+            throw new RuntimeException(
+                'Otorisasi impor produksi dipakai di luar lingkungan `production`.'
+            );
+        }
+
+        $fingerprint = ImportFingerprint::of(
+            $plan['source_path'] ?? '',
+            $this->school,
+            $this->year,
+            $plan,
+        );
+
+        if (! $this->authorization->covers($plan, $fingerprint)) {
+            throw new RuntimeException(
+                'Otorisasi tidak cocok dengan rencana yang hendak ditulis. '
+                .'Jalankan ulang analisis kering dan otorisasinya.'
+            );
+        }
     }
 
     /**

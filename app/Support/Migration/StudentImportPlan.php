@@ -92,10 +92,29 @@ class StudentImportPlan
      */
     protected array $classCache = [];
 
+    /**
+     * Jalur berkas sumber, bila pemanggilnya menyebutkannya.
+     *
+     * Ikut di dalam rencana supaya sidik jari impor produksi dapat dihitung
+     * ulang dari rencana itu sendiri, tanpa pemanggil perlu membawa jalurnya
+     * terpisah — dan karena itu tanpa kesempatan keduanya berbeda (butir 519).
+     *
+     * Tidak pernah ikut tercetak di laporan mana pun: berkas ini privat dan
+     * letaknya di luar repositori.
+     */
+    protected ?string $sourcePath = null;
+
     public function __construct(
         protected School $school,
         protected ?AcademicYear $year = null,
     ) {}
+
+    public function forSource(string $path): self
+    {
+        $this->sourcePath = $path;
+
+        return $this;
+    }
 
     /**
      * @param  array<int, array<string, mixed>>  $rows
@@ -145,6 +164,7 @@ class StudentImportPlan
         ksort($classes);
 
         return [
+            'source_path' => $this->sourcePath,
             'rows' => $plan,
             'nisn' => $nisn,
             'classes' => array_values($classes),
