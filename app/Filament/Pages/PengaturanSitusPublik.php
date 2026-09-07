@@ -69,6 +69,7 @@ class PengaturanSitusPublik extends Page implements HasForms
         'contact_address',
         'contact_phone',
         'contact_email',
+        'contact_maps_url',
         'social_instagram',
         'social_facebook',
         'social_youtube',
@@ -197,6 +198,22 @@ class PengaturanSitusPublik extends Page implements HasForms
                             ->label(__('Surel'))
                             ->email()
                             ->maxLength(150),
+
+                        /*
+                         * Tautan peta, bukan alamat kedua.
+                         *
+                         * Alamatnya sudah ada di atas sebagai teks. Yang belum
+                         * ada adalah cara membukanya di peta, dan itu tidak
+                         * dirangkai sendiri dari teks alamat: alamat yang
+                         * diketik manusia sering tidak persis sama dengan yang
+                         * dikenali peta, dan pencarian yang meleset lebih buruk
+                         * daripada tidak ada tautan (butir 564).
+                         */
+                        Forms\Components\TextInput::make('contact_maps_url')
+                            ->label(__('Tautan Peta Lokasi'))
+                            ->url()
+                            ->maxLength(500)
+                            ->helperText(__('Tempelkan tautan peta yang sudah Anda buka sendiri. Kosongkan untuk menyembunyikan tombolnya.')),
                     ]),
 
                 Forms\Components\Section::make(__('Media Sosial'))

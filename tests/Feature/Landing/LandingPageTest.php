@@ -673,12 +673,16 @@ class LandingPageTest extends TestCase
     {
         $html = $this->get('/')->assertOk()->getContent();
 
-        // Tanpa foto yang diunggah, bidangnya tetap utuh dan menyatakan
-        // keadaannya — bukan kotak kosong yang tampak seperti gambar gagal
-        // dimuat, dan bukan foto sekolah lain (butir 467).
+        // Tanpa foto yang diunggah, bidangnya tetap utuh — bukan kotak kosong
+        // yang tampak seperti gambar gagal dimuat, dan bukan foto sekolah lain
+        // (butir 467).
         $this->assertStringContainsString('class="hero__media"', $html);
         $this->assertStringContainsString('photo__ph', $html);
-        $this->assertStringContainsString('Foto menyusul', $html);
+
+        // Sejak M8 bingkainya tidak lagi berlabel: begitu sebagian slot terisi,
+        // "Foto menyusul" pada slot yang belum berubah menjadi janji, bukan
+        // keterangan (butir 565).
+        $this->assertStringNotContainsString('Foto menyusul', $html);
 
         // Rasionya dikunci, sehingga tata letak tidak bergeser saat fotonya
         // menyusul.
@@ -752,7 +756,6 @@ class LandingPageTest extends TestCase
             'Akses Sistem Informasi',
             'Guru & Staf',
             'Kenali Smart Sukses School',
-            'Foto menyusul',
             'Kehidupan di Smart Sukses School',
         ] as $indonesian) {
             $this->assertStringNotContainsString(
@@ -770,7 +773,6 @@ class LandingPageTest extends TestCase
             'Education Units',
             'Information System Access',
             'Teachers & Staff',
-            'Photo coming soon',
             'Life at Smart Sukses School',
         ] as $english) {
             $this->assertStringContainsString($english, $text);

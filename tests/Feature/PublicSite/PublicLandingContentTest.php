@@ -377,7 +377,10 @@ class PublicLandingContentTest extends TestCase
         );
 
         $this->assertStringContainsString('photo__ph', $html);
-        $this->assertStringContainsString('Foto menyusul', $html);
+
+        // Bingkainya netral sejak M8: ia menahan tata letak tanpa menjanjikan
+        // apa pun kepada pembacanya (butir 565).
+        $this->assertStringNotContainsString('Foto menyusul', $html);
     }
 
     public function test_foto_yang_diunggah_menggantikan_penandanya(): void

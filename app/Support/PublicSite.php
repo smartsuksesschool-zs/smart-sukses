@@ -111,13 +111,33 @@ class PublicSite
      */
     public function externalPpdbUrl(): ?string
     {
-        $url = SiteSetting::get('ppdb_url');
+        return $this->externalUrl('ppdb_url');
+    }
+
+    /**
+     * Alamat luar yang sudah diperiksa, atau NULL.
+     *
+     * Satu aturan untuk setiap tautan keluar halaman muka — PPDB, blog, peta,
+     * dan seluruh media sosial. Sebelum M8 hanya `ppdb_url` yang diperiksa,
+     * karena hanya ia yang menjadi pengalihan server; sisanya dicetak apa
+     * adanya sebagai `href`. Bedanya tidak sebesar itu: `href` yang berisi
+     * `javascript:` tetap berjalan ketika seseorang menekannya, dan yang
+     * mengisi kolom-kolom itu adalah panel admin yang sama (butir 563).
+     *
+     * Yang diterima hanya `http` dan `https` **berikut host**-nya. Nilai yang
+     * ditolak diperlakukan sama dengan belum disetel: barisnya tidak dirender,
+     * bukan dirender sebagai tautan rusak dan bukan pula menjadi galat.
+     */
+    public function externalUrl(string $key): ?string
+    {
+        $url = SiteSetting::get($key);
 
         if ($url === null) {
             return null;
         }
 
-        $parts = parse_url(trim($url));
+        $url = trim($url);
+        $parts = parse_url($url);
 
         if ($parts === false) {
             return null;
@@ -129,7 +149,7 @@ class PublicSite
             return null;
         }
 
-        return blank($parts['host'] ?? null) ? null : trim($url);
+        return blank($parts['host'] ?? null) ? null : $url;
     }
 
     /**
@@ -140,7 +160,22 @@ class PublicSite
      */
     public function blogUrl(): ?string
     {
-        return SiteSetting::get('blog_url');
+        return $this->externalUrl('blog_url');
+    }
+
+    /**
+     * Tautan peta lokasi sekolah, bila pemilik sudah menempelkannya.
+     *
+     * Alamatnya sendiri sudah ada sebagai teks (`contact_address`); yang belum
+     * ada adalah cara membukanya di peta. Alamatnya **tidak** dirangkai menjadi
+     * query pencarian Google: alamat yang diketik manusia sering tidak persis
+     * sama dengan yang dikenali peta, dan hasil pencarian yang meleset lebih
+     * buruk daripada tidak ada tautan sama sekali. Pemilik menempelkan tautan
+     * yang benar-benar ia buka sendiri (butir 564).
+     */
+    public function mapsUrl(): ?string
+    {
+        return $this->externalUrl('contact_maps_url');
     }
 
     public function logoUrl(): string
@@ -191,9 +226,13 @@ class PublicSite
         return SiteSetting::get('contact_'.$key);
     }
 
+    /**
+     * Tautan media sosial, sudah diperiksa. NULL bila belum diisi atau ditolak,
+     * sehingga ikonnya tidak pernah dirender kosong.
+     */
     public function social(string $key): ?string
     {
-        return SiteSetting::get('social_'.$key);
+        return $this->externalUrl('social_'.$key);
     }
 
     /**

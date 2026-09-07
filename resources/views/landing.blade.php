@@ -471,6 +471,18 @@
                             <div>
                                 <div class="contact__label">{{ __('Alamat') }}</div>
                                 <div class="contact__value">{{ $site->contact('address') }}</div>
+
+                                {{-- Tombol peta hanya muncul bila pemilik sudah
+                                     menempelkan tautannya; alamatnya sendiri
+                                     tidak pernah dirangkai menjadi pencarian
+                                     (butir 564). --}}
+                                @if ($site->mapsUrl())
+                                    <div class="contact__value">
+                                        <a href="{{ $site->mapsUrl() }}" target="_blank" rel="noopener">
+                                            {{ __('Buka di peta') }}
+                                        </a>
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     @endif
