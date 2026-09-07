@@ -12,6 +12,7 @@
         </div>
     @else
         @include('livewire.portal.partials.child-switcher')
+        @include('livewire.portal.partials.add-child-link')
 
         @if ($summary)
             @php($child = $summary['child'])

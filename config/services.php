@@ -28,6 +28,21 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    /*
+     * Masuk dengan Google — keputusan pemilik (M7).
+     *
+     * Ketiganya boleh kosong, dan ketika kosong tombol "Masuk dengan Google"
+     * tidak muncul serta rute OAuth-nya menjawab 404. Lingkungan yang belum
+     * disetel karena itu tidak memperlihatkan pintu yang tidak dapat dibuka.
+     * Kredensialnya hanya berasal dari environment: tidak ada nilai bawaan,
+     * dan tidak ada satu pun yang tersimpan di dalam repository.
+     */
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

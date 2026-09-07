@@ -8,6 +8,10 @@
     Tidak ada pemilih peran. Tidak ada tautan lupa kata sandi: SMTP belum
     diadakan, dan menawarkan pemulihan yang tidak dapat mengirim surel lebih
     buruk daripada tidak menawarkannya sama sekali (butir 441).
+
+    "Masuk dengan Google" berdiri di halaman yang sama, bukan di halaman
+    tersendiri: pintu masuknya tetap satu, dan yang bertambah hanya cara
+    membuktikan diri (butir 529).
 --}}
 <div class="auth" id="konten">
     <div class="auth__card">
@@ -66,6 +70,29 @@
                 <span wire:loading wire:target="authenticate">{{ __('Memproses…') }}</span>
             </button>
         </form>
+
+        @if (\App\Support\GoogleOAuth::isEnabled())
+            {{--
+                Tombolnya tautan GET biasa, bukan formulir: yang memulai OAuth
+                adalah pengalihan ke Google, dan Socialite sendiri yang menaruh
+                `state` di sesi untuk diperiksa saat callback.
+
+                Hanya muncul bila kredensialnya benar-benar disetel. Pintu yang
+                tidak dapat dibuka lebih buruk daripada pintu yang tidak ada
+                (butir 529).
+            --}}
+            <div class="auth__alt">
+                <span class="auth__alt-label">{{ __('atau') }}</span>
+            </div>
+
+            <a href="{{ route('oauth.google.redirect') }}" class="btn btn--wide btn--lg">
+                {{ __('Masuk dengan Google') }}
+            </a>
+
+            <p class="auth__note">
+                {{ __('Siswa dan orang tua/wali dapat mendaftarkan akunnya sendiri lewat Google. Permintaan diperiksa admin sebelum akun aktif.') }}
+            </p>
+        @endif
 
         <p class="auth__note">
             {{ __('Belum menjadi siswa?') }}

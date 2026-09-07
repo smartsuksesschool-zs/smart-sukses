@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AuthProvider;
 use App\Enums\RoleName;
 use App\Models\Concerns\BelongsToSchool;
 use Database\Factories\UserFactory;
@@ -40,6 +41,8 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'locale',
         'is_active',
         'must_change_password',
+        'auth_provider',
+        'provider_subject',
     ];
 
     /**
@@ -64,6 +67,9 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     protected $hidden = [
         'password',
         'remember_token',
+        // Pengenal permanen dari penyedia luar. Bukan rahasia, tetapi tidak
+        // punya satu pun pembaca yang sah di luar server ini.
+        'provider_subject',
     ];
 
     /**
@@ -79,6 +85,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             'is_active' => 'boolean',
             'must_change_password' => 'boolean',
             'password' => 'hashed',
+            'auth_provider' => AuthProvider::class,
         ];
     }
 
@@ -91,6 +98,18 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     public function parentedStudents(): HasMany
     {
         return $this->hasMany(Student::class, 'parent_user_id');
+    }
+
+    /**
+     * Akun ini masuk dengan kata sandi, bukan lewat penyedia luar.
+     *
+     * Dibaca sebagai keadaan, bukan sebagai izin: yang menolak kata sandi
+     * kosong tetap `AbstractHasher::check()`, yang mengembalikan false untuk
+     * hash NULL tanpa perlu satu aturan tambahan pun di aplikasi ini.
+     */
+    public function usesPasswordAuth(): bool
+    {
+        return $this->password !== null;
     }
 
     /**

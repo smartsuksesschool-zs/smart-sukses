@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\Portal\ReportCardDownloadController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\Portal\StudentReportCardController;
 use App\Http\Middleware\EnsureParentPortalAccess;
 use App\Http\Middleware\EnsureStudentPortalAccess;
 use App\Http\Middleware\EnsureTeacherPortalAccess;
+use App\Livewire\Auth\GoogleClaim;
 use App\Livewire\Auth\Login;
 use App\Livewire\Portal\NotificationInbox;
 use App\Livewire\Portal\ParentDashboard;
@@ -78,6 +80,35 @@ Route::post('/bahasa/{locale}', LocaleController::class)
  * atau belum" (butir 442).
  */
 Route::get('/login', Login::class)->name('login');
+
+/*
+ * Masuk dengan Google — keputusan pemilik (M7).
+ *
+ * Bukan pintu masuk kedua: ketiga rute ini berakhir di tempat yang sama dengan
+ * `/login`, yaitu `App\Support\LoginDestination`. Yang bertambah hanya cara
+ * membuktikan kepemilikan akun (butir 529).
+ *
+ * Seluruhnya GET, dan seluruhnya dibatasi laju per IP. Yang perlu ditahan bukan
+ * penebakan kata sandi — tidak ada kata sandi di jalur ini — melainkan
+ * pemakaian callback OAuth sebagai alat memancing, dan pemuatan berulang
+ * halaman pencocokan. Batas pencocokan NIS/NISN itu sendiri lebih ketat lagi
+ * dan tinggal di dalam komponennya, karena kiriman Livewire tidak melewati
+ * rute ini (butir 541).
+ */
+Route::prefix('masuk/google')
+    ->name('oauth.google.')
+    ->middleware('throttle:20,1')
+    ->group(function () {
+        Route::get('/', [GoogleAuthController::class, 'redirect'])->name('redirect');
+        Route::get('/callback', [GoogleAuthController::class, 'callback'])->name('callback');
+
+        /*
+         * Halaman pencocokan NIS/NISN. Pagarnya identitas Google di sesi — yang
+         * hanya ditulis callback di atas — bukan middleware `auth`: yang
+         * membukanya memang belum punya akun, dan itulah sebabnya ia di sini.
+         */
+        Route::get('/lengkapi', GoogleClaim::class)->name('claim');
+    });
 
 /*
  * API 4.7 PPDB Online — Auth Level: Public.
