@@ -264,6 +264,19 @@ Blade.
 CTA utama halaman muka memakai `ppdb_url` bila disetel, dan **jatuh ke halaman
 PPDB Laravel yang memang sudah berjalan** bila belum.
 
+> **Diperbarui M7.2.** `ppdb_url` kini menjadi **satu-satunya** tujuan
+> pendaftaran publik, dan nilainya diperiksa sebelum dipakai:
+>
+> * hanya `http`/`https` berikut host yang diterima — `javascript:` dan `data:`
+>   ditolak dan diperlakukan sama dengan belum disetel (butir 553);
+> * seluruh CTA pendaftaran memakainya, termasuk tautan "Belum menjadi siswa?"
+>   di halaman masuk yang sebelumnya menunjuk `route('ppdb.schools')` langsung
+>   (butir 556);
+> * `/ppdb` dan `/ppdb/{kode}` mengalihkan ke sana dengan **302** supaya penanda
+>   halaman lama tetap hidup; `/ppdb/cek-status` tidak ikut dialihkan
+>   (butir 554, 555);
+> * ketika kosong atau ditolak, alur PPDB internal tetap berjalan apa adanya.
+
 Bawaannya sengaja bukan alamat Google Form: menuliskan alamat formulir milik
 sekolah sebagai bawaan di dalam kode berarti mengarang alamat yang belum tentu
 berlaku. Pemilik menempelkan alamat formulir yang sedang dipakai dari panel

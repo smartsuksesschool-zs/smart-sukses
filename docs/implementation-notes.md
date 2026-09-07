@@ -9028,6 +9028,557 @@ menyentuh antrean; seeder yang memanggilnya akan mengirim pemberitahuan setiap
 kali dijalankan — di lingkungan yang, kalau surelnya salah konfigurasi, punya
 alamat orang tua sungguhan.
 
+### 529. Google bukan sistem autentikasi kedua
+
+Yang bertambah pada batch ini hanya **cara membuktikan kepemilikan akun**. Sesudah
+terbukti, akun Google melewati `App\Support\LoginDestination` yang sama persis
+dengan akun berkata sandi, dan seluruh policy, `canAccessPanel()`, global scope
+tenant, serta middleware portal tetap berlaku sesudahnya.
+
+Tidak ada satu pun aturan otorisasi di project ini yang punya cabang "kalau lewat
+Google". Kalau ada, cabang itu cepat atau lambat akan tertinggal dari
+pasangannya — dan yang tertinggal pada aturan otorisasi bukan ketidakcocokan
+melainkan lubang.
+
+Tombolnya pun berdiri di halaman masuk yang sudah ada, bukan di halaman ketiga.
+Pintu masuknya tetap satu (butir 437).
+
+Ketiga rutenya menjawab 404 ketika kredensialnya belum disetel, dan tombolnya
+tidak muncul. Pintu yang tidak dapat dibuka lebih buruk daripada pintu yang tidak
+ada: yang pertama membuat orang mengira sistemnya rusak.
+
+### 530. NIS/NISN adalah pengenal, bukan rahasia
+
+Keputusan keamanan terpenting seluruh batch ini, dan yang paling mudah keliru.
+
+NIS dan NISN tercetak di kartu pelajar, tertulis di lembar jawaban, dan beredar
+di grup wali murid. Keduanya pengenal — seperti nomor rekening: berguna untuk
+menunjuk sesuatu, tidak berguna untuk membuktikan kepemilikan.
+
+Karena itu pencocokan yang berhasil hanya berarti *"permintaan ini menunjuk siswa
+yang memang ada"*. Ia tidak membuktikan bahwa pemohon adalah siswa itu, dan sama
+sekali tidak membuktikan bahwa ia orang tuanya. Kalau pencocokan saja sudah cukup
+untuk membuat akun, kartu pelajar yang terjatuh menjadi kunci portal — termasuk
+tagihan, nilai, dan rapor anak orang lain.
+
+Karena itu pula tidak ada satu pun jalur di dalam kode ini yang berakhir pada akun
+aktif tanpa seorang manusia menekan Setujui. Persetujuan admin bukan formalitas;
+ia satu-satunya pembuktian hubungan yang ada.
+
+### 531. Penanda keunikan diturunkan model, bukan diisi pemanggil
+
+`account_claims` menegakkan dua aturan keunikan yang berbeda, dan keduanya hanya
+berlaku pada sebagian status. MySQL maupun SQLite tidak punya *partial unique
+index*, tetapi keduanya menganggap baris yang mengandung NULL sebagai berbeda di
+dalam indeks unik — sehingga sebuah kolom penanda yang bernilai 1 selama
+keadaannya berlaku dan NULL sesudahnya menghasilkan efek yang sama, secara
+portabel.
+
+Yang menentukan bukan triknya melainkan **siapa yang mengisinya**. Penanda itu
+diturunkan dari `status` di dalam hook `saving` model, satu tempat, dan tidak
+pernah disentuh pemanggil mana pun. Kalau pemanggil yang mengisinya, cepat atau
+lambat ada satu jalur yang lupa — dan yang hilang bukan sebuah kolom, melainkan
+jaminan basis data bahwa satu siswa hanya punya satu pemilik akun.
+
+### 532. Yang tidak disimpan: token, NIS, NISN
+
+**Token Google tidak disimpan sama sekali.** Sesudah callback, aplikasi ini tidak
+pernah memanggil API Google lagi, jadi tidak ada satu pun yang perlu disimpan
+untuk dipakai nanti. Skemanya tidak menyediakan tempatnya, dan yang dititipkan ke
+sesi hanya tiga nilai: subject, surel, nama.
+
+**NIS dan NISN tidak disalin ke `account_claims`.** Keduanya dipakai sekali untuk
+menemukan `student_id`, dan sesudah itu `student_id` sudah menyebut baris induknya
+dengan lebih tepat daripada salinan yang dapat basi. Menyimpannya berarti menaruh
+pengenal siswa di tabel yang diisi publik — dan menaruhnya di sana tidak
+menambahkan satu pun kemampuan.
+
+Kuncinya `provider_subject`, bukan surel. Alamat Workspace yang dilepas dapat
+diberikan kepada karyawan berikutnya; `sub` dari Google tidak pernah dipakai
+ulang, bahkan setelah akunnya dihapus. Surel tetap disimpan, tetapi sebagai
+keterangan bagi admin yang menilai, bukan sebagai identitas.
+
+### 533. Empat keadaan, satu kalimat
+
+Pencocokan punya empat hasil yang berbeda — cocok, tidak ditemukan, NIS dan NISN
+menunjuk dua orang, serta siswanya sudah punya pemilik akun — dan dari luar
+keempatnya terlihat sama persis.
+
+Membedakannya di layar akan mengubah formulir ini menjadi alat menebak NIS.
+"Tidak ditemukan" menjawab *"tebakanmu salah"*; "NIS benar, NISN salah" menjawab
+*"tebakanmu benar, tinggal satu nilai lagi"*. Yang kedua jauh lebih berharga bagi
+orang yang sedang menebak daripada bagi orang yang sedang salah ketik.
+
+Perbedaannya tetap ada — sebagai enum, di catatan internal, dan sebagai bahasa
+test — tempat ia berguna dan tidak berbahaya. Pola yang sama sudah dipakai
+halaman masuk sejak butir 115.
+
+Alasan penolakan yang ditulis admin pun tidak pernah sampai ke pemohon. Ia
+melihat satu kalimat yang sama untuk seluruh penolakan.
+
+### 534. Yang menentukan adalah keadaan saat menulis, bukan saat memeriksa
+
+Pemeriksaan di formulir publik dan pada tombol Filament hanya berlaku untuk
+keadaan pada saat itu. Antara pemeriksaan dan penulisan, siapa pun dapat
+mengubahnya: admin kedua yang menekan Setujui pada permintaan lain untuk siswa
+yang sama, atau TU yang menautkan akun lewat halaman siswa.
+
+Karena itu seluruh persetujuan berjalan di dalam satu transaksi, dan setiap
+syarat diperiksa **ulang di dalamnya** atas baris yang sudah dikunci
+`lockForUpdate()`.
+
+Dan karena SQLite mengabaikan penguncian itu — serta karena kode mana pun dapat
+keliru — lapisan terakhirnya bukan kode melainkan indeks unik
+`account_claims_approved_unique`. Seandainya seluruh pemeriksaan lolos
+berbarengan, basis data tetap menolak baris kedua.
+
+### 535. Daftar putih peran, bukan daftar hitam
+
+`AccountClaim::SELF_SERVICE_ROLES` menyebut dua peran yang **boleh** diminta
+sendiri, bukan enam yang tidak boleh.
+
+Bedanya baru terasa nanti: peran baru pada `RoleName` tidak akan diam-diam menjadi
+dapat diminta sendiri oleh siapa pun yang punya akun Google. Dengan daftar hitam,
+peran baru aman hanya selama seseorang ingat menambahkannya ke sana.
+
+Daftarnya ditegakkan dua kali — pada validasi komponen dan di dalam
+`AccountClaimRegistrar` — karena keduanya melindungi dari hal yang berbeda: yang
+pertama dari nilai yang diselundupkan ke payload, yang kedua dari pemanggilan
+kode di kemudian hari yang melewati formulir sama sekali.
+
+### 536. Surel disamarkan di daftar, utuh di rincian
+
+Daftar permintaan dibuka untuk menyapu antrean, sering dalam keadaan tergesa, dan
+tampil di layar yang dilihat bersama-sama. Yang diperlukan untuk mengenali sebuah
+baris di sana hanya bentuk surelnya.
+
+Halaman rinciannya dibuka justru untuk memutuskan, dan di sana alamat utuh memang
+salah satu bahan keputusannya — bersama nama pada akun Google, nama orang tua pada
+data induk, dan keadaan tautan yang berlaku sekarang.
+
+Keadaan tautan itu sengaja ditampilkan sebelum tombolnya ditekan, bukan sesudahnya:
+permintaan atas siswa yang sudah punya pemilik akun tidak dapat disetujui, dan
+admin sebaiknya mengetahuinya sebelum ia mencoba.
+
+Tidak ada aksi massal. Menyetujui berarti membuat akun dan menaut seseorang ke
+seorang anak; tombol "setujui 40 yang tercentang" adalah cara paling murah untuk
+melewatkan seluruhnya tanpa membaca satu pun.
+
+### 537. Anak kedua: satu akun, dua tautan
+
+Satu identitas Google berhak atas satu `users`. Orang tua dengan dua anak karena
+itu menjadi satu pengguna dengan dua tautan, bukan dua akun bersurel sama yang
+masing-masing punya kotak masuk sendiri.
+
+Alurnya sempat tidak dapat dijangkau siapa pun, dan itu baru terlihat dari test.
+Begitu anak pertama disetujui, akun orang tuanya sudah ada — sehingga setiap
+"Masuk dengan Google" berikutnya langsung mendarat di portal, dan halaman
+pencocokan tidak pernah lagi terbuka sendiri.
+
+Dua hal menutupnya. Halaman pencocokan kini menerima satu pengecualian: orang tua
+yang **sudah masuk** dan akunnya memang lahir dari Google. Identitasnya waktu itu
+dibaca dari akunnya sendiri, bukan dari sesi OAuth — sesi itu sudah dilepas ketika
+ia masuk, dan membacanya lagi berarti mempercayai nilai yang tidak lagi dijaga
+siapa pun. Dan dasbor orang tua mendapat tautan "Daftarkan anak lainnya", karena
+kemampuan yang tidak punya pintu sama saja dengan tidak ada.
+
+Perannya di sana terkunci ORANG_TUA: akun yang sudah ada tidak dapat memakai
+halaman itu untuk meminta peran kedua.
+
+### 538. `users.password` menjadi nullable
+
+Akun Google tidak punya kata sandi, dan satu-satunya alternatif dari NULL adalah
+menyimpan hash acak yang tidak dapat dipakai siapa pun.
+
+Itu ditolak karena nilai semacam itu berbohong tentang keadaan akun: setiap
+pembaca kolomnya — sekarang, dan bertahun-tahun lagi — akan mengira akun itu punya
+kata sandi, dan setiap laporan yang menghitung "akun berkata sandi" akan salah.
+
+NULL mengatakan yang sebenarnya, dan Laravel sudah menolaknya dengan benar tanpa
+satu aturan tambahan pun: `AbstractHasher::check()` mengembalikan `false` untuk
+hash NULL, sehingga `Auth::attempt()` atas akun Google selalu gagal — termasuk
+dengan kata sandi kosong. Cast `hashed` pun meneruskan NULL apa adanya.
+
+Akun berkata sandi yang sudah ada tidak tersentuh: kolomnya bertambah dengan nilai
+NULL, dan tidak ada satu baris pun yang diubah.
+
+Migrasi turunnya mengisi lebih dulu akun tanpa kata sandi dengan hash acak sebelum
+mengembalikan NOT NULL — bukan untuk memberi mereka kata sandi, melainkan supaya
+migrasi turunnya gagal dengan alasan yang dapat dibaca, bukan dengan galat
+constraint basis data yang tidak menerangkan apa pun.
+
+### 539. Batasan skema dilaporkan, bukan diakali
+
+Dua batasan yang ditemukan saat merancang alur orang tua:
+
+  * `students.parent_user_id` tunggal — satu siswa hanya punya satu akun orang
+    tua, sehingga ayah dan ibu tidak dapat punya akun sendiri-sendiri;
+  * `users.school_id` tunggal — satu akun hanya berada di satu cabang, sehingga
+    orang tua dengan anak di dua cabang tidak dapat memakai satu akun.
+
+Keduanya tidak diakali. Yang kedua ditolak eksplisit saat persetujuan, dengan
+pesan yang menerangkan sebabnya kepada admin.
+
+Mengubahnya berarti mengganti relasi satu-ke-banyak menjadi tabel pivot —
+perubahan ERD yang menyentuh portal orang tua, penyaringan penerima notifikasi,
+tagihan, dan rapor. Itu keputusan pemilik, bukan efek samping sebuah batch
+autentikasi.
+
+### 540. Log memuat keputusan, bukan tebakan
+
+Baris log alur ini memuat id permintaan, peran yang diminta, id siswa, status, id
+peninjau, dan IP. Ia tidak pernah memuat NIS, NISN, surel, token, maupun payload.
+
+Yang paling penting yang tidak dicatat adalah **nilai yang dicoba**. Log yang
+memuat setiap NIS dan NISN yang pernah dikirim orang adalah daftar tebakan yang
+tersimpan rapi — sebuah berkas yang berisi persis apa yang hendak dilindungi alur
+ini, dalam bentuk yang paling mudah dibaca mesin.
+
+Ada test yang menjalankan satu pencocokan gagal dan satu yang berhasil, menyadap
+seluruh baris log yang keluar, lalu menuntut tidak satu pun nilai itu muncul di
+dalamnya.
+
+### 541. Batas pencocokan tinggal di komponen, bukan di rute
+
+Ketiga rute OAuth dibatasi 20 per menit per IP lewat middleware `throttle`. Itu
+menahan pemakaian callback sebagai alat memancing dan pemuatan berulang halaman
+pencocokan.
+
+Batas pengiriman NIS/NISN — lima per sepuluh menit, per identitas Google **dan**
+IP — tinggal di dalam komponennya, karena kiriman Livewire tidak melewati rute
+halaman itu sama sekali. Middleware di rute tidak akan pernah melihatnya.
+
+Ia lebih ketat daripada halaman masuk berkata sandi (lima per menit) dengan
+sengaja: yang dilindungi bukan satu akun melainkan seluruh daftar siswa, dan
+percobaan berulang atas NIS yang berganti-ganti adalah pemindaian, bukan lupa.
+
+### 542. Tidak ada modul izin ke-17
+
+Permintaan akun memakai izin modul `user` pada matriks PRD 1.1.2 apa adanya:
+`user.view` untuk melihat, `user.manage` untuk memutuskan.
+
+Sebuah permintaan akun adalah permintaan untuk membuat sebuah `users`, jadi
+kewenangannya memang kewenangan yang sama. Menambahkan modul ke-17 berarti
+menambahkan baris yang tidak ada di dokumen sumber mana pun, dan setiap peran baru
+kelak harus dijawab dua kali: sekali untuk pengguna, sekali untuk permintaan
+pengguna.
+
+Akibatnya persis sesuai keputusan produk: Super Admin dan Admin Sekolah dapat
+menyetujui; Kepala Sekolah, Guru, Wali Kelas, dan Bendahara — yang tidak punya
+modul `user` sama sekali — bahkan tidak melihat menunya.
+
+### 543. Satu aksi, dua tempat, satu definisi
+
+Setujui dan Tolak muncul di dua tempat: sebagai aksi baris pada daftar, dan
+sebagai aksi header pada halaman rincian. Filament memakai kelas yang berbeda
+untuk keduanya — `Tables\Actions\Action` dan `Actions\Action` — tetapi keduanya
+turunan `MountableAction`.
+
+Karena itu yang digandakan hanya pembuatan objeknya; seluruh aturannya — label,
+konfirmasi, syarat izin, penanganan galat — disusun sekali. Tanpa itu, tombol yang
+sama akan punya dua salinan syarat izin, dan salah satunya akan perlahan
+tertinggal.
+
+Tidak ada aksi sunting di mana pun. Kalau ada yang keliru pada sebuah permintaan
+— salah anak, salah peran — yang benar adalah menolaknya dan meminta pemohon
+mengirim ulang, bukan menyunting pengakuan orang lain sampai ia menjadi benar.
+
+### 544. Jenis permintaan, bukan peran
+
+Perubahan terpenting M7.1, dan seluruhnya terletak pada satu kolom.
+
+Pemohon publik memilih sebuah **`AccountClaimType`** — SISWA, ORANG_TUA, atau
+STAF_SEKOLAH — bukan sebuah `RoleName`. Yang ketiga tidak punya pasangan sama
+sekali: `STAF_SEKOLAH` tidak ada pada matriks izin PRD 1.1.2, tidak dapat
+diberikan kepada siapa pun, dan tidak membawa satu izin pun. Ia kalimat *"saya
+bekerja di sekolah ini"* yang menunggu dijawab manusia.
+
+Bedanya bukan penamaan. Kalau pemohon memilih sebuah **peran**, maka setiap
+pagar yang menahan `GURU` adalah daftar hitam yang harus diingat seseorang, dan
+peran baru pada `RoleName` akan aman hanya selama seseorang ingat. Karena ia
+memilih sebuah **jenis**, nilai `GURU` yang diselundupkan ke payload tidak
+sekadar ditolak validasi — ia tidak punya kolom untuk mendarat.
+
+Menambahkan `STAF_SEKOLAH` ke `RoleName` akan jauh lebih murah ditulis dan jauh
+lebih mahal dimiliki: ia akan muncul di pemilih peran `UserResource`, dituntut
+punya akun penguji oleh test kesiapan UAT (butir 526), dan menuntut satu baris
+pada matriks izin yang tidak pernah diminta dokumen mana pun — sebuah peran
+tanpa izin, hidup di dalam enum yang seluruh isinya peran nyata.
+
+Kolomnya karena itu dua: `requested_type` (yang diminta) dan `approved_role`
+(yang diberikan). Yang kedua NULL sampai admin memutuskan.
+
+### 545. Staf tidak punya yang dapat dicocokkan, dan itu tidak dikarang
+
+Siswa dan orang tua dicocokkan dengan NIS + NISN. Staf tidak punya padanannya:
+tidak ada tabel guru di project ini, dan NIP bukan data yang dipegang aplikasi
+ini sama sekali.
+
+Godaannya adalah mengarang sesuatu supaya alurnya terlihat setara — kode
+pegawai, pencocokan nama, atau daftar surel yang diunggah lebih dulu. Ketiganya
+akan menghasilkan pagar yang tidak menahan apa pun: nama tidak unik, kode yang
+baru dibuat tidak diketahui siapa pun, dan daftar surel adalah pekerjaan
+pengumpulan yang justru hendak dihapus alur ini.
+
+Yang jujur adalah mengakui bahwa untuk staf, **persetujuan admin bukan lapisan
+tambahan melainkan satu-satunya lapisan yang ada**. Dan justru karena itu
+perannya tidak boleh ikut dipilih pemohon (butir 547).
+
+### 546. Cabang dipilih pemohon staf, dan itu bukan kebocoran
+
+Permintaan siswa menurunkan cabangnya dari siswa yang cocok. Permintaan staf
+tidak punya sumber semacam itu, sehingga pemohon memilihnya sendiri dari daftar
+cabang aktif.
+
+Daftar itu sudah publik — halaman PPDB menampilkannya kepada siapa saja — jadi
+tidak ada keterangan baru yang dibuka. Dan ia bukan bukti apa-apa; ia menentukan
+**antrean siapa** yang akan membacanya.
+
+`school_id` karena itu tetap NOT NULL untuk seluruh jenis. Membiarkannya NULL
+bagi staf akan terlihat lebih rapi dan berakibat fatal: global scope tenant
+menyaring tepat pada kolom itu, sehingga baris ber-`school_id` NULL tidak akan
+pernah terlihat oleh satu pun Admin Sekolah — antrean yang tidak dapat dibaca
+siapa pun.
+
+### 547. Yang tidak pernah dapat lahir dari jalur publik
+
+Peninjau memilih satu peran dari `AccountClaim::REVIEWER_ASSIGNABLE_ROLES`:
+GURU, WALI_KELAS, BENDAHARA, KEPALA_SEKOLAH.
+
+SCHOOL_ADMIN dan SUPER_ADMIN tidak ada di sana, dan tidak boleh ditambahkan.
+Keduanya dapat **membuat pengguna lain**, dan SUPER_ADMIN bahkan melewati
+seluruh policy lewat `Gate::before`. Sebuah jalur publik yang dapat berakhir di
+salah satunya berarti pendaftaran mandiri yang, dengan satu kekeliruan seorang
+admin yang sedang lelah, menyerahkan seluruh cabang — atau seluruh platform.
+
+SCHOOL_ADMIN tetap dibuat lewat `UserResource`, tempat pembuatnya sudah terbukti
+dan tercatat. SUPER_ADMIN tetap milik platform.
+
+Daftarnya ditegakkan dua kali: sebagai pilihan pada formulir Filament, dan lagi
+di dalam `AccountClaimReviewer`. Yang pertama menahan kekeliruan; yang kedua
+menahan pemanggilan kode di kemudian hari yang melewati formulir sama sekali.
+
+Untuk permintaan siswa dan orang tua, pemilih peran **tidak muncul sama sekali**
+dan pilihan peninjau diabaikan sepenuhnya: perannya sudah ditentukan jenisnya.
+Menawarkan pemilih di sana berarti memberi kesempatan menyetujui permintaan
+siswa sebagai bendahara.
+
+### 548. Kunci string, karena satu anggota NULL mematikan indeks komposit
+
+`account_claims.student_id` menjadi nullable pada M7.1 — permintaan staf tidak
+merujuk siapa pun.
+
+Perubahan itu diam-diam mematikan kedua indeks unik sebelumnya. MySQL dan SQLite
+menganggap baris yang mengandung NULL sebagai berbeda di dalam indeks unik; itu
+persis yang membuat trik *partial unique index* bekerja (butir 531), tetapi
+akibatnya sebuah indeks komposit yang salah satu anggotanya NULL berhenti
+berlaku **untuk baris itu**. Aturan "satu permintaan menunggu per identitas"
+akan mati justru bagi permintaan staf, satu-satunya yang `student_id`-nya
+memang NULL — dan seorang pemohon staf dapat menumpuk antrean sebanyak yang ia
+mau.
+
+Keduanya karena itu diganti kunci string yang disusun model: ketiadaan siswa
+menjadi `'-'`, sebuah nilai yang tetap dibandingkan. Yang hilang hanya
+keindahan indeks komposit; yang didapat adalah aturan yang berlaku untuk
+seluruh baris, bukan untuk sebagian yang kebetulan lengkap.
+
+### 549. Hanya orang tua yang punya alasan sah memakai ulang akunnya
+
+Pemakaian ulang akun Google diperketat pada M7.1: kini hanya peran ORANG_TUA
+yang boleh melakukannya, dan alasannya tunggal — anak kedua (butir 537).
+
+SISWA menaut ke satu baris siswa; satu orang tidak dapat menjadi dua siswa.
+Staf sudah punya akunnya begitu permintaan pertamanya disetujui; permintaan
+kedua dari identitas yang sama bukan penambahan melainkan penggantian peran
+lewat pintu belakang. Untuk keduanya, "pakai ulang" hanya nama lain dari
+pengambilalihan.
+
+### 550. Tidak ada tabel guru, dan itu menghapus seluruh kelas masalahnya
+
+Temuan arsitektur M7.1. Project ini tidak punya model maupun tabel `teachers`:
+guru **adalah** `users` berperan GURU/WALI_KELAS, dan kedua kolom yang menyebut
+guru menunjuk `users` secara langsung — `classes.homeroom_teacher_id` dan
+`class_subjects.teacher_id`.
+
+Rancangan awal M7.1 mengandaikan sebuah record guru yang perlu ditaut saat
+persetujuan, lengkap dengan bahayanya: pencocokan nama, record yang dikarang
+diam-diam, duplikat yang lahir dari dua persetujuan. Tidak satu pun di antaranya
+dapat terjadi di sini, karena tidak ada tabel keduanya.
+
+Menyetujui permintaan staf sebagai GURU karena itu **sudah** membuat identitas
+gurunya. Akun itu langsung muncul di kedua pemilih pada layar admin — keduanya
+menyaring berdasarkan peran — tanpa satu langkah penautan tambahan, dan tanpa
+mapping paralel yang perlu dijaga tetap sinkron.
+
+Batas cabangnya pun sudah ada tanpa aturan baru: kedua pemilih memakai
+`User::query()`, yang membawa global scope tenant, sehingga guru cabang lain
+tidak pernah ikut ditawarkan.
+
+Penugasan — mata pelajaran, kelas yang diajar, kelas perwalian, jadwal — tetap
+milik layar yang sudah ada. Persetujuan menetapkan identitas dan peran, lalu
+berhenti.
+
+### 551. Wali kelas tetap satu orang, satu akun
+
+Akun yang disetujui sebagai WALI_KELAS tidak memerlukan akun GURU kedua,
+identitas Google kedua, maupun record guru kedua.
+
+Matriks izin PRD 1.1.2 sudah menyusunnya demikian: WALI_KELAS memiliki seluruh
+izin GURU ditambah `report_card.manage`. Pemilih "Guru Pengajar" pada layar
+Kelas → Mata Pelajaran memuat GURU **dan** WALI_KELAS sekaligus, dan
+`EnsureTeacherPortalAccess` menerima keduanya.
+
+Ini diperiksa test, bukan diandaikan — pertanyaannya cukup masuk akal untuk
+ditanyakan, dan jawabannya cukup mudah berubah untuk perlu dijaga.
+
+### 552. Tujuan dihitung sesudah masuk, bukan sebelumnya
+
+Ditemukan test alur staf, dan ia cacat sungguhan pada kode M7.
+
+`GoogleAuthController::signIn()` menghitung `LoginDestination::urlFor()` sebelum
+`Auth::login()`. Untuk siswa dan orang tua itu tidak terlihat — tujuan keduanya
+rute portal biasa. Untuk staf, tujuannya `Filament::getPanel('admin')->getUrl()`,
+dan nilai itu bergantung pada siapa yang sedang login: bagi tamu ia menjawab
+`/admin/login`, bukan dasbor.
+
+Akibatnya staf yang identitasnya baru saja terbukti dikirim ke halaman masuk
+panel, yang memantulkannya ke `/login`, yang baru kemudian mengantarnya ke
+dasbor. Ia mendarat di tempat yang benar lewat dua pantulan yang tidak perlu.
+
+Urutannya kini sama dengan halaman masuk berkata sandi: masuk dulu, tentukan
+tujuan sesudahnya, dan bila tujuannya NULL, `refuse()` yang membuang sesinya
+sehingga tidak ada pengguna yang setengah masuk (butir 157).
+
+Pelajaran yang lebih umum: `getUrl()` milik Filament bukan konstanta. Setiap
+pemanggilan di luar konteks pengguna yang sudah masuk perlu diperiksa dua kali —
+dan test yang sama pernah menemukannya sekali pada M6 (`UatReadinessTest`), waktu
+itu di dalam test, bukan di dalam kode produksi.
+
+### 553. Alamat luar diperiksa di titik pakainya
+
+`ppdb_url` sudah punya validasi `->url()` pada formulir admin sejak halaman
+muka V2. Itu cukup selama nilainya hanya dicetak sebagai `href`; sejak M7.2
+nilai yang sama menentukan ke mana peramban pengunjung **dialihkan server**,
+dan itu menuntut pemeriksaan kedua di titik pakainya.
+
+Alasannya bukan ketidakpercayaan pada formulirnya, melainkan bahwa formulir
+bukan satu-satunya jalur tulis: seeder, tinker, dan perintah artisan menulis ke
+`site_settings` tanpa melewati satu pun aturan Filament. Pemeriksaan yang hanya
+ada di formulir adalah pemeriksaan yang dapat dilewati tanpa niat jahat sama
+sekali.
+
+`PublicSite::externalPpdbUrl()` karena itu menjadi satu-satunya penerjemah
+nilai itu menjadi alamat yang boleh dipakai. Yang diterima hanya `http` dan
+`https` **berikut host**-nya — syarat kedua itu yang menolak `data://text/html,…`
+dan `https://` tanpa host, sementara `javascript:` gugur pada syarat pertama.
+
+Nilai yang ditolak diperlakukan sama dengan belum disetel: CTA jatuh ke halaman
+PPDB aplikasi ini. Bukan galat, dan bukan alamat karangan — sebuah alamat yang
+salah ketik tidak boleh menjadikan halaman muka tidak dapat dibuka.
+
+### 554. Satu tujuan pendaftaran, alur lama tetap berdiri
+
+Keputusan pemilik M7.2: pendaftaran publik bermuara ke satu alamat, yaitu Google
+Form yang ia setel sendiri.
+
+Alur PPDB internal **tidak dihapus**. Ia berdiri di belakang sebagai cadangan,
+dan `RedirectPpdbToConfiguredForm` yang memutuskan mana yang berlaku: selama
+`ppdb_url` terisi dan lolos pemeriksaan, `/ppdb` dan `/ppdb/{kode}` mengalihkan
+ke sana; ketika kosong atau ditolak, permintaannya diteruskan apa adanya dan
+pengunjung melihat halaman PPDB aplikasi ini persis seperti sebelumnya.
+
+Menghapus alurnya akan lebih rapi dibaca dan jauh lebih mahal dibatalkan.
+Formulir Google adalah milik pihak lain: ia dapat ditutup, dipindah, atau
+kehabisan kuota, dan pada hari itu satu-satunya jalan kembali adalah menulis
+ulang modul yang sudah teruji. Yang dihapus adalah **pilihannya**, bukan
+kemampuannya.
+
+Pemisahannya di middleware, bukan di dalam komponen Livewire-nya, karena yang
+berubah bukan isi halaman melainkan apakah halamannya ditampilkan sama sekali.
+`SchoolList` dan `RegistrationForm` tidak disentuh satu baris pun dan tetap
+teruji apa adanya.
+
+**302, bukan 301.** Keputusannya berbunyi "untuk saat ini". Pengalihan permanen
+tersimpan di peramban setiap pengunjung yang pernah membukanya dan tidak dapat
+ditarik dari sisi server — biaya yang tidak sebanding dengan penghematan satu
+permintaan.
+
+### 555. Urutan rute menentukan, dan `/ppdb/cek-status` hampir menjadi korbannya
+
+`/ppdb/{schoolCode}` adalah parameter bebas: ia cocok dengan `cek-status` juga.
+Laravel mencocokkan rute menurut urutan pendaftaran, sehingga menaruh grup
+pengalihan lebih dulu berarti pemeriksaan status pendaftar ikut dialihkan ke
+formulir pendaftaran — pengunjung yang bertanya "bagaimana pendaftaran saya"
+dijawab dengan formulir kosong.
+
+`cek-status` karena itu didaftarkan **sebelum** grup berparameter, dan itu bukan
+selera penataan melainkan syarat kebenaran. Ia juga sengaja berada di luar
+pengalihan: ia bukan pendaftaran melainkan pembacaan baris yang sudah ada di
+basis data ini, dan Google Form tidak dapat menjawabnya.
+
+### 556. PPDB bukan klaim akun
+
+Dua alur yang mudah tertukar karena keduanya berbunyi "mendaftar":
+
+  * **PPDB** — calon siswa yang belum tercatat di basis data ini sama sekali.
+    Tujuannya Google Form.
+  * **Klaim akun Google** — orang yang **sudah** tercatat (siswa, orang tua
+    anaknya, atau staf) dan hendak memiliki akunnya. Tujuannya `/login`.
+
+Mengirim calon siswa ke alur klaim berarti memintanya mencocokkan NIS yang belum
+ia miliki; mengirim siswa lama ke Google Form berarti mendaftarkannya ulang
+sebagai calon.
+
+Satu tautan sempat berada di sisi yang salah: "Belum menjadi siswa? Daftar PPDB"
+pada halaman masuk menunjuk `route('ppdb.schools')` langsung, sehingga ia
+satu-satunya CTA pendaftaran yang tidak ikut berpindah ketika pemilik mengganti
+alamat formulirnya. Kini ia memakai `ppdbUrl()` seperti yang lain.
+
+### 557. Pemilih satu pilihan bukan pilihan
+
+Sejak cabang kedua disembunyikan, pemilih cabang pada permintaan staf hanya
+berisi satu baris. Dropdown semacam itu bukan pilihan melainkan pekerjaan
+tambahan, dan pada formulir yang diisi orang yang sedang tidak sabar, setiap
+langkah yang tidak menentukan apa pun adalah langkah yang akan salah diisi.
+
+Cabangnya karena itu diisi sendiri dan **disebutkan sebagai keterangan** —
+pemohon tetap berhak tahu ke mana permintaannya pergi.
+
+Aturannya diturunkan dari data, bukan dari nama cabang: `count($options) === 1`.
+Begitu cabang kedua diaktifkan lagi, pemilihnya muncul kembali tanpa satu baris
+pun yang perlu diubah. Menuliskan "kalau cabangnya PUSAT" akan menjadi aturan
+yang benar hari ini dan salah diam-diam pada hari cabang ketiga dibuka.
+
+Nilai yang diisi sendiri tetap melewati validasi yang sama: yang dilewati
+pertanyaannya, bukan pemeriksaannya.
+
+### 558. Menyembunyikan cabang bukan menghapus cabang
+
+Cabang Bandung disembunyikan lewat `schools.is_active = false` — mekanisme yang
+sudah ada sejak ERD 2.2, bukan mekanisme baru.
+
+Yang membuatnya cukup adalah bahwa seluruh permukaan publik memang sudah
+menyaring dengannya: daftar cabang PPDB (`SchoolList`), halaman pendaftaran per
+cabang (`RegistrationForm`), pemilih cabang permintaan staf
+(`AccountClaimRegistrar::selectableSchools()`), dan pencocokan NIS/NISN
+(`StudentClaimMatcher` menyaring lewat `whereHas('school', is_active)`).
+Tidak ada satu pun aturan baru yang perlu ditulis untuk menyembunyikannya.
+
+Yang **tidak** dilakukan, dan sengaja: tidak ada tabel yang di-drop, tidak ada
+migrasi yang dihapus, tidak ada dukungan multi-cabang yang dilepas, dan tidak
+ada satu baris data operasional pun yang dihapus. Barisnya masih ada beserta
+namanya, `school_id` masih ada di seluruh model bisnis, dan global scope tenant
+tetap bekerja persis seperti sebelumnya.
+
+Membalikkannya adalah satu tombol di Manajemen Cabang — bukan pemulihan dari
+backup, dan bukan deployment.
+
+Satu akibat yang perlu diketahui: siswa di cabang yang disembunyikan tidak dapat
+mengklaim akunnya sendiri selama cabangnya nonaktif, karena `StudentClaimMatcher`
+ikut menyaring cabang aktif. Itu memang yang diminta ("cabang yang belum
+menerima pengguna"), tetapi ia konsekuensi yang harus disadari sebelum sebuah
+cabang berisi siswa dinonaktifkan.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
