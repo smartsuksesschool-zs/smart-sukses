@@ -84,13 +84,52 @@ class PublicSite
      */
     public function ppdbUrl(): string
     {
-        return SiteSetting::get('ppdb_url') ?? route('ppdb.schools');
+        return $this->externalPpdbUrl() ?? route('ppdb.schools');
     }
 
     /** Apakah CTA PPDB menunjuk ke luar aplikasi (Google Form). */
     public function ppdbIsExternal(): bool
     {
-        return SiteSetting::get('ppdb_url') !== null;
+        return $this->externalPpdbUrl() !== null;
+    }
+
+    /**
+     * Alamat PPDB luar yang **sudah diperiksa**, atau NULL.
+     *
+     * Satu-satunya tempat nilai `ppdb_url` diterjemahkan menjadi alamat yang
+     * boleh dipakai. Sebelum M7.2 nilainya dipakai apa adanya di tiga tempat
+     * berbeda; sejak `/ppdb` ikut mengalihkan ke sana, nilai yang sama
+     * menentukan ke mana peramban pengunjung dibawa — dan itu menuntut
+     * pemeriksaan di titik pakainya, bukan hanya di formulir yang menuliskannya
+     * (butir 553).
+     *
+     * Yang diterima hanya `http` dan `https` **berikut host**-nya. `javascript:`
+     * dan `data:` karena itu tidak pernah lolos: keduanya tidak punya host, dan
+     * skemanya tidak ada di daftar. Nilai yang ditolak diperlakukan sama dengan
+     * belum disetel — CTA jatuh ke halaman PPDB aplikasi ini, bukan ke alamat
+     * karangan dan bukan pula menjadi galat.
+     */
+    public function externalPpdbUrl(): ?string
+    {
+        $url = SiteSetting::get('ppdb_url');
+
+        if ($url === null) {
+            return null;
+        }
+
+        $parts = parse_url(trim($url));
+
+        if ($parts === false) {
+            return null;
+        }
+
+        $scheme = mb_strtolower((string) ($parts['scheme'] ?? ''));
+
+        if (! in_array($scheme, ['http', 'https'], true)) {
+            return null;
+        }
+
+        return blank($parts['host'] ?? null) ? null : trim($url);
     }
 
     /**

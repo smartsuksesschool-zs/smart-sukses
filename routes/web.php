@@ -8,6 +8,7 @@ use App\Http\Controllers\Portal\StudentReportCardController;
 use App\Http\Middleware\EnsureParentPortalAccess;
 use App\Http\Middleware\EnsureStudentPortalAccess;
 use App\Http\Middleware\EnsureTeacherPortalAccess;
+use App\Http\Middleware\RedirectPpdbToConfiguredForm;
 use App\Livewire\Auth\GoogleClaim;
 use App\Livewire\Auth\Login;
 use App\Livewire\Portal\NotificationInbox;
@@ -114,11 +115,32 @@ Route::prefix('masuk/google')
  * API 4.7 PPDB Online — Auth Level: Public.
  * Halaman-halaman berikut sengaja tidak memakai middleware auth
  * (PPDB-01 poin 1: "dapat diakses publik via URL: /ppdb/[kode_sekolah]").
+ *
+ * Sejak M7.2 pendaftaran publik punya **satu** tujuan: Google Form yang
+ * disetel pemilik. Kedua alamat pendaftaran di bawah karena itu berdiri di
+ * belakang `RedirectPpdbToConfiguredForm`, yang mengalihkan ke sana selama
+ * alamatnya terisi dan sah. Rutenya sengaja tidak dihapus: penanda halaman yang
+ * sudah tersebar tidak boleh menjadi 404 hanya karena tujuannya berpindah
+ * (butir 443), dan alur PPDB internal tetap utuh sebagai cadangan bila
+ * formulirnya kelak ditarik (butir 554).
+ *
+ * `/ppdb/cek-status` **tidak** ikut dialihkan: ia bukan pendaftaran melainkan
+ * pemeriksaan status pendaftar yang sudah ada di basis data ini, dan Google
+ * Form tidak dapat menjawabnya.
  */
 Route::prefix('ppdb')->name('ppdb.')->group(function () {
-    Route::get('/', SchoolList::class)->name('schools');
+    /*
+     * Didaftarkan **sebelum** `/{schoolCode}`, dan urutannya menentukan: Laravel
+     * mencocokkan rute menurut urutan pendaftaran, sehingga parameter bebas di
+     * bawah akan menelan `/ppdb/cek-status` dan mengalihkan pemeriksaan status
+     * ke formulir pendaftaran (butir 555).
+     */
     Route::get('/cek-status', StatusCheck::class)->name('check-status');
-    Route::get('/{schoolCode}', RegistrationForm::class)->name('register');
+
+    Route::middleware(RedirectPpdbToConfiguredForm::class)->group(function () {
+        Route::get('/', SchoolList::class)->name('schools');
+        Route::get('/{schoolCode}', RegistrationForm::class)->name('register');
+    });
 });
 
 /*

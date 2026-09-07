@@ -94,9 +94,28 @@
             </p>
         @endif
 
+        {{--
+            Pendaftaran siswa baru ≠ pendaftaran akun.
+
+            Tautan ini mengantar calon siswa ke PPDB — alamat yang sama dengan
+            seluruh CTA pendaftaran lain, yaitu `ppdb_url`. Ia **tidak** boleh
+            mengantar ke "Masuk dengan Google" di atas: yang di atas untuk orang
+            yang sudah tercatat di sekolah ini dan hendak mengklaim akunnya,
+            sedangkan yang di sini belum menjadi siapa-apa di basis data ini
+            (butir 556).
+
+            Sebelum M7.2 tautannya menunjuk `route('ppdb.schools')` langsung,
+            sehingga halaman masuk menjadi satu-satunya CTA pendaftaran yang
+            tidak ikut berpindah ketika pemilik mengganti alamat formulirnya.
+        --}}
+        @php($site = app(\App\Support\PublicSite::class))
+
         <p class="auth__note">
             {{ __('Belum menjadi siswa?') }}
-            <a href="{{ route('ppdb.schools') }}">{{ __('Daftar PPDB') }}</a>
+            <a
+                href="{{ $site->ppdbUrl() }}"
+                @if ($site->ppdbIsExternal()) target="_blank" rel="noopener" @endif
+            >{{ __('Daftar PPDB') }}</a>
         </p>
 
         <div class="auth__foot">
