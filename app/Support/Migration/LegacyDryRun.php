@@ -63,9 +63,10 @@ class LegacyDryRun
      *
      * @return array<string, mixed>
      */
-    public function plan(): array
+    public function plan(array $excludedRows = []): array
     {
         return (new StudentImportPlan($this->school, $this->year))
+            ->excludingRows($excludedRows)
             ->build($this->workbook->students($this->studentSheets)['rows']);
     }
 

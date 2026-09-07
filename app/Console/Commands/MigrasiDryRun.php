@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\ParsesExcludedRows;
 use App\Models\AcademicYear;
 use App\Models\School;
 use App\Support\Migration\LegacyDryRun;
@@ -30,12 +31,15 @@ use Throwable;
  */
 class MigrasiDryRun extends Command
 {
+    use ParsesExcludedRows;
+
     protected $signature = 'migrasi:dry-run
         {berkas : Jalur berkas .xlsx sekolah (di luar repositori)}
         {--school=PUSAT : Kode cabang, bukan id numerik}
         {--tahun-ajaran= : Nama tahun ajaran tujuan; bawaan: yang sedang aktif}
         {--sheet-siswa= : Nama lembar siswa, boleh lebih dari satu dipisah koma; kosong = deteksi otomatis}
-        {--sheet-guru= : Nama lembar guru; kosong = deteksi otomatis}';
+        {--sheet-guru= : Nama lembar guru; kosong = deteksi otomatis}
+        {--kecualikan-baris= : Baris sumber yang dinyatakan sekolah BUKAN siswa terdaftar, dipisah koma. Bentuk: "Kelas 11:12" atau "12". Hanya berlaku pada baris tanpa NIS; tanpa nama lembar ia ditolak bila cocok di lebih dari satu lembar.}';
 
     protected $description = 'Menganalisis berkas siswa/guru sekolah terhadap skema, tanpa menulis apa pun.';
 
@@ -65,7 +69,7 @@ class MigrasiDryRun extends Command
             $run = new LegacyDryRun($workbook, $school, $year, $studentSheets, $teacherSheets);
             $students = $run->students();
             $teachers = $run->teachers();
-            $plan = $run->plan();
+            $plan = $run->plan($this->excludedRows());
         } catch (Throwable $e) {
             // Pesan pengecualian boleh menyebut lembar yang hilang, tidak pernah
             // isi barisnya.
@@ -354,6 +358,20 @@ class MigrasiDryRun extends Command
         $this->components->twoColumnDetail('siap', "<fg=green>{$r['ready']}</>");
         $this->components->twoColumnDetail('tertunda', "<fg=yellow>{$r['pending']}</>");
         $this->components->twoColumnDetail('ditolak', "<fg=red>{$r['rejected']}</>");
+        $this->components->twoColumnDetail(
+            'dikecualikan (bukan siswa terdaftar)',
+            $r['excluded'] > 0 ? "<fg=cyan>{$r['excluded']}</>" : '0',
+        );
+
+        // Nomor yang diminta tetapi tidak berlaku tidak pernah didiamkan.
+        if ($r['excluded_ignored'] !== []) {
+            foreach ($r['excluded_ignored'] as $ignored) {
+                $this->components->warn(
+                    "--kecualikan-baris \"{$ignored['locator']}\" tidak diterapkan ({$ignored['reason']}). "
+                    .'Sebutkan lembarnya, contoh: "Kelas 11:12".',
+                );
+            }
+        }
         $this->components->twoColumnDetail(
             'sumber = siap + tertunda + ditolak',
             $r['balanced'] ? '<fg=green>seimbang</>' : '<fg=red>TIDAK seimbang</>',

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\ParsesExcludedRows;
 use App\Models\AcademicYear;
 use App\Models\School;
 use App\Support\Migration\LegacyWorkbook;
@@ -36,12 +37,15 @@ use Throwable;
  */
 class MigrasiTerapkanUji extends Command
 {
+    use ParsesExcludedRows;
+
     protected $signature = 'migrasi:terapkan-uji
         {berkas : Jalur berkas .xlsx sekolah (di luar repositori)}
         {--school=PUSAT : Kode cabang, bukan id numerik}
         {--tahun-ajaran= : Nama tahun ajaran tujuan; bawaan: yang sedang aktif}
         {--sheet-siswa= : Nama lembar siswa, boleh lebih dari satu dipisah koma; kosong = deteksi otomatis}
-        {--konfirmasi : Tulis ke basis data uji. Tanpa ini perintah hanya mencetak rencana.}';
+        {--konfirmasi : Tulis ke basis data uji. Tanpa ini perintah hanya mencetak rencana.}
+        {--kecualikan-baris= : Baris sumber yang dinyatakan sekolah BUKAN siswa terdaftar, dipisah koma. Bentuk: "Kelas 11:12" atau "12". Hanya berlaku pada baris tanpa NIS; tanpa nama lembar ia ditolak bila cocok di lebih dari satu lembar.}';
 
     protected $description = 'Menerapkan impor siswa ke basis data UJI saja, mengikuti rencana yang sama dengan migrasi:dry-run.';
 
@@ -87,6 +91,7 @@ class MigrasiTerapkanUji extends Command
             }
 
             $plan = (new StudentImportPlan($school, $year))
+                ->excludingRows($this->excludedRows())
                 ->build($workbook->students($sheets)['rows']);
         } catch (Throwable $e) {
             $this->components->error($e->getMessage());
@@ -205,7 +210,8 @@ class MigrasiTerapkanUji extends Command
         $r = $plan['reconciliation'];
         $this->components->twoColumnDetail(
             'rekonsiliasi',
-            "{$r['source']} sumber = {$r['ready']} siap + {$r['pending']} tertunda + {$r['rejected']} ditolak",
+            "{$r['source']} sumber = {$r['ready']} siap + {$r['pending']} tertunda + {$r['rejected']} ditolak"
+                ." + {$r['excluded']} dikecualikan",
         );
     }
 

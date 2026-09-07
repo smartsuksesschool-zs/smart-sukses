@@ -26,7 +26,7 @@ use App\Models\StudentClass;
  *
  * Rekonsiliasi selalu tertutup:
  *
- *     baris sumber = siap + tertunda + ditolak
+ *     baris sumber = siap + tertunda + ditolak + dikecualikan
  *
  * Semua query membawa `school_id` eksplisit — perintah artisan berjalan tanpa
  * sesi sehingga SchoolScope tidak aktif.
@@ -48,6 +48,22 @@ class StudentImportPlan
     public const PENDING_PPDB_RECONCILIATION = 'PPDB_RECONCILIATION_REQUIRED';
 
     public const REJECTED_MASTER_INCOMPLETE = 'REJECTED_MASTER_INCOMPLETE';
+
+    /**
+     * Baris sumber yang **bukan siswa terdaftar**, dinyatakan sekolah.
+     *
+     * Berbeda dari PENDING_MISSING_NIS, dan bedanya bukan tata bahasa. Yang
+     * tertunda adalah siswa resmi yang NIS-nya belum terbit: ia akan diimpor,
+     * nanti. Yang dikecualikan tidak akan pernah diimpor — ia ikut kegiatan
+     * tanpa pernah terdaftar, sehingga menahannya di antrean "tertunda" berarti
+     * menyimpan pekerjaan yang tidak akan pernah selesai, dan gerbang produksi
+     * yang menuntut nol tertunda tidak akan pernah terbuka (butir 559).
+     *
+     * Tidak pernah writable, dan tidak pernah ditentukan sendiri oleh kode ini:
+     * sekolah yang menyatakannya, per lembar dan nomor baris, lewat
+     * `excludingRows()`.
+     */
+    public const EXCLUDED_NOT_REGISTERED = 'EXCLUDED_NOT_REGISTERED';
 
     public const PLACEMENT_READY = 'PLACEMENT_READY';
 
@@ -109,6 +125,37 @@ class StudentImportPlan
         protected ?AcademicYear $year = null,
     ) {}
 
+    /**
+     * Penunjuk baris yang dinyatakan sekolah bukan siswa terdaftar.
+     *
+     * Bentuknya `['sheet' => ?string, 'line' => int, 'label' => string]`.
+     * Lembar boleh NULL — artinya "baris sekian di lembar mana pun" — dan
+     * penunjuk seperti itu hanya berlaku bila ia menemukan **tepat satu**
+     * baris yang layak (butir 566).
+     *
+     * Nomor baris dan nama lembar, bukan nama orang: keduanya bukan data
+     * pribadi, sehingga pengecualian dapat dicatat di perintah, di log, dan di
+     * dokumen tanpa memindahkan identitas siapa pun ke luar berkas sumbernya
+     * (butir 560).
+     *
+     * @var array<int, array{sheet: ?string, line: int, label: string}>
+     */
+    protected array $excludedLocators = [];
+
+    /**
+     * Kunci `lembar|baris` yang benar-benar berlaku, hasil penyelesaian.
+     *
+     * @var array<string, true>
+     */
+    protected array $excludedKeys = [];
+
+    /**
+     * Penunjuk yang diminta tetapi tidak berlaku, beserta sebabnya.
+     *
+     * @var array<int, array{locator: string, reason: string}>
+     */
+    protected array $excludedIgnored = [];
+
     public function forSource(string $path): self
     {
         $this->sourcePath = $path;
@@ -117,11 +164,69 @@ class StudentImportPlan
     }
 
     /**
+     * Menyatakan baris sumber tertentu bukan siswa terdaftar.
+     *
+     * Menerima dua bentuk: `"12"` dan `"Kelas 11:12"`. Yang pertama tidak
+     * menyebut lembar, dan berkas sekolah 2026/2027 memakai satu lembar per
+     * tingkat (butir 484) — sehingga "baris 12" ada di ketiganya. Bentuk itu
+     * karena itu hanya berlaku bila ia menemukan tepat satu baris yang layak;
+     * selebihnya ia ditolak sebagai ambigu, bukan diterapkan ke semuanya
+     * (butir 566).
+     *
+     * @param  array<int, int|string>  $locators
+     */
+    public function excludingRows(array $locators): self
+    {
+        foreach ($locators as $raw) {
+            $locator = self::parseLocator((string) $raw);
+
+            if ($locator !== null) {
+                $this->excludedLocators[] = $locator;
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * `"Kelas 11:12"` -> lembar + baris; `"12"` -> baris saja.
+     *
+     * Pemisahnya titik dua **terakhir**, sehingga nama lembar yang kebetulan
+     * memuat titik dua tidak terpotong di tempat yang salah.
+     *
+     * @return array{sheet: ?string, line: int, label: string}|null
+     */
+    public static function parseLocator(string $raw): ?array
+    {
+        $raw = trim($raw);
+
+        if ($raw === '') {
+            return null;
+        }
+
+        $at = mb_strrpos($raw, ':');
+        $sheet = $at === false ? null : trim(mb_substr($raw, 0, $at));
+        $number = trim($at === false ? $raw : mb_substr($raw, $at + 1));
+
+        if (! ctype_digit($number) || (int) $number <= 0) {
+            return null;
+        }
+
+        return [
+            'sheet' => ($sheet === null || $sheet === '') ? null : $sheet,
+            'line' => (int) $number,
+            'label' => $raw,
+        ];
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $rows
      * @return array<string, mixed>
      */
     public function build(array $rows): array
     {
+        $this->resolveExclusions($rows);
+
         $plan = [];
         $seenNis = [];
         $seenNisn = [];
@@ -178,6 +283,105 @@ class StudentImportPlan
     }
 
     /**
+     * Menerjemahkan penunjuk menjadi baris yang benar-benar dikecualikan.
+     *
+     * Dua lintasan, dan lintasan pertama inilah yang membuat bentuk "baris
+     * sekian" aman. Sebuah penunjuk hanya berlaku bila ia menemukan **tepat
+     * satu** baris yang layak; kalau ia menemukan dua — keadaan biasa pada
+     * berkas satu-lembar-per-tingkat — ia tidak diterapkan ke keduanya,
+     * melainkan ditolak sebagai ambigu (butir 566).
+     *
+     * "Layak" berarti barisnya tanpa NIS. Syarat itu diperiksa di sini **dan**
+     * sekali lagi di `decide()`: yang di sini menentukan penunjuknya berlaku
+     * atau tidak, yang di sana menentukan barisnya berpindah atau tidak
+     * (butir 561).
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     */
+    protected function resolveExclusions(array $rows): void
+    {
+        $this->excludedKeys = [];
+        $this->excludedIgnored = [];
+
+        foreach ($this->excludedLocators as $locator) {
+            $matches = [];
+
+            foreach ($rows as $row) {
+                if ((int) ($row['source_line'] ?? 0) !== $locator['line']) {
+                    continue;
+                }
+
+                if ($locator['sheet'] !== null && ! self::sheetMatches((string) ($row['sheet'] ?? ''), $locator['sheet'])) {
+                    continue;
+                }
+
+                if (! $this->isExclusionEligible($row)) {
+                    continue;
+                }
+
+                $matches[self::rowKey($row)] = true;
+            }
+
+            $matches = array_keys($matches);
+
+            if (count($matches) === 1) {
+                $this->excludedKeys[$matches[0]] = true;
+
+                continue;
+            }
+
+            $this->excludedIgnored[] = [
+                'locator' => $locator['label'],
+                'reason' => count($matches) > 1 ? 'ambigu' : 'tidak berlaku',
+            ];
+        }
+    }
+
+    /**
+     * Apakah baris ini benar-benar dapat dipindahkan oleh pengecualian.
+     *
+     * Syaratnya **sama persis dengan urutan `decide()`**, dan itu yang membuat
+     * laporannya jujur. Data induk yang tidak lengkap diperiksa lebih dulu di
+     * sana, sehingga baris tanpa nama akan ditolak sebelum cabang "tanpa NIS"
+     * tercapai. Kalau di sini ia dianggap layak, penunjuknya akan terhitung
+     * berhasil diselesaikan tetapi tidak pernah berlaku — hilang tanpa muncul
+     * di daftar mana pun, dan operator mengira barisnya sudah dikeluarkan
+     * padahal ia justru ditolak (butir 568).
+     *
+     * @param  array<string, mixed>  $row
+     */
+    protected function isExclusionEligible(array $row): bool
+    {
+        if ($this->text($row['full_name'] ?? null) === '') {
+            return false;
+        }
+
+        if ($this->gender($this->text($row['gender'] ?? null)) === '') {
+            return false;
+        }
+
+        return $this->identifier($row['nis'] ?? null) === null;
+    }
+
+    /**
+     * Penanda satu baris sumber: lembar dan nomor barisnya.
+     *
+     * Nomor baris saja tidak cukup — ia dihitung ulang dari satu di setiap
+     * lembar, sehingga "baris 12" ada di setiap lembar tingkat (butir 566).
+     *
+     * @param  array<string, mixed>  $row
+     */
+    protected static function rowKey(array $row): string
+    {
+        return trim((string) ($row['sheet'] ?? '')).'|'.(int) ($row['source_line'] ?? 0);
+    }
+
+    protected static function sheetMatches(string $sheet, string $wanted): bool
+    {
+        return mb_strtolower(trim($sheet)) === mb_strtolower(trim($wanted));
+    }
+
+    /**
      * @param  array<string, mixed>  $row
      * @param  array<string, int>  $seenNis
      * @param  array<string, int>  $seenNisn
@@ -228,7 +432,20 @@ class StudentImportPlan
         //    identitas sementara akan menjadi identitas tetap begitu ada nilai,
         //    tagihan, dan rapor yang menggantung padanya (butir 488).
         if ($nis === null) {
-            return $this->outcome($decision, self::PENDING_MISSING_NIS);
+            /*
+             * Pengecualian hanya berlaku di titik ini, dan itu yang membuatnya
+             * aman: satu-satunya perpindahan yang mungkin adalah
+             * PENDING_MISSING_NIS -> EXCLUDED_NOT_REGISTERED. Baris yang
+             * membawa NIS tidak pernah dapat dikecualikan, sehingga daftar ini
+             * tidak dapat berubah menjadi cara menghapus siswa resmi dari impor
+             * tanpa seorang pun menyadarinya (butir 561).
+             *
+             * Nomor baris yang diminta tetapi tidak memenuhi syarat tidak
+             * didiamkan: ia dilaporkan sebagai permintaan yang tidak berlaku.
+             */
+            return isset($this->excludedKeys[self::rowKey($row)])
+                ? $this->outcome($decision, self::EXCLUDED_NOT_REGISTERED)
+                : $this->outcome($decision, self::PENDING_MISSING_NIS);
         }
 
         if (isset($seenNis[$nis])) {
@@ -426,21 +643,48 @@ class StudentImportPlan
         $ready = 0;
         $pending = 0;
         $rejected = 0;
+        $excluded = 0;
+        $appliedLines = [];
 
         foreach ($plan as $row) {
             match (true) {
                 in_array($row['outcome'], self::WRITABLE, true) => $ready++,
                 $row['outcome'] === self::REJECTED_MASTER_INCOMPLETE => $rejected++,
+                $row['outcome'] === self::EXCLUDED_NOT_REGISTERED => [$excluded++, $appliedLines[] = trim((string) ($row['sheet'] ?? '')).':'.$row['line']],
                 default => $pending++,
             };
         }
 
+        /*
+         * Penunjuk yang diminta tetapi tidak berlaku — ambigu, barisnya punya
+         * NIS, atau nomornya tidak ada di berkas — tidak didiamkan.
+         * Pengecualian yang diketik keliru dan diam berarti operator mengira
+         * satu baris sudah dikeluarkan padahal ia masih tertunda (butir 561).
+         */
+        $requested = array_map(fn (array $l): string => $l['label'], $this->excludedLocators);
+        sort($requested);
+        sort($appliedLines);
+
+        /*
+         * Tanda tangan **skalar**, dan bentuk itu yang menentukan.
+         *
+         * `ImportFingerprint::totals()` melewati setiap nilai yang bukan skalar,
+         * sehingga daftar berbentuk array tidak pernah ikut terhitung: rencana
+         * yang mengecualikan baris 12 dan rencana yang mengecualikan baris 20
+         * akan bersidik jari sama selama keduanya mengecualikan satu baris.
+         * Yang masuk sidik jari karena itu string ini, bukan daftarnya
+         * (butir 567).
+         */
         return [
             'source' => count($plan),
             'ready' => $ready,
             'pending' => $pending,
             'rejected' => $rejected,
-            'balanced' => count($plan) === $ready + $pending + $rejected,
+            'excluded' => $excluded,
+            'excluded_signature' => implode(',', $appliedLines),
+            'excluded_requested' => $requested,
+            'excluded_ignored' => $this->excludedIgnored,
+            'balanced' => count($plan) === $ready + $pending + $rejected + $excluded,
         ];
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\ParsesExcludedRows;
 use App\Models\AcademicYear;
 use App\Models\School;
 use App\Support\Migration\ImportFingerprint;
@@ -49,6 +50,8 @@ use Throwable;
  */
 class MigrasiTerapkanProduksi extends Command
 {
+    use ParsesExcludedRows;
+
     protected $signature = 'migrasi:terapkan-produksi
         {berkas : Jalur berkas .xlsx sekolah (di luar repositori)}
         {--school= : Kode cabang tujuan. WAJIB, tanpa nilai bawaan.}
@@ -56,7 +59,8 @@ class MigrasiTerapkanProduksi extends Command
         {--sheet-siswa= : Nama lembar siswa, dipisah koma; kosong = deteksi otomatis}
         {--sidik-jari= : Sidik jari dari analisis kering yang sudah ditinjau.}
         {--backup-terverifikasi : Menyatakan operator sudah memverifikasi sendiri backup yang dapat dipulihkan.}
-        {--konfirmasi : Melanjutkan ke konfirmasi akhir. Tanpa ini perintah hanya menampilkan pratinjau.}';
+        {--konfirmasi : Melanjutkan ke konfirmasi akhir. Tanpa ini perintah hanya menampilkan pratinjau.}
+        {--kecualikan-baris= : Baris sumber yang dinyatakan sekolah BUKAN siswa terdaftar, dipisah koma. Bentuk: "Kelas 11:12" atau "12". Hanya berlaku pada baris tanpa NIS; tanpa nama lembar ia ditolak bila cocok di lebih dari satu lembar.}';
 
     protected $description = 'IMPOR PRODUKSI siswa. Butuh APP_ENV=production, backup terverifikasi, dan konfirmasi diketik.';
 
@@ -92,6 +96,7 @@ class MigrasiTerapkanProduksi extends Command
             // tepat sebelum menulis. Tidak ada rencana yang dibawa dari
             // pemanggilan lain.
             $plan = (new StudentImportPlan($school, $year))
+                ->excludingRows($this->excludedRows())
                 ->forSource($path)
                 ->build($workbook->students($sheets)['rows']);
 
@@ -253,6 +258,10 @@ class MigrasiTerapkanProduksi extends Command
         $this->components->info('REKONSILIASI');
         $this->components->twoColumnDetail('SUMBER', (string) $r['source']);
         $this->components->twoColumnDetail('SIAP', "<fg=green>{$r['ready']}</>");
+        $this->components->twoColumnDetail(
+            'DIKECUALIKAN (bukan siswa terdaftar)',
+            $r['excluded'] > 0 ? "<fg=cyan>{$r['excluded']}</>" : '0',
+        );
         $this->components->twoColumnDetail('TERTUNDA', $this->pendingLabel($plan));
         $this->components->twoColumnDetail(
             'DITOLAK',
@@ -390,6 +399,8 @@ class MigrasiTerapkanProduksi extends Command
             'ready' => $plan['reconciliation']['ready'],
             'pending' => $plan['reconciliation']['pending'],
             'rejected' => $plan['reconciliation']['rejected'],
+            'excluded' => $plan['reconciliation']['excluded'],
+            'excluded_lines' => $plan['reconciliation']['excluded_requested'],
             'created' => $result['created'],
             'matched' => $result['matched'],
             'placed' => $result['placed'],
