@@ -9579,6 +9579,208 @@ ikut menyaring cabang aktif. Itu memang yang diminta ("cabang yang belum
 menerima pengguna"), tetapi ia konsekuensi yang harus disadari sebelum sebuah
 cabang berisi siswa dinonaktifkan.
 
+### 559. Tertunda dan dikecualikan bukan hal yang sama
+
+Berkas sekolah memuat empat puluh baris. Tiga puluh sembilan siswa resmi, dan
+satu baris tanpa NIS milik anak yang ikut kegiatan tanpa pernah terdaftar.
+
+Sampai M8 baris itu jatuh ke `PENDING_MISSING_NIS`, dan pembacaannya keliru:
+tertunda berarti *"siswa resmi yang NIS-nya belum terbit — ia akan diimpor,
+nanti"*. Baris ini tidak akan pernah diimpor. Menahannya di sana berarti
+menyimpan pekerjaan yang tidak akan pernah selesai, dan gerbang impor produksi
+yang menuntut nol tertunda tidak akan pernah terbuka.
+
+Dua jalan pintas yang ditolak. Mengarang NIS supaya barisnya ikut — identitas
+sementara yang akan menjadi identitas tetap begitu ada nilai, tagihan, dan rapor
+menggantung padanya (butir 488). Dan memperlakukan "tanpa NIS" sebagai
+dikecualikan secara umum — itu akan diam-diam membuang siswa resmi yang NIS-nya
+kebetulan belum tertulis di lembar, yaitu persis keadaan yang butir 488
+lindungi.
+
+Yang benar adalah pernyataan eksplisit dari sekolah, per baris.
+`EXCLUDED_NOT_REGISTERED` karena itu ember keempat pada rekonsiliasi, dan
+kontraknya bertambah satu suku:
+
+    baris sumber = siap + tertunda + ditolak + dikecualikan
+
+### 560. Dinyatakan per nomor baris, bukan per nama
+
+Pengecualian ditulis sebagai nomor baris sumber (`--kecualikan-baris=12`).
+
+Nomor baris bukan data pribadi. Ia dapat ditulis di perintah, tercatat di
+riwayat shell, masuk ke log audit impor, dan disebut di dokumen ini tanpa
+memindahkan identitas siapa pun ke luar berkas sumbernya — yang letaknya memang
+di luar repositori dan tidak pernah ikut tercetak di laporan mana pun
+(butir 519).
+
+Nama akan lebih enak dibaca dan salah pada ketiga tempat itu sekaligus.
+
+Penguraiannya satu trait untuk ketiga perintah. Ditulis tiga kali, ia akan cepat
+atau lambat berbeda pada satu perintah — dan perbedaan yang paling mungkin
+adalah perintah produksi menerima nilai yang ditolak analisis kering, yaitu
+keadaan yang justru harus mustahil.
+
+### 561. Pengecualian hanya dapat memindahkan satu jenis baris
+
+Pagar terpenting perubahan ini, dan seluruhnya terletak pada di mana
+pemeriksaannya dipasang.
+
+Daftar pengecualian dibaca **hanya** di titik `PENDING_MISSING_NIS`. Satu-satunya
+perpindahan yang mungkin karena itu `PENDING_MISSING_NIS -> EXCLUDED_NOT_REGISTERED`.
+Baris yang membawa NIS tidak pernah dapat dikecualikan, sehingga daftar ini
+tidak dapat berubah menjadi cara menghapus siswa resmi dari impor tanpa seorang
+pun menyadarinya. Baris tanpa nama pun tetap `REJECTED_MASTER_INCOMPLETE`:
+penolakan diperiksa lebih dulu, dan pengecualian tidak menutupinya.
+
+Nomor yang diminta tetapi tidak berlaku — karena barisnya punya NIS, atau
+nomornya tidak ada di berkas — tidak didiamkan. Rencana mencantumkannya sebagai
+`excluded_ignored`, dan analisis kering mencetak peringatannya. Pengecualian
+yang salah ketik dan diam berarti operator mengira satu baris sudah dikeluarkan
+padahal ia masih tertunda; ia baru akan mengetahuinya ketika gerbang produksi
+menolak, tanpa tahu sebabnya.
+
+### 562. Daftar pengecualian ikut masuk sidik jari
+
+`ImportFingerprint` menghitung bagian `reconciliation`, dan ember keempat berada
+di dalamnya. Akibatnya rencana yang **ditinjau tanpa** pengecualian tidak dapat
+**diterapkan dengan** pengecualian, dan sebaliknya: sidik jarinya tidak cocok
+dan impor produksi berhenti.
+
+Itu bukan efek samping yang kebetulan menguntungkan melainkan yang memang
+diinginkan. Daftar pengecualian adalah keputusan yang menentukan siapa yang
+tidak jadi diimpor; ia harus ditinjau bersama rencananya, bukan diketikkan
+pertama kali pada perintah yang menulis.
+
+Sidik jari yang dibuat sebelum M8 karena itu tidak lagi cocok. Itu benar:
+bentuk rencananya memang berubah.
+
+### 563. Satu aturan untuk seluruh tautan keluar
+
+M7.2 memeriksa `ppdb_url` karena ia menjadi pengalihan server. Sisanya — blog,
+peta, dan seluruh media sosial — dicetak apa adanya sebagai `href`.
+
+Bedanya tidak sebesar yang terlihat. `href` berisi `javascript:` tetap berjalan
+ketika seseorang menekannya, dan yang mengisi seluruh kolom itu adalah panel
+admin yang sama, lewat jalur tulis yang sama, dan dapat pula diisi seeder atau
+tinker yang tidak melewati satu pun aturan Filament.
+
+`PublicSite::externalUrl()` karena itu menjadi satu-satunya penerjemah untuk
+seluruhnya: hanya `http`/`https` berikut host. Nilai yang ditolak diperlakukan
+sama dengan belum disetel — barisnya tidak dirender, bukan dirender sebagai
+tautan rusak, dan bukan pula menjadi galat.
+
+### 564. Tautan peta ditempel, bukan dirangkai dari alamat
+
+Godaannya jelas: alamat sekolah sudah ada sebagai teks, jadi tinggal
+merangkainya menjadi `?q=` sebuah pencarian peta dan tombolnya jadi tanpa kolom
+baru.
+
+Yang dihasilkan bukan lokasi sekolah melainkan **hasil pencarian**. Alamat yang
+diketik manusia sering tidak persis sama dengan yang dikenali peta — singkatan
+jalan, nomor blok, nama kecamatan yang berubah — dan pengunjung yang menekan
+"Buka di peta" lalu mendarat di jalan yang salah dirugikan lebih jauh daripada
+pengunjung yang tidak menemukan tombol sama sekali.
+
+Kolomnya karena itu terpisah, dan pemilik menempelkan tautan yang benar-benar ia
+buka sendiri. Kosong berarti tombolnya tidak muncul.
+
+### 565. Bingkai kosong, bukan janji
+
+Penanda foto berbunyi "Foto menyusul" sejak butir 467, dan kalimat itu benar
+selama fotonya memang belum ada sama sekali.
+
+Sekolah kini sudah menyerahkan koleksi fotonya. Begitu sebagian slot terisi,
+kalimat yang sama berubah artinya: pengunjung membacanya pada slot yang
+kebetulan belum diisi, di sebelah slot yang sudah — dan ia menjadi janji yang
+tidak seorang pun ingat sudah dibuat.
+
+Yang tersisa hanya bingkai berukuran tetap beserta ikonnya. Tata letaknya tidak
+bergeser ketika sebuah foto belum ada, dan tidak ada yang dijanjikan kepada
+siapa pun.
+
+Yang tetap tidak dilakukan, sama seperti sejak awal: tidak ada foto sekolah lain
+yang diunduh untuk mengisinya. Foto anak yang bukan siswa Smart Sukses School,
+terpasang di halaman resmi Smart Sukses School, adalah klaim yang keliru
+sekalipun hanya sementara.
+
+### 566. Nomor baris tidak unik, karena berkasnya banyak lembar
+
+M8 menerima `--kecualikan-baris=12` dan memperlakukan nomor itu sebagai
+pengenal. Ia bukan.
+
+`LegacyWorkbook` menghitung `source_line` sebagai `$offset + 1` **di dalam tiap
+worksheet**, dan berkas sekolah 2026/2027 memakai satu lembar per tingkat
+(butir 484). "Baris 12" karena itu ada di Kelas 10, Kelas 11, dan Kelas 12
+sekaligus, dan `readAcross()` menggabungkan ketiganya menjadi satu daftar tanpa
+menomori ulang.
+
+Akibatnya sebuah pengecualian dapat mengenai lebih dari satu baris tanpa
+operatornya tahu. Pagar butir 561 menahan kerusakan terburuknya — baris ber-NIS
+tidak pernah dapat dikecualikan — tetapi ia tidak menahan yang ini: dua baris
+tanpa NIS di lembar berbeda, keduanya keluar, padahal yang dimaksud satu.
+
+Penunjuknya karena itu menjadi **lembar + baris**: `"Kelas 11:12"`. Bentuk
+singkat `"12"` tetap diterima, karena berkas satu lembar masih ada dan
+memaksanya menulis nama lembar hanya menambah kesempatan salah ketik. Yang
+berubah adalah artinya: bentuk singkat berlaku **hanya bila ia menemukan tepat
+satu baris yang layak**. Dua atau lebih berarti ambigu, dan ambigu berarti tidak
+diterapkan sama sekali — bukan diterapkan ke semuanya.
+
+Menolak lebih aman daripada menebak. Operator yang penunjuknya ditolak membaca
+peringatan dan menambahkan nama lembar; operator yang penunjuknya ditebak tidak
+membaca apa pun.
+
+Penyelesaiannya menuntut dua lintasan: lintasan pertama mencocokkan penunjuk ke
+baris, lintasan kedua memutuskan tiap baris. Ambiguitas hanya dapat dilihat
+setelah seluruh baris dikenal, jadi ia tidak dapat ditentukan di dalam
+`decide()` yang berjalan per baris.
+
+### 567. Yang masuk sidik jari hanyalah nilai skalar
+
+Butir 562 menyatakan daftar pengecualian ikut menentukan sidik jari impor.
+Pernyataan itu baru separuh benar, dan separuh yang hilang penting.
+
+`ImportFingerprint::totals()` melewati setiap nilai yang bukan skalar
+(`if (! is_scalar($value)) { continue; }`). `excluded_requested` berbentuk array,
+sehingga ia tidak pernah ikut terhitung. Yang masuk hanyalah `excluded` —
+sebuah **jumlah**.
+
+Akibatnya: rencana yang mengecualikan `Kelas 10:3` dan rencana yang
+mengecualikan `Kelas 11:3` bersidik jari **sama**, karena keduanya mengecualikan
+satu baris. Impor produksi akan menerima rencana yang bukan rencana yang
+ditinjau, dan yang berbeda di antara keduanya persis hal yang paling perlu
+ditinjau: siapa yang tidak jadi diimpor.
+
+`excluded_signature` karena itu ditambahkan sebagai **string** — daftar kunci
+`lembar:baris` yang benar-benar berlaku, diurutkan dan digabung koma. Bentuknya
+skalar bukan kebetulan melainkan syarat: itulah satu-satunya bentuk yang
+`totals()` baca.
+
+Pelajarannya lebih umum daripada kolom ini. Sebuah fungsi yang diam-diam
+melewatkan nilai yang tidak dikenalinya akan selalu terlihat bekerja, dan yang
+hilang darinya tidak pernah muncul sebagai galat — hanya sebagai jaminan yang
+ternyata tidak pernah ada.
+
+### 568. Kelayakan pengecualian harus mengikuti urutan keputusan
+
+Penyelesaian penunjuk memeriksa "baris ini layak dikecualikan atau tidak", dan
+mula-mula syaratnya hanya satu: tanpa NIS.
+
+Itu tidak cukup. `decide()` memeriksa kelengkapan data induk **lebih dulu**,
+sehingga baris tanpa nama berakhir `REJECTED_MASTER_INCOMPLETE` sebelum cabang
+"tanpa NIS" tercapai. Penunjuk yang menunjuk baris seperti itu akan terhitung
+berhasil diselesaikan — ia tidak masuk daftar "tidak berlaku" — tetapi tidak
+pernah benar-benar memindahkan apa pun.
+
+Hasilnya penunjuk yang hilang diam-diam: tidak berlaku, dan tidak dilaporkan
+tidak berlaku. Operator membaca "0 diabaikan" lalu mengira barisnya sudah
+dikeluarkan, padahal ia justru ditolak.
+
+`isExclusionEligible()` karena itu mengulang urutan `decide()` apa adanya: nama,
+jenis kelamin, baru NIS. Dua tempat yang harus sepakat memang lebih rapuh
+daripada satu, tetapi yang dipertaruhkan bukan kerapian melainkan kejujuran
+laporannya — dan ada test yang menahannya tetap sepakat.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
