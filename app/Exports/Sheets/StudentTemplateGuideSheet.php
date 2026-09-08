@@ -37,6 +37,7 @@ class StudentTemplateGuideSheet implements FromArray, ShouldAutoSize, WithHeadin
         'nisn' => '0012345678',
         'nama_lengkap' => 'Budi Contoh Pratama',
         'jenis_kelamin' => 'L',
+        'kelas' => 'X Terbuka - 2',
         'tempat_lahir' => 'Depok',
         'tanggal_lahir' => '2010-05-17',
         'agama' => 'Islam',
@@ -103,7 +104,8 @@ class StudentTemplateGuideSheet implements FromArray, ShouldAutoSize, WithHeadin
             'tanggal_lahir' => __('Format YYYY-MM-DD, contoh 2010-05-17.'),
             'email_orang_tua' => __('Alamat surel yang sah, atau dikosongkan.'),
             'tahun_masuk' => __('Empat digit tahun, contoh 2026.'),
-            'status' => __('Diisi :values. Bila dikosongkan dianggap ACTIVE.', [
+            'kelas' => __('Nama rombel persis seperti di menu Kelas, contoh "X Terbuka - 2". Kosongkan bila siswa belum ditempatkan; kelas baru tidak dibuat dari berkas ini.'),
+            'status' => __('Diisi :values. **Kosongkan saja** bila siswa masih aktif — jangan diisi tingkat kelas seperti 10 atau XII.', [
                 'values' => implode(', ', array_column(StudentStatus::cases(), 'value')),
             ]),
             default => __('Boleh dikosongkan.'),
@@ -120,7 +122,8 @@ class StudentTemplateGuideSheet implements FromArray, ShouldAutoSize, WithHeadin
             __('Jangan menggabungkan sel (merged cells).'),
             __('Satu baris untuk satu siswa; jangan menyisipkan baris judul atau baris jumlah.'),
             __('NIS harus unik di dalam satu cabang. NIS yang sudah ada akan ditolak, bukan ditimpa.'),
-            __('Penempatan kelas tidak diatur lewat berkas ini. Lakukan lewat menu Kelas setelah siswa masuk.'),
+            __('Kolom kelas diisi nama rombel yang sudah ada pada tahun ajaran aktif. Rombel yang belum ada harus dibuat lebih dulu lewat menu Kelas — berkas ini tidak pernah membuat rombel baru.'),
+            __('Kelas yang tidak dikenali menolak barisnya, dan siswanya tidak jadi dibuat. Nama rombel yang tersedia disebutkan pada pesan kesalahan.'),
             __('Akun portal siswa tidak dibuat oleh import ini.'),
         ];
     }

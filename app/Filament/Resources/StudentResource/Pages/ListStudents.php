@@ -135,12 +135,29 @@ class ListStudents extends ListRecords
         $notification = Notification::make()
             ->title(__(':count siswa berhasil diimport', ['count' => $import->imported]));
 
+        /*
+         * Jumlah yang tertempatkan disebut tersendiri.
+         *
+         * "13 siswa berhasil diimport" adalah kalimat yang sama persis ketika
+         * ketiga belasnya masuk tanpa rombel — dan itulah yang terjadi pada uji
+         * coba pertama. Menyebut berapa yang benar-benar masuk kelas membuat
+         * kekurangannya terlihat di layar yang sama, bukan setengah jam
+         * kemudian di daftar siswa (butir 572).
+         */
+        $placement = $import->imported === 0
+            ? null
+            : __(':placed dari :imported siswa ditempatkan ke kelas.', [
+                'placed' => $import->placed,
+                'imported' => $import->imported,
+            ]);
+
         if ($import->errors === []) {
-            return $notification->success();
+            return $notification->body($placement)->success();
         }
 
         return $notification
-            ->body(__(':rejected baris ditolak.', ['rejected' => $import->rejected])."\n"
+            ->body(($placement === null ? '' : $placement.PHP_EOL)
+                .__(':rejected baris ditolak.', ['rejected' => $import->rejected])."\n"
                 .implode("\n", array_slice($import->errors, 0, 10))
                 .(count($import->errors) > 10 ? "\n".__('… dan :count baris lain.', ['count' => count($import->errors) - 10]) : ''))
             ->warning()

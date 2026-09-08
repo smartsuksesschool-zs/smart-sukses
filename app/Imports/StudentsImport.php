@@ -3,10 +3,15 @@
 namespace App\Imports;
 
 use App\Enums\Gender;
+use App\Enums\StudentClassStatus;
 use App\Enums\StudentStatus;
+use App\Models\AcademicYear;
+use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\StudentClass;
 use App\Support\Migration\NisnNormalizer;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Concerns\ToCollection;
@@ -45,6 +50,20 @@ class StudentsImport implements ToCollection, WithEvents, WithHeadingRow
         'nisn' => 'nisn',
         'nama_lengkap' => 'full_name',
         'jenis_kelamin' => 'gender',
+        /*
+         * Penempatan rombel, opsional.
+         *
+         * Sampai M9.1 kolom ini tidak ada, dan akibatnya terlihat pada uji coba
+         * pertama: tiga belas siswa masuk, seluruhnya "Belum ada kelas", dan
+         * tata usaha harus menempatkan satu per satu lewat menu Kelas. Impor
+         * yang menuntut pekerjaan manual sebanyak itu sesudahnya bukan impor
+         * (butir 572).
+         *
+         * Tetap **opsional**: berkas lama tanpa kolom ini harus tetap terbaca,
+         * dan siswa yang rombelnya memang belum ditentukan harus tetap dapat
+         * dimasukkan.
+         */
+        'kelas' => 'class_label',
         'tempat_lahir' => 'birth_place',
         'tanggal_lahir' => 'birth_date',
         'agama' => 'religion',
@@ -88,6 +107,41 @@ class StudentsImport implements ToCollection, WithEvents, WithHeadingRow
     public array $errors = [];
 
     protected ?string $currentSheet = null;
+
+    /**
+     * NIS yang sudah terlihat pada berkas ini -> nomor barisnya.
+     *
+     * Dipakai membedakan dua kegagalan yang pesannya dulu sama persis: NIS yang
+     * bentrok dengan siswa yang **sudah ada di basis data**, dan NIS yang
+     * bentrok dengan **baris lain di berkas yang sama**. Yang pertama menuntut
+     * tata usaha memeriksa data siswa; yang kedua menuntutnya memeriksa
+     * berkasnya sendiri — dan "Kolom NIS sudah digunakan" tidak memberi tahu
+     * yang mana (butir 574).
+     *
+     * @var array<string, int>
+     */
+    protected array $seenNis = [];
+
+    /**
+     * Rombel yang sudah terisi pada berkas ini -> jumlah tambahannya.
+     *
+     * Kapasitas kelas ditegakkan layar Kelas (ERD 2.2 classes.capacity), dan
+     * impor tidak boleh menjadi pintu belakang yang melewatinya. Baris yang
+     * sudah ditempatkan pada berkas yang sama ikut dihitung, sebab keduanya
+     * belum tentu tersimpan ketika baris berikutnya dinilai (butir 575).
+     *
+     * @var array<int, int>
+     */
+    protected array $placedThisRun = [];
+
+    /** @var array<string, array<int, int>>|null nama rombel ternormalkan -> id */
+    protected ?array $classMap = null;
+
+    protected ?AcademicYear $activeYear = null;
+
+    protected bool $activeYearResolved = false;
+
+    public int $placed = 0;
 
     public function __construct(protected int $schoolId) {}
 
@@ -218,6 +272,29 @@ class StudentsImport implements ToCollection, WithEvents, WithHeadingRow
 
             unset($data['nisn_state']);
 
+            /*
+             * Bentrok NIS di dalam berkas yang sama dilaporkan tersendiri.
+             *
+             * Aturan `unique` di bawah tetap menangkapnya — baris pertama sudah
+             * tersimpan ketika baris kedua dinilai — tetapi pesannya akan
+             * menyuruh tata usaha memeriksa data siswa, padahal yang keliru
+             * berkasnya sendiri (butir 574).
+             */
+            $nisKey = (string) ($data['nis'] ?? '');
+
+            if ($nisKey !== '' && isset($this->seenNis[$nisKey])) {
+                $this->errors[] = __('Baris :line: NIS ini sudah dipakai baris :first pada berkas yang sama.', [
+                    'line' => $line,
+                    'first' => $this->seenNis[$nisKey],
+                ]);
+                $this->rejected++;
+
+                continue;
+            }
+
+            $classLabel = $data['class_label'];
+            unset($data['class_label']);
+
             $validator = Validator::make($data, [
                 'nis' => [
                     'required',
@@ -254,10 +331,225 @@ class StudentsImport implements ToCollection, WithEvents, WithHeadingRow
                 continue;
             }
 
-            Student::create($validator->validated() + ['school_id' => $this->schoolId]);
+            // Kelas diselesaikan **sebelum** siswanya dibuat, sehingga baris
+            // yang kelasnya keliru tidak pernah meninggalkan siswa tanpa rombel
+            // — keadaan yang justru memicu perbaikan ini (butir 572).
+            $classId = null;
+
+            if ($classLabel !== null) {
+                $resolved = $this->resolveClass($classLabel);
+
+                if ($resolved['error'] !== null) {
+                    $this->errors[] = "Baris {$line}: ".$resolved['error'];
+                    $this->rejected++;
+
+                    continue;
+                }
+
+                $classId = $resolved['id'];
+            }
+
+            /*
+             * Satu baris, satu transaksi.
+             *
+             * Siswa dan penempatannya berhasil bersama-sama atau gagal
+             * bersama-sama. Berkasnya sendiri sengaja **tidak** dijadikan
+             * seluruh-atau-tidak-sama-sekali: kontrak sebagian sudah berlaku
+             * sejak awal importer ini — satu baris yang keliru tidak boleh
+             * menahan tiga puluh sembilan baris yang benar (butir 487).
+             */
+            DB::transaction(function () use ($validator, $classId, $classLabel): void {
+                $student = Student::create($validator->validated() + ['school_id' => $this->schoolId]);
+
+                if ($classId !== null) {
+                    $this->place($student, $classId);
+                    $this->placedThisRun[$classId] = ($this->placedThisRun[$classId] ?? 0) + 1;
+                    $this->placed++;
+                }
+
+                unset($classLabel);
+            });
+
+            if ($nisKey !== '') {
+                $this->seenNis[$nisKey] = $line;
+            }
 
             $this->imported++;
         }
+    }
+
+    /**
+     * Menempatkan siswa pada rombel tahun ajaran aktif.
+     *
+     * Bentuknya sama persis dengan jalur migrasi legacy dan layar Kelas:
+     * `firstOrCreate` atas kunci sekolah + siswa + tahun + status aktif,
+     * sehingga aturan "satu penempatan aktif per siswa per tahun" ditegakkan
+     * satu cara saja, bukan tiga cara yang perlahan berbeda (butir 573).
+     */
+    protected function place(Student $student, int $classId): void
+    {
+        StudentClass::query()->firstOrCreate(
+            [
+                'school_id' => $this->schoolId,
+                'student_id' => $student->id,
+                'academic_year_id' => $this->activeYear()?->id,
+                'status' => StudentClassStatus::Active->value,
+            ],
+            [
+                'class_id' => $classId,
+            ],
+        );
+    }
+
+    /**
+     * Nama rombel dari berkas -> id rombel, atau sebab penolakannya.
+     *
+     * Pencocokannya **deterministik**: spasi dirapikan dan huruf disamakan,
+     * tidak lebih. Tidak ada tebakan kemiripan, dan tidak ada alias yang
+     * diwarisi dari jalur migrasi legacy — alias di `CanonicalRombel` adalah
+     * koreksi atas salah ketik pada satu berkas sumber tertentu, bukan aturan
+     * umum tentang label rombel mana pun (butir 506, 576).
+     *
+     * Rombel tidak pernah dibuat dari teks di berkas. Yang membuat rombel hanya
+     * layar Kelas, dengan sengaja (butir 490).
+     *
+     * @return array{id: ?int, error: ?string}
+     */
+    protected function resolveClass(string $label): array
+    {
+        $year = $this->activeYear();
+
+        if ($year === null) {
+            return [
+                'id' => null,
+                'error' => __('kolom kelas diisi, tetapi cabang ini belum punya tahun ajaran aktif.'),
+            ];
+        }
+
+        $key = self::classKey($label);
+        $matches = $this->classMap()[$key] ?? [];
+
+        if ($matches === []) {
+            $available = implode(', ', array_keys($this->classNames()));
+
+            return [
+                'id' => null,
+                'error' => $available === ''
+                    ? __('Kelas ":label" tidak ditemukan; belum ada rombel pada tahun ajaran aktif.', ['label' => $label])
+                    : __('Kelas ":label" tidak ditemukan pada tahun ajaran aktif. Pilihan yang ada: :available.', [
+                        'label' => $label,
+                        'available' => $available,
+                    ]),
+            ];
+        }
+
+        if (count($matches) > 1) {
+            // Dua rombel bernama sama pada satu tahun ajaran adalah cacat data.
+            // Menebak salah satunya berarti menempatkan siswa di kelas yang
+            // belum tentu dimaksud siapa pun.
+            return [
+                'id' => null,
+                'error' => __('Kelas ":label" cocok dengan lebih dari satu rombel pada tahun ajaran aktif.', ['label' => $label]),
+            ];
+        }
+
+        $classId = $matches[0];
+        $class = SchoolClass::query()->withoutGlobalScopes()->find($classId);
+
+        if ($class !== null && ! $this->hasRoomFor($class)) {
+            return [
+                'id' => null,
+                'error' => __('Kelas ":label" sudah penuh (kapasitas :capacity).', [
+                    'label' => $class->name,
+                    'capacity' => $class->capacity,
+                ]),
+            ];
+        }
+
+        return ['id' => $classId, 'error' => null];
+    }
+
+    /**
+     * Kapasitas rombel, menghitung juga baris yang sudah ditempatkan pada
+     * berkas ini (butir 575).
+     */
+    protected function hasRoomFor(SchoolClass $class): bool
+    {
+        $pending = $this->placedThisRun[$class->id] ?? 0;
+
+        return ($class->activeStudentCount() + $pending) < $class->capacity;
+    }
+
+    protected function activeYear(): ?AcademicYear
+    {
+        if (! $this->activeYearResolved) {
+            $this->activeYear = AcademicYear::query()
+                ->withoutGlobalScopes()
+                ->where('school_id', $this->schoolId)
+                ->where('is_active', true)
+                ->first();
+
+            $this->activeYearResolved = true;
+        }
+
+        return $this->activeYear;
+    }
+
+    /**
+     * Nama rombel ternormalkan -> daftar id, dibatasi cabang dan tahun aktif.
+     *
+     * Dibatasi eksplisit pada `school_id`, tidak menyandarkan diri pada global
+     * scope: importer dipanggil dengan cabang yang sudah ditetapkan pemanggil,
+     * dan pembatasan yang tertulis tidak dapat hilang karena konteks sesi
+     * berubah.
+     *
+     * @return array<string, array<int, int>>
+     */
+    protected function classMap(): array
+    {
+        if ($this->classMap === null) {
+            $this->classMap = [];
+
+            foreach ($this->classNames() as $name => $id) {
+                $this->classMap[self::classKey($name)][] = $id;
+            }
+        }
+
+        return $this->classMap;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    protected function classNames(): array
+    {
+        $year = $this->activeYear();
+
+        if ($year === null) {
+            return [];
+        }
+
+        return SchoolClass::query()
+            ->withoutGlobalScopes()
+            ->where('school_id', $this->schoolId)
+            ->where('academic_year_id', $year->id)
+            ->orderBy('name')
+            ->pluck('id', 'name')
+            ->all();
+    }
+
+    /**
+     * Kunci pencocokan rombel: spasi dirapikan, huruf disamakan.
+     *
+     * Sengaja sesempit itu. "x terbuka - 2" yang diketik tata usaha memang
+     * menunjuk "X Terbuka - 2", tetapi "X Terbuka 2" tanpa tanda hubung tidak
+     * dianggap sama — dan pesan penolakannya menyebutkan daftar rombel yang
+     * ada, sehingga ejaan yang benar terbaca langsung tanpa perlu ditebak
+     * program (butir 576).
+     */
+    public static function classKey(string $label): string
+    {
+        return mb_strtoupper((string) preg_replace('/\s+/u', ' ', trim($label)));
     }
 
     /**
@@ -326,6 +618,7 @@ class StudentsImport implements ToCollection, WithEvents, WithHeadingRow
             'parent_email' => $this->value($row, 'email_orang_tua'),
             'entry_year' => $this->value($row, 'tahun_masuk'),
             'status' => $status === '' ? StudentStatus::Active->value : $status,
+            'class_label' => $this->value($row, 'kelas'),
         ];
     }
 
