@@ -9849,6 +9849,89 @@ sudah benar.
 Test keadaan kosong yang tersisa karena itu membuang sesi di setiap pembukaan
 halaman, sehingga setiap pemeriksaan setara dengan orang yang baru saja masuk.
 
+### 572. Impor yang tidak menempatkan kelas belum selesai bekerja
+
+Ditemukan pada uji coba lokal pertama, dan bukan lewat test: Admin Sekolah
+mengunggah berkas lewat `/admin/students`, tiga belas siswa masuk, satu ditolak
+karena NIS-nya sudah ada — dan **seluruh tiga belas** berbunyi "Belum ada kelas".
+
+Sebabnya bukan cacat melainkan kekosongan: `StudentsImport::COLUMNS` tidak punya
+kolom kelas sama sekali, dan importer tidak pernah menyentuh `student_classes`.
+Setiap baris yang berhasil karena itu menghasilkan siswa tanpa rombel, dan tata
+usaha harus menempatkannya satu per satu lewat menu Kelas sesudahnya.
+
+Impor yang menuntut pekerjaan manual sebanyak itu sesudahnya bukan impor. Kolom
+`kelas` karena itu ditambahkan, dan penempatannya dilakukan pada baris yang sama.
+
+Kolomnya **opsional**, dan itu disengaja dua kali: berkas lama tanpa kolom itu
+harus tetap terbaca, dan siswa yang rombelnya memang belum ditentukan harus
+tetap dapat dimasukkan.
+
+Notifikasi hasilnya ikut berubah. "13 siswa berhasil diimport" adalah kalimat
+yang sama persis ketika ketiga belasnya masuk tanpa rombel; kini jumlah yang
+benar-benar tertempatkan disebut tersendiri, sehingga kekurangannya terlihat di
+layar yang sama — bukan setengah jam kemudian di daftar siswa.
+
+### 573. Satu bentuk penempatan, dipakai tiga jalur
+
+Penempatan rombel kini ditulis tiga tempat: layar Kelas, jalur migrasi legacy,
+dan importer normal. Ketiganya memakai bentuk yang sama persis —
+`firstOrCreate` atas kunci sekolah + siswa + tahun ajaran + status aktif, dengan
+`class_id` sebagai nilai.
+
+Bentuk itu yang menegakkan aturan "satu penempatan aktif per siswa per tahun",
+dan ia ditegakkan oleh kuncinya, bukan oleh pemeriksaan yang harus diingat
+pemanggil. Menulisnya dengan cara berbeda di importer akan membuat aturan yang
+sama punya tiga penafsiran yang perlahan berbeda.
+
+### 574. Dua bentrok NIS yang menuntut dua tindakan berbeda
+
+Pesan lama untuk keduanya sama: *"Kolom NIS sudah digunakan."*
+
+Tetapi yang harus dilakukan tata usaha berbeda sama sekali. NIS yang bentrok
+dengan siswa yang **sudah ada di basis data** menuntutnya memeriksa data siswa —
+mungkin siswa itu memang sudah pernah diimpor. NIS yang bentrok dengan **baris
+lain di berkas yang sama** menuntutnya memeriksa berkasnya sendiri, karena di
+sana ada dua baris untuk satu orang.
+
+Aturan `unique` menangkap keduanya — baris pertama sudah tersimpan ketika baris
+kedua dinilai — sehingga bedanya tidak pernah terlihat. NIS yang sudah dilihat
+pada berkas ini karena itu dicatat beserta nomor barisnya, dan bentrok internal
+dilaporkan lebih dulu dengan menyebut baris pertamanya.
+
+### 575. Kapasitas kelas berlaku juga lewat impor
+
+Kapasitas rombel (`classes.capacity`) ditegakkan layar Kelas sejak KELAS-02.
+Importer yang melewatinya akan menghasilkan keadaan yang tidak dapat dibuat
+lewat antarmuka mana pun — kelas berisi empat puluh siswa pada kapasitas tiga
+puluh lima — dan tidak seorang pun akan tahu dari mana asalnya.
+
+Yang perlu diperhatikan: baris yang sudah ditempatkan **pada berkas yang sama**
+ikut dihitung. Tanpa itu, berkas berisi empat puluh baris untuk satu kelas
+berkapasitas tiga puluh lima akan lolos seluruhnya, karena setiap baris membaca
+jumlah yang sama seperti sebelum berkas dibuka.
+
+### 576. Alias legacy tidak diwarisi importer normal
+
+`CanonicalRombel::ALIASES` memuat satu koreksi: `XII TERBUKA - I` -> `XII
+Terbuka - 1`. Godaannya jelas — importer normal akan lebih "pintar" bila
+memakainya juga.
+
+Ia tidak dipakai, dan sebabnya asal-usulnya. Alias itu koreksi atas salah ketik
+pada **satu berkas sumber tertentu** yang sudah diperiksa manusia (butir 506),
+bukan pernyataan umum tentang label rombel mana pun. Menerapkannya pada berkas
+yang belum pernah dilihat siapa pun berarti mengambil keputusan tentang data
+yang belum ada.
+
+Yang dipakai importer normal hanya normalisasi yang deterministik: spasi
+dirapikan, huruf disamakan. "x terbuka - 2" cocok; "X Terbuka 2" tanpa tanda
+hubung tidak. Yang menutup selisihnya bukan tebakan melainkan pesan
+penolakannya, yang menyebutkan daftar rombel yang benar-benar ada — sehingga
+ejaan yang benar terbaca langsung, bukan ditebak program.
+
+Tidak ada pencocokan kemiripan, dan importer tetap tidak pernah membuat rombel
+baru dari teks di berkas (butir 490).
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
