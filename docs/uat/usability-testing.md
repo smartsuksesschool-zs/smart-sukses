@@ -73,6 +73,40 @@ yang harus Anda lakukan berikutnya.
 
 ---
 
+## Ada satu kelas contoh, dan itu memang disengaja
+
+Di **Data Siswa** Anda akan menemukan kelas bernama **X-A** berisi **3 siswa
+contoh**. Mereka bukan siswa sungguhan.
+
+Kelas itu sengaja kami biarkan karena hanya merekalah yang sudah punya nilai,
+rapor, hasil ujian, dan tagihan. Tanpa mereka, Anda tidak bisa mencoba **Input
+Nilai**, **Rapor**, **Ujian**, **Tagihan**, **portal siswa**, maupun **portal
+orang tua** — layarnya akan kosong semua.
+
+Rombel sungguhan kelas X adalah **X Terbuka - 2**, berisi **12 siswa**.
+
+Akibatnya, dua angka di layar akan terlihat "tidak bulat" selama uji coba, dan
+**keduanya wajar**:
+
+| Yang Anda lihat | Kenapa |
+| --- | --- |
+| Kartu **Kelas X** menunjukkan **15** | 12 siswa sungguhan + 3 siswa contoh di X-A |
+| **Belum Ada Kelas** menunjukkan **1** | Satu data lama yang masih kami telusuri; bukan bagian dari daftar resmi |
+
+Daftar resmi sekolah tetap **39 siswa**: 12 di kelas X, 13 di kelas XI, dan 14
+di kelas XII. Angka itu sudah dicocokkan satu per satu.
+
+> **Tolong jangan mengubah atau menghapus** siswa contoh di X-A maupun data yang
+> muncul di "Belum Ada Kelas". Keduanya sedang dipakai untuk pengujian. Kalau
+> ada yang terlihat janggal pada keduanya, cukup **laporkan**, jangan diperbaiki
+> sendiri.
+
+Yang tetap perlu dilaporkan: kalau angka-angka itu membuat Anda ragu mana data
+sungguhan dan mana data contoh — beri tahu kami, berarti tampilannya belum cukup
+menjelaskan dirinya.
+
+---
+
 ## Kepala Sekolah / Pengelola (Pak Akbar)
 
 Yang ingin kami tahu: apakah Anda bisa membedakan keempat menu ini tanpa
