@@ -4,6 +4,7 @@ namespace App\Filament\Resources\StudentResource\Pages;
 
 use App\Exports\StudentsExport;
 use App\Filament\Resources\StudentResource;
+use App\Filament\Resources\StudentResource\Widgets\StudentRosterOverview;
 use App\Imports\StudentsImport;
 use App\Models\Student;
 use Filament\Actions;
@@ -19,6 +20,22 @@ use Maatwebsite\Excel\Facades\Excel;
 class ListStudents extends ListRecords
 {
     protected static string $resource = StudentResource::class;
+
+    /**
+     * Ringkasan jumlah siswa, di atas tabelnya.
+     *
+     * Pertanyaan "totalnya berapa, sudah masuk kelas semua belum?" muncul
+     * setiap kali sebuah berkas diimpor, dan menjawabnya lewat tabel berarti
+     * menyaring empat kali lalu menghitung sendiri (butir 578).
+     *
+     * @return array<int, class-string>
+     */
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            StudentRosterOverview::class,
+        ];
+    }
 
     protected function getHeaderActions(): array
     {
