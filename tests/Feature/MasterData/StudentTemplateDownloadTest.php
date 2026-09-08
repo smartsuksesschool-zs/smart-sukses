@@ -367,7 +367,7 @@ class StudentTemplateDownloadTest extends TestCase
 
         $path = $this->sheetFile([
             $headings,
-            ['Z0001', '0088888888', 'Siswa Karangan Satu', 'L', '', '', '', '', '', '', '', '', 'ACTIVE'],
+            ['Z0001', '0088888888', 'Siswa Karangan Satu', 'L', '', '', '', '', '', '', '', '', '', 'ACTIVE'],
         ]);
 
         $import = new StudentsImport($this->school->id);
@@ -384,7 +384,7 @@ class StudentTemplateDownloadTest extends TestCase
 
         $path = $this->sheetFile([
             $headings,
-            ['Z0001', '0088888888', 'Siswa Karangan Satu', 'L', '', '', '', '', '', '', '', '', 'ACTIVE'],
+            ['Z0001', '0088888888', 'Siswa Karangan Satu', 'L', '', '', '', '', '', '', '', '', '', 'ACTIVE'],
         ]);
 
         $import = new StudentsImport($this->school->id);
@@ -553,10 +553,10 @@ class StudentTemplateDownloadTest extends TestCase
 
         $path = $this->sheetFile([
             $headings,
-            ['Z0001', '0088888888', 'Siswa Karangan Satu', 'L', '', '', '', '', '', '', '', '', 'ACTIVE'],
-            ['Z0002', '0088888881', 'Siswa Karangan Dua', 'X', '', '', '', '', '', '', '', '', 'ACTIVE'],
-            ['Z0003', '0088888882', 'Siswa Karangan Tiga', 'P', '', '', '', '', '', '', '', '', '10'],
-            ['Z0004', '0088888883', 'Siswa Karangan Empat', 'L', '', '', '', '', '', '', '', '', ''],
+            ['Z0001', '0088888888', 'Siswa Karangan Satu', 'L', '', '', '', '', '', '', '', '', '', 'ACTIVE'],
+            ['Z0002', '0088888881', 'Siswa Karangan Dua', 'X', '', '', '', '', '', '', '', '', '', 'ACTIVE'],
+            ['Z0003', '0088888882', 'Siswa Karangan Tiga', 'P', '', '', '', '', '', '', '', '', '', '10'],
+            ['Z0004', '0088888883', 'Siswa Karangan Empat', 'L', '', '', '', '', '', '', '', '', '', ''],
         ]);
 
         $probe = new StudentsImport($this->school->id);
@@ -592,7 +592,7 @@ class StudentTemplateDownloadTest extends TestCase
             ]),
             $this->sheetFile([
                 array_keys(StudentsImport::COLUMNS),
-                ['Z0002', '0088888881', 'Siswa Karangan Dua', 'P', '', '', '', '', '', '', '', '', 'ACTIVE'],
+                ['Z0002', '0088888881', 'Siswa Karangan Dua', 'P', '', '', '', '', '', '', '', '', '', 'ACTIVE'],
             ]),
             $this->sheetFile([
                 ['nomor_induk', 'nama', 'kelamin'],
@@ -622,7 +622,7 @@ class StudentTemplateDownloadTest extends TestCase
     {
         $path = $this->sheetFile([
             array_keys(StudentsImport::COLUMNS),
-            ['Z0001', '0088888888', 'Siswa Karangan Satu', 'X', '', '', '', '', '', '', '', '', 'ACTIVE'],
+            ['Z0001', '0088888888', 'Siswa Karangan Satu', 'X', '', '', '', '', '', '', '', '', '', 'ACTIVE'],
         ]);
 
         [, $written] = $this->importThroughAction($path);
