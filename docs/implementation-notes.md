@@ -10023,6 +10023,52 @@ satu pun `isLazy` di seluruh kode aplikasi, dan `SuperAdminStatsUiTest`
 menegaskan kehadirannya dengan `assertSeeLivewire`. Isi kartunya diuji pada
 widgetnya sendiri, tempat angkanya memang berada.
 
+### 581. Dua anggapan berlawanan tentang satu berkas
+
+Unggahan berkas impor gagal dengan "Kesalahan saat memuat" padahal berkasnya
+sudah tersimpan dengan selamat. Teks itu adalah `labelFileLoadError` milik
+FilePond — bukan kegagalan mengunggah, melainkan kegagalan **memuat ulang**
+berkas yang sudah tersimpan, pada langkah sesudahnya.
+
+Sebabnya dua anggapan yang berlawanan tentang berkas yang sama:
+
+* Filament menganggap berkas unggahan **publik** (`$visibility = 'public'`
+  bawaan `BaseFileUpload`), sehingga ia menyerahkan URL polos tanpa tanda
+  tangan: `Storage::disk('local')->url($file)` -> `/storage/imports/…`.
+* Laravel menganggap disk itu **privat**. `ServeFile::hasValidSignature()`
+  meloloskan permintaan hanya bila `visibility` **pada konfigurasi disk**
+  bernilai `'public'`; milik kita tidak diset, sehingga jatuh ke `'private'`
+  dan menuntut tanda tangan.
+
+Keduanya masuk akal sendiri-sendiri, dan tidak ada yang salah ketik. Yang tidak
+ada hanyalah satu test yang pernah mengambil URL itu.
+
+Kode statusnya menjelaskan mengapa laporannya berbunyi 404:
+
+```php
+abort_unless($this->hasValidSignature($request), $this->isProduction ? 404 : 403);
+```
+
+403 di lingkungan lokal, **404 di produksi** — dan 404 pula bila permintaannya
+dilayani langsung oleh peramban web lewat simlink `public/storage`, tanpa pernah
+sampai ke Laravel.
+
+Perbaikannya menyatakan kebenarannya, bukan melonggarkan penjaganya:
+`->visibility('private')` pada kolomnya. Filament lalu membuat URL bertanda
+tangan lewat `temporaryUrl()`, yang justru diterima `ServeFile`. Membuat disknya
+publik akan "berhasil" pula, dan itulah godaannya — tetapi berkas ini memuat
+nama, NIS, dan alamat siswa, dan lintasannya dapat ditebak.
+
+Terverifikasi terhadap server yang berjalan: bertanda tangan 200, tanpa tanda
+tangan 403, tanda tangan dirusak 403.
+
+Satu hal yang **tidak** terbukti: mengapa keluhannya datang dari tampilan
+ponsel. Permintaannya sama persis pada kedua tampilan dan tidak ada satu pun
+cabang di sisi server yang bergantung pada lebar layar. Dugaannya — dugaan,
+bukan temuan — pada desktop langkah `load` tidak pernah tercapai karena FilePond
+masih memegang berkas hasil unggahan di memori, dan baru memuat dari URL
+tersimpan ketika kolomnya dirender ulang.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

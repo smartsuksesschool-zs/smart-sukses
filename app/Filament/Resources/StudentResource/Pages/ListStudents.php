@@ -89,7 +89,27 @@ class ListStudents extends ListRecords
                         ])
                         ->maxSize(5120)
                         ->disk('local')
-                        ->directory('imports'),
+                        ->directory('imports')
+                        /*
+                         * Berkasnya privat, dan Filament perlu diberi tahu.
+                         *
+                         * Bawaan Filament menganggap berkas unggahan publik,
+                         * sehingga ia menyerahkan URL polos "/storage/imports/…"
+                         * kepada peramban. Penjaga Laravel (ServeFile) menuntut
+                         * tanda tangan untuk disk yang visibility-nya bukan
+                         * "public" — dan visibility disk `local` di sini memang
+                         * tidak diset. Permintaan itu karena itu selalu ditolak:
+                         * 403 di lokal, 404 di produksi, dan FilePond
+                         * menampilkannya sebagai "Kesalahan saat memuat"
+                         * meskipun berkasnya sudah tersimpan dengan selamat.
+                         *
+                         * Dengan visibility privat, Filament membuat URL
+                         * bertanda tangan lewat temporaryUrl() — yang justru
+                         * diterima penjaga itu. Bukan pelonggaran: berkas ini
+                         * memuat data siswa, dan lintasannya tetap tidak dapat
+                         * diambil tanpa tanda tangan (butir 581).
+                         */
+                        ->visibility('private'),
                 ])
                 ->action(fn (array $data) => $this->runImport($data['file'])),
         ];
