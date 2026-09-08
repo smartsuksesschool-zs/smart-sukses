@@ -9932,6 +9932,97 @@ ejaan yang benar terbaca langsung, bukan ditebak program.
 Tidak ada pencocokan kemiripan, dan importer tetap tidak pernah membuat rombel
 baru dari teks di berkas (butir 490).
 
+### 577. Angka roster tidak dapat dibaca dari satu tempat
+
+Pertanyaan yang muncul setiap kali berkas diimpor selalu sama: *"jadi sekarang
+totalnya berapa, dan sudah masuk kelas semua belum?"*. Menjawabnya sebelum ini
+berarti membuka tabel Data Siswa, menyaring per kelas, dan menghitung sendiri —
+sekali untuk setiap tingkat.
+
+Yang membuatnya lebih buruk: hasil impor melaporkan berapa yang masuk, tetapi
+tidak berapa yang **ada**. Impor terakhir menuliskan "8 siswa berhasil
+diimport, 31 baris ditolak", dan tidak ada satu pun layar yang dapat menjawab
+apakah 8 itu melengkapi 31 sebelumnya atau menggandakannya.
+
+Sebabnya juga tercatat di sini: pesan galat impor tidak pernah disimpan. Ia
+hidup di memori `StudentsImport` selama satu permintaan, tampil sepuluh baris
+pertama pada notifikasi, lalu hilang. Ketika pertanyaannya datang sehari
+kemudian, tidak ada yang dapat dibaca ulang.
+
+### 578. Rumus ringkasan tinggal di layanan, bukan di widget
+
+`StudentRosterSummary` memegang seluruh rumusnya; `StudentRosterOverview` hanya
+menyusun kartunya. Pemisahan ini bukan selera susunan berkas — rumus yang
+tinggal di dalam widget hanya dapat diuji lewat HTML yang dirender, sehingga
+setiap penegasan tentang angka berubah menjadi penegasan tentang penanda.
+
+Tiga aturan yang menentukan benar-tidaknya angka ini, ketiganya mudah dilanggar
+tanpa terlihat:
+
+1. **Tingkat dibaca dari `classes.grade_level`, bukan dari nama kelas.** Nama
+   rombel adalah teks bebas milik sekolah. Mengurai "XII" dari "XII Terbuka - 1"
+   berjalan sampai hari sekolah menuliskannya "12 Terbuka 1", dan sejak itu
+   penghitungnya salah tanpa ada yang berubah maksudnya.
+2. **Satu siswa dihitung sekali.** `student_classes` menyimpan riwayat: baris
+   lama tetap tinggal berstatus MOVED (KELAS-02). Menghitung barisnya akan
+   melipatgandakan setiap anak yang pernah pindah kelas.
+3. **Hanya tahun ajaran aktif.** Penempatan tahun lalu bukan keadaan hari ini.
+
+Tidak ada angka kontrak yang ditulis mati. Roster resmi hari ini 12/13/14 = 39,
+tetapi itu keadaan satu hari di satu cabang; menuliskannya berarti kartu ini
+berbohong pada hari pertama seorang siswa pindah. Ada test yang menjaganya
+dengan cara yang benar — memeriksa bahwa rombel kosong dilaporkan kosong, bukan
+memindai sumber untuk mencari digitnya.
+
+### 579. Cakupan Super Admin dinyatakan, bukan disembunyikan
+
+Super Admin tidak terikat cabang, dan `SchoolScope` melewatinya — pada halaman
+Data Siswa ia memang melihat seluruh cabang. Ringkasannya karena itu mengikuti
+tabel di bawahnya dan menghitung lintas cabang pula.
+
+Yang berbahaya bukan angkanya melainkan angka lintas cabang yang tampil tanpa
+keterangan: ia terbaca sebagai angka satu sekolah. Kartu Total Siswa karena itu
+menyebut cakupannya sendiri — "Semua cabang" atau "Cabang Anda" — dan `scope`
+pada hasil layanan menyediakan hal yang sama untuk diuji.
+
+Admin Sekolah tetap hanya menghitung cabangnya. Penyaringan cabang dilakukan
+eksplisit lewat `school_id` setelah `withoutGlobalScope`, bukan dengan
+mengandalkan scope global yang aktif — supaya batasnya terbaca di tempat yang
+sama dengan hitungannya.
+
+Satu jebakan yang halus di rincian rombel: nama rombel hanya unik **di dalam**
+satu cabang. "X Terbuka - 2" dapat ada di dua cabang sekaligus, dan
+mengelompokkan dengan namanya saja akan meleburkan keduanya menjadi satu baris
+— Super Admin membaca "X Terbuka - 2: 24" untuk dua rombel berisi dua belas,
+angka yang tidak dimiliki cabang mana pun. Pengelompokannya karena itu per
+rombel (`classes.id`), dan pada cakupan lintas cabang labelnya diberi kode
+cabang.
+
+### 580. Widget tetap lazy, dan testnya menegaskan yang benar
+
+Widget Filament lazy secara bawaan: muatan pertama berisi kerangka, angkanya
+menyusul pada permintaan berikutnya. Ringkasan ini hanya empat agregat
+berindeks, sehingga sempat terpasang `$isLazy = false` supaya angkanya terbaca
+pada cat pertama.
+
+Itu keputusan yang salah, dan alasannya yang membuatnya salah: yang mendorongnya
+bukan kebutuhan pengguna melainkan sebuah test halaman yang menegaskan teks
+kartu lewat `assertSee`. Mengubah perilaku produksi agar sebuah penegasan lulus
+adalah menulis kode untuk testnya, bukan untuk yang memakainya.
+
+Harganya juga terukur, bukan hipotetis. Dengan widget dirender pada setiap
+render halaman, `StudentImportExportTest` gagal **2 dari 8** jalan yang
+identik — impornya sesekali tidak menghasilkan baris apa pun. Tanpa perubahan
+itu: **0 dari 8**. Jalur impornya sendiri terbukti tidak bersalah (empat puluh
+siklus impor berturut-turut lewat widget yang aktif, nihil gagal), sehingga yang
+goyah adalah daur hidup render halamannya ketika sebuah aksi dipanggil — bukan
+sesuatu yang pantas ditukar dengan hilangnya satu kedipan kerangka.
+
+Repo ini pun sudah punya jawabannya: `ViewSchool` memasang header widget tanpa
+satu pun `isLazy` di seluruh kode aplikasi, dan `SuperAdminStatsUiTest`
+menegaskan kehadirannya dengan `assertSeeLivewire`. Isi kartunya diuji pada
+widgetnya sendiri, tempat angkanya memang berada.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
