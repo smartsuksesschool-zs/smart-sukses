@@ -9781,6 +9781,74 @@ jenis kelamin, baru NIS. Dua tempat yang harus sepakat memang lebih rapuh
 daripada satu, tetapi yang dipertaruhkan bukan kerapian melainkan kejujuran
 laporannya — dan ada test yang menahannya tetap sepakat.
 
+### 569. Daftar kosong adalah keadaan, bukan kegagalan — dan harus berbunyi begitu
+
+Sebelum M9 hanya satu tabel di seluruh panel yang punya keadaan kosong sendiri;
+sisanya jatuh ke kalimat bawaan Filament, *"Tidak ada data yang ditemukan"*.
+
+Kalimat itu benar dan tidak berguna. Ia menjawab pertanyaan yang tidak
+ditanyakan siapa pun ("apakah ada barisnya?") dan mendiamkan yang ditanyakan
+semua orang ("jadi saya harus apa?"). Pada UAT akibatnya dua-duanya mahal:
+penguji yang mengira sistemnya rusak berhenti menguji, atau melaporkan cacat
+yang tidak ada — dan keduanya membuang waktu orang yang sedang meminjamkan
+waktunya.
+
+Sembilan tabel karena itu mendapat judul dan keterangan sendiri. Yang menentukan
+pemilihannya satu syarat: **langkah berikutnya harus tunggal**. Tagihan kosong
+punya satu jawaban (Generate Tagihan), rapor kosong punya satu jawaban (Generate
+Rapor Kelas). Di tempat yang jawabannya memang bercabang, keduanya disebut —
+Daftar Nilai menyebut Input Nilai **dan** pengisian satu per satu, karena
+menuliskan salah satunya saja akan terbaca sebagai satu-satunya cara.
+
+Yang tidak dilakukan: mengisi layar dengan data contoh supaya tidak terlihat
+kosong. Kekosongan pada bekal UAT disengaja (butir 528), dan menutupinya berarti
+menghapus justru pekerjaan yang ingin dilihat dikerjakan penguji.
+
+### 570. Daftar yang tidak akan pernah bertambah lagi perlu mengatakannya
+
+"Pendaftar PPDB" adalah keadaan kosong yang paling mudah disalahartikan, dan
+sebabnya bukan data melainkan keputusan: sejak M7.2 pendaftaran publik diarahkan
+ke formulir Google, sehingga pendaftar baru **tidak lagi masuk** ke tabel ini
+sama sekali.
+
+Admin yang membukanya besok akan melihat daftar kosong dan menyimpulkan hal yang
+salah — bahwa pendaftarannya rusak, atau bahwa belum ada yang mendaftar. Yang
+benar adalah keduanya bukan: pendaftarnya ada, tetapi ada di tempat lain.
+
+Keterangan kosongnya karena itu menyebut ke mana pendaftaran berpindah, dan
+menjelaskan bahwa halaman ini menyimpan pendaftar dari alur lama. Sebuah layar
+yang keadaannya ditentukan keputusan produk harus menyebut keputusan itu; kalau
+tidak, setiap orang baru akan menemukannya sendiri lewat kesimpulan yang keliru.
+
+### 571. Dua "cacat" yang ternyata milik harness
+
+Audit peran-demi-peran M9 sempat memunculkan dua temuan yang tampak serius, dan
+keduanya salah. Dicatat justru karena keduanya akan muncul lagi pada audit
+berikutnya.
+
+**Pertama, pengalihan 302 yang berselang-seling.** Delapan peran diuji berurutan
+dalam satu method; hasilnya berpola sukses-gagal-sukses-gagal. Penyebabnya
+`AuthenticateSession`, yang menyimpan hash kata sandi pengguna di dalam sesi:
+`actingAs()` yang berpindah pengguna tanpa membuang sesi membuat middleware itu
+mengeluarkan pengguna berikutnya. Setelah sesi dibuang di antara peran, kedelapan
+peran mendarat 200.
+
+**Kedua, menu yang tampak identik untuk semua peran.** Sidebar dibaca lewat
+pembangun navigasi Filament di dalam proses yang sama untuk delapan peran
+berturut-turut, dan hasilnya tiga puluh butir menu untuk semuanya — termasuk
+Guru yang mestinya tidak melihat Buku Kas. Dibaca dari HTML yang benar-benar
+dirender, dengan satu peran per proses, Guru melihat sebelas butir dan Bendahara
+delapan: navigasi memang tersaring dengan benar sejak awal.
+
+Pelajarannya sama untuk keduanya: **audit yang menumpuk banyak identitas dalam
+satu proses menguji harness-nya sendiri, bukan aplikasinya.** Dan konsekuensi
+paling mahalnya bukan laporan yang salah, melainkan "perbaikan" yang menyusul —
+melonggarkan otorisasi agar menu terlihat benar akan merusak yang sebenarnya
+sudah benar.
+
+Test keadaan kosong yang tersisa karena itu membuang sesi di setiap pembukaan
+halaman, sehingga setiap pemeriksaan setara dengan orang yang baru saja masuk.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
