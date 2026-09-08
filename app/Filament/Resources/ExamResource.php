@@ -175,6 +175,11 @@ class ExamResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            /*
+             * Keadaan kosong yang menerangkan langkah berikutnya.
+             */
+            ->emptyStateHeading(__('Belum ada ujian online'))
+            ->emptyStateDescription(__('Buat ujian, isi soalnya, lalu terbitkan agar siswa dapat mengerjakannya pada jendela waktu yang Anda tentukan.'))
             ->columns([
                 Tables\Columns\TextColumn::make('title')
                     ->label(__('Judul'))

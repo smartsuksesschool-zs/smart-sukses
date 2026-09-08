@@ -88,6 +88,14 @@ class GradeResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            /*
+             * Keadaan kosong yang menerangkan langkah berikutnya.
+             *
+             * Dua jalur yang sama-sama sah, jadi keduanya disebut: menuliskan salah
+             * satunya saja akan terbaca sebagai satu-satunya cara (butir 569).
+             */
+            ->emptyStateHeading(__('Belum ada nilai'))
+            ->emptyStateDescription(__('Nilai dapat diisi sekaligus satu kelas lewat menu Input Nilai, atau satu per satu dari halaman ini.'))
             ->columns([
                 Tables\Columns\TextColumn::make('student.full_name')
                     ->label(__('Siswa'))

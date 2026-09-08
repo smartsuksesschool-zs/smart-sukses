@@ -78,6 +78,14 @@ class AccountClaimResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            /*
+             * Keadaan kosong yang menerangkan langkah berikutnya.
+             *
+             * Antrean yang kosong di sini berarti belum ada yang mendaftar, bukan ada
+             * yang belum disiapkan admin. Bedanya perlu dikatakan (butir 569).
+             */
+            ->emptyStateHeading(__('Belum ada permintaan akun'))
+            ->emptyStateDescription(__('Permintaan muncul sendiri ketika siswa, orang tua, atau staf menekan "Masuk dengan Google" di halaman masuk. Tidak ada yang perlu dibuat dari halaman ini.'))
             ->defaultSort('requested_at', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('requested_at')

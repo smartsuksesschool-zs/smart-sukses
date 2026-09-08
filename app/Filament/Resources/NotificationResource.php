@@ -168,6 +168,11 @@ class NotificationResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            /*
+             * Keadaan kosong yang menerangkan langkah berikutnya.
+             */
+            ->emptyStateHeading(__('Belum ada pengumuman'))
+            ->emptyStateDescription(__('Gunakan tombol tambah di kanan atas untuk mengirim pengumuman ke siswa, orang tua, atau guru.'))
             ->columns([
                 Tables\Columns\TextColumn::make('title')
                     ->label(__('Judul'))

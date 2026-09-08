@@ -66,6 +66,15 @@ class StudentFeeResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            /*
+             * Keadaan kosong yang menerangkan langkah berikutnya.
+             *
+             * Layar paling mungkin disalahpahami sebagai rusak: periode berjalan memang
+             * sengaja belum bertagihan, dan tanpa kalimat ini bendahara melihat daftar
+             * kosong tanpa tahu bahwa membuat tagihan justru pekerjaannya (butir 569).
+             */
+            ->emptyStateHeading(__('Belum ada tagihan pada tampilan ini'))
+            ->emptyStateDescription(__('Tagihan tidak pernah dibuat otomatis. Gunakan menu Generate Tagihan untuk menerbitkan tagihan satu angkatan sekaligus, lalu kembali ke halaman ini.'))
             ->columns([
                 Tables\Columns\TextColumn::make('student.full_name')
                     ->label(__('Siswa'))

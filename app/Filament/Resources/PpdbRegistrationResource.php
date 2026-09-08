@@ -117,6 +117,15 @@ class PpdbRegistrationResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            /*
+             * Keadaan kosong yang menerangkan langkah berikutnya.
+             *
+             * Tanpa kalimat ini daftar yang kosong terbaca sebagai kerusakan, padahal ia
+             * akibat keputusan M7.2 yang memindahkan pendaftaran ke formulir Google
+             * (butir 570).
+             */
+            ->emptyStateHeading(__('Belum ada pendaftar pada daftar ini'))
+            ->emptyStateDescription(__('Sejak pendaftaran diarahkan ke formulir Google, pendaftar baru tidak lagi masuk ke daftar ini. Halaman ini menyimpan pendaftar yang tercatat lewat alur PPDB aplikasi.'))
             // PPDB-03 poin 1 — kolom: no. daftar, nama, asal sekolah, status, tanggal daftar.
             ->columns([
                 Tables\Columns\TextColumn::make('reg_number')

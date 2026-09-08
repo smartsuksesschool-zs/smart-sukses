@@ -119,6 +119,11 @@ class SiteBlockResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            /*
+             * Keadaan kosong yang menerangkan langkah berikutnya.
+             */
+            ->emptyStateHeading(__('Belum ada blok isi halaman muka'))
+            ->emptyStateDescription(__('Tambahkan blok Unit, Program, Kegiatan, atau Artikel. Blok yang terbit langsung tampil di halaman muka publik.'))
             // Urutan tabel dibuat sama dengan urutan tampil di halaman muka,
             // supaya admin menyusun urutan sambil melihat hasilnya.
             ->defaultSort('position')

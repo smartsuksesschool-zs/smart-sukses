@@ -85,6 +85,11 @@ class ScheduleResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            /*
+             * Keadaan kosong yang menerangkan langkah berikutnya.
+             */
+            ->emptyStateHeading(__('Belum ada jadwal pelajaran'))
+            ->emptyStateDescription(__('Tambahkan jadwal per kelas dan mata pelajaran. Jadwal yang tersimpan langsung tampil di portal siswa dan portal guru.'))
             ->columns([
                 Tables\Columns\TextColumn::make('day_of_week')
                     ->label(__('Hari'))

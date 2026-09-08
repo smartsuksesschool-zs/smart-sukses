@@ -97,6 +97,15 @@ class ReportCardResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            /*
+             * Keadaan kosong yang menerangkan langkah berikutnya.
+             *
+             * Dua langkah yang mudah tertukar — dibuat dan diterbitkan — disebut
+             * sekaligus, karena wali kelas yang berhenti di langkah pertama akan
+             * mengira rapornya sudah sampai (butir 569).
+             */
+            ->emptyStateHeading(__('Belum ada rapor'))
+            ->emptyStateDescription(__('Rapor dibuat lewat tombol Generate Rapor Kelas di atas, setelah nilai kelas terisi. Rapor yang sudah dibuat masih perlu diterbitkan sebelum terlihat siswa dan orang tua.'))
             ->columns([
                 Tables\Columns\TextColumn::make('student.full_name')
                     ->label(__('Siswa'))
