@@ -13,6 +13,7 @@ use App\Models\ExamAttempt;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\SeedPassword;
 use Database\Seeders\RolePermissionSeeder;
 use Database\Seeders\SchoolSeeder;
 use Database\Seeders\SimulationSeeder;
@@ -122,11 +123,18 @@ class SimulationJourneyTest extends TestCase
         $user = $this->studentUser();
         $exam = $this->simulationExam();
 
-        // 1. Masuk lewat pintu tunggal — halaman masuk adalah komponen Livewire,
-        // dan perannya ditentukan akun, bukan kiriman.
+        /*
+         * 1. Masuk lewat pintu tunggal — halaman masuk adalah komponen Livewire,
+         * dan perannya ditentukan akun, bukan kiriman.
+         *
+         * Kata sandinya dibaca dari sumber yang sama dengan seeder, bukan
+         * ditulis ulang di sini. Menuliskannya sebagai teks mati berarti test
+         * ini hanya benar selama SEED_ADMIN_PASSWORD kebetulan tidak disetel —
+         * dan ia gagal di mesin mana pun yang memang menyetelnya (butir 577).
+         */
         Livewire::test(Login::class)
             ->set('email', $user->email)
-            ->set('password', 'Password123')
+            ->set('password', SeedPassword::resolve())
             ->call('authenticate');
 
         $this->assertAuthenticatedAs($user);
@@ -213,9 +221,12 @@ class SimulationJourneyTest extends TestCase
         $user = $this->studentUser();
         $user->forceFill(['is_active' => false])->save();
 
+        // Kata sandinya sengaja **benar**: yang dibuktikan di sini adalah akun
+        // nonaktif ditolak, bukan kata sandi keliru ditolak. Teks mati membuat
+        // keduanya tidak dapat dibedakan (butir 577).
         Livewire::test(Login::class)
             ->set('email', $user->email)
-            ->set('password', 'Password123')
+            ->set('password', SeedPassword::resolve())
             ->call('authenticate');
 
         $this->assertGuest();
