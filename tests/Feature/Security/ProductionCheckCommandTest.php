@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Security;
 
+use App\Support\SeedPassword;
 use Database\Seeders\RolePermissionSeeder;
 use Database\Seeders\SchoolSeeder;
 use Database\Seeders\UserSeeder;
@@ -20,6 +21,25 @@ use Tests\TestCase;
 class ProductionCheckCommandTest extends TestCase
 {
     use RefreshDatabase;
+
+    /** @var array<string, string|null> keadaan env asli, dipulihkan di tearDown */
+    protected array $seedPasswordEnv = [];
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        /*
+         * `unset($_ENV[...])` bertahan lintas test dalam satu proses, sehingga
+         * membersihkannya tanpa memulihkannya akan membocorkan keadaan ke test
+         * berikutnya — persis jenis ketergantungan urutan yang sedang diperbaiki.
+         */
+        $this->seedPasswordEnv = [
+            'env' => $_ENV[SeedPassword::ENV_KEY] ?? null,
+            'server' => $_SERVER[SeedPassword::ENV_KEY] ?? null,
+            'putenv' => getenv(SeedPassword::ENV_KEY) === false ? null : getenv(SeedPassword::ENV_KEY),
+        ];
+    }
 
     public function test_the_command_fails_on_a_development_configuration(): void
     {
@@ -82,14 +102,16 @@ class ProductionCheckCommandTest extends TestCase
         $this->withProductionConfig();
 
         config(['app.key' => 'base64:RAHASIA-KUNCI-APLIKASI-JANGAN-TERCETAK=']);
-        putenv('SEED_ADMIN_PASSWORD=RAHASIA-KATA-SANDI-SEEDER');
+
+        // Lewat config, bukan putenv: perintahnya membaca config, sehingga
+        // rahasia yang hanya ditaruh di env tidak pernah sampai ke tempat yang
+        // diuji dan testnya lulus tanpa menguji apa pun (butir 582).
+        config([SeedPassword::CONFIG_KEY => 'RAHASIA-KATA-SANDI-SEEDER']);
 
         $this->artisan('app:production-check')
             ->doesntExpectOutputToContain('RAHASIA-KUNCI-APLIKASI-JANGAN-TERCETAK')
             ->doesntExpectOutputToContain('RAHASIA-KATA-SANDI-SEEDER')
             ->assertExitCode(0);
-
-        putenv('SEED_ADMIN_PASSWORD');
     }
 
     // ------------------------------------------------- pagar seeding produksi
@@ -99,12 +121,12 @@ class ProductionCheckCommandTest extends TestCase
         $this->seed(RolePermissionSeeder::class);
         $this->seed(SchoolSeeder::class);
 
-        putenv('SEED_ADMIN_PASSWORD');
+        $this->withoutSeedPassword();
         app()->detectEnvironment(fn () => 'production');
 
         try {
             $this->expectException(RuntimeException::class);
-            $this->expectExceptionMessage('SEED_ADMIN_PASSWORD');
+            $this->expectExceptionMessage(SeedPassword::ENV_KEY);
 
             (new UserSeeder)->run();
         } finally {
@@ -120,17 +142,33 @@ class ProductionCheckCommandTest extends TestCase
         $this->seed(RolePermissionSeeder::class);
         $this->seed(SchoolSeeder::class);
 
-        putenv('SEED_ADMIN_PASSWORD');
+        $this->withoutSeedPassword();
         app()->detectEnvironment(fn () => 'production');
+
+        /*
+         * Pengecualiannya ditangkap ke variabel, bukan diperiksa di dalam
+         * `catch`. `$this->fail()` melempar AssertionFailedError yang mewarisi
+         * RuntimeException, sehingga `catch (RuntimeException)` menelan
+         * kegagalannya sendiri dan test ini lulus justru ketika penolakannya
+         * tidak terjadi (butir 582).
+         */
+        $exception = null;
 
         try {
             (new UserSeeder)->run();
-            $this->fail('Seeding produksi tanpa kata sandi seharusnya ditolak.');
-        } catch (RuntimeException $exception) {
-            $this->assertStringNotContainsString('Password123', $exception->getMessage());
+        } catch (RuntimeException $tertangkap) {
+            $exception = $tertangkap;
         } finally {
             app()->detectEnvironment(fn () => 'testing');
         }
+
+        $this->assertInstanceOf(
+            RuntimeException::class,
+            $exception,
+            'Seeding produksi tanpa kata sandi seharusnya ditolak.',
+        );
+
+        $this->assertStringNotContainsString(SeedPassword::FALLBACK, $exception->getMessage());
     }
 
     /**
@@ -139,7 +177,7 @@ class ProductionCheckCommandTest extends TestCase
      */
     public function test_local_seeding_still_works_without_the_variable(): void
     {
-        putenv('SEED_ADMIN_PASSWORD');
+        $this->withoutSeedPassword();
 
         $this->seed(RolePermissionSeeder::class);
         $this->seed(SchoolSeeder::class);
@@ -173,6 +211,38 @@ class ProductionCheckCommandTest extends TestCase
         $this->assertStringContainsString('UserSeeder', $registered);
     }
 
+    /**
+     * Menyimulasikan SEED_ADMIN_PASSWORD yang benar-benar tidak disetel.
+     *
+     * `putenv()` sendirian tidak pernah cukup, dan sebabnya bukan lapisan env
+     * yang kurang: `SeedPassword` membaca nilainya lewat **config**, bukan
+     * `env()` (butir 511). Config itu sudah terisi dari `.env` mesin yang
+     * menjalankan test saat aplikasi di-boot, sehingga test yang hanya
+     * memanggil `putenv()` menguji keadaan yang tidak pernah terjadi — dan
+     * lulus atau gagalnya bergantung pada isi `.env` pengembangnya, bukan pada
+     * kode yang dijaganya (butir 582).
+     */
+    protected function withoutSeedPassword(): void
+    {
+        config([SeedPassword::CONFIG_KEY => null]);
+
+        // Lapisan env ikut dikosongkan supaya apa pun yang membacanya ulang
+        // selama test ini melihat keadaan yang sama; dipulihkan di tearDown.
+        putenv(SeedPassword::ENV_KEY);
+        unset($_ENV[SeedPassword::ENV_KEY], $_SERVER[SeedPassword::ENV_KEY]);
+
+        /*
+         * Helper ini membuktikan dirinya sendiri, dan memakai ukuran milik kode
+         * produksinya. Kalau suatu hari `SeedPassword` membaca nilainya dari
+         * tempat lain, yang gagal adalah baris ini — bukan test yang jauh di
+         * bawah yang lulus tanpa pernah menguji apa pun.
+         */
+        $this->assertFalse(
+            SeedPassword::isConfigured(),
+            'Kata sandi seeder masih terbaca; keadaan "tidak disetel" belum benar-benar tercapai.',
+        );
+    }
+
     protected function withProductionConfig(): void
     {
         config([
@@ -197,7 +267,20 @@ class ProductionCheckCommandTest extends TestCase
 
     protected function tearDown(): void
     {
-        putenv('SEED_ADMIN_PASSWORD');
+        foreach (['env' => '_ENV', 'server' => '_SERVER'] as $kunci => $superglobal) {
+            if ($this->seedPasswordEnv[$kunci] === null) {
+                unset($GLOBALS[$superglobal][SeedPassword::ENV_KEY]);
+            } else {
+                $GLOBALS[$superglobal][SeedPassword::ENV_KEY] = $this->seedPasswordEnv[$kunci];
+            }
+        }
+
+        if ($this->seedPasswordEnv['putenv'] === null) {
+            putenv(SeedPassword::ENV_KEY);
+        } else {
+            putenv(SeedPassword::ENV_KEY.'='.$this->seedPasswordEnv['putenv']);
+        }
+
         app()->detectEnvironment(fn () => 'testing');
 
         parent::tearDown();

@@ -10069,6 +10069,54 @@ bukan temuan — pada desktop langkah `load` tidak pernah tercapai karena FilePo
 masih memegang berkas hasil unggahan di memori, dan baru memuat dari URL
 tersimpan ketika kolomnya dirender ulang.
 
+### 582. Test yang menarik tuas yang salah
+
+`test_seeding_in_production_without_a_password_is_refused` gagal di mesin yang
+`.env`-nya memuat `SEED_ADMIN_PASSWORD`. Diagnosis pertamanya masuk akal tetapi
+keliru: "`putenv()` hanya membersihkan lapisan `getenv`, sedangkan `env()` masih
+membacanya dari `$_ENV`/`$_SERVER`".
+
+Yang benar lebih sederhana dan lebih tajam: **`SeedPassword` tidak pernah membaca
+`env()` sama sekali.** Ia membaca `config('seeding.admin_password')` — justru
+karena butir 511, supaya pagarnya tetap benar sesudah `config:cache`. Nilai
+config itu sudah terisi saat aplikasi di-boot. `putenv()` karena itu tidak
+menyentuh apa pun yang diuji, di lapisan mana pun.
+
+Testnya lulus bertahun-tahun hanya karena `.env` mesin yang menjalankannya
+kebetulan kosong. Ia menguji `.env` pengembang, bukan kode yang dijaganya.
+
+Yang lebih buruk ditemukan sekalian. Test tetangganya:
+
+```php
+try {
+    (new UserSeeder)->run();
+    $this->fail('… seharusnya ditolak.');
+} catch (RuntimeException $exception) {
+    $this->assertStringNotContainsString(SeedPassword::FALLBACK, $exception->getMessage());
+}
+```
+
+`$this->fail()` melempar `AssertionFailedError`, dan `PHPUnit\Framework\Exception`
+mewarisi `RuntimeException` — sehingga `catch` itu **menelan kegagalannya
+sendiri**, lalu memeriksa bahwa pesan kegagalan PHPUnit tidak memuat kata sandi
+bawaan. Tentu saja tidak. Test itu hijau justru ketika penolakannya tidak
+terjadi.
+
+Perbaikannya menarik tuas yang benar: `withoutSeedPassword()` mengosongkan
+**config**-nya, membersihkan lapisan env sebagai pelengkap, lalu memeriksa
+dirinya sendiri lewat `SeedPassword::isConfigured()` — sehingga bila suatu hari
+nilainya dibaca dari tempat lain, yang gagal adalah helper-nya, bukan test jauh
+di bawah yang lulus tanpa menguji apa pun. Keadaan `$_ENV`/`$_SERVER` disimpan
+di `setUp` dan dipulihkan di `tearDown`, karena `unset` atas superglobal
+bertahan lintas test dalam satu proses.
+
+Pengecualiannya kini ditangkap ke variabel dan diperiksa **di luar** `catch`,
+sehingga `fail()` tidak dapat tertelan lagi.
+
+Terbukti dengan merusak pagarnya sengaja (`fallbackAllowed()` dibuat selalu
+`true`): kedua test menjadi merah, dan hijau kembali setelah dipulihkan.
+Sebelum perbaikan, hanya satu yang merah.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
