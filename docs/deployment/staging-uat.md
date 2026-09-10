@@ -197,6 +197,84 @@ nama lingkungan berikutnya ikut terlindungi tanpa perlu diingat.
 
 ---
 
+## 5b. Railway — staging yang benar-benar berjalan
+
+Runbook di atas menyiapkan VPS `staging.smartsukses.sch.id`. Yang **sudah
+berjalan** hari ini adalah staging di Railway, dan topologinya berbeda: TLS
+publik berhenti di edge Railway, lalu diteruskan ke Caddy/FrankenPHP yang
+dijalankan Railpack, baru ke PHP.
+
+```
+Railway edge (TLS berhenti di sini)
+  → Caddy / FrankenPHP
+    → Laravel
+      → aplikasi
+```
+
+Ada **dua** hop, dan masing-masing harus memercayai hop sebelumnya. Melewatkan
+salah satunya menghasilkan gejala yang sama persis, dan gejalanya tidak
+menunjukkan lapisan mana yang salah.
+
+### Yang harus disetel
+
+| Lapisan | Variabel | Nilai |
+| --- | --- | --- |
+| Laravel | `TRUSTED_PROXIES` | `*` |
+| Railpack/Caddy | `CADDY_GLOBAL_OPTIONS` | lihat di bawah |
+
+```
+servers {
+    trusted_proxies static private_ranges 100.0.0.0/8
+}
+```
+
+Nilai `private_ranges 100.0.0.0/8` mengikuti contoh konfigurasi resmi
+Railway/Caddy untuk memercayai proxy Railway. Pengaturan ini
+**khusus Railway/Railpack** — jangan disalin ke penyedia lain, yang punya
+konfigurasi proxy dan dokumentasinya sendiri.
+
+`TRUSTED_PROXIES=*` sah di sini karena origin tidak dapat dihubungi langsung
+dari internet: lalu lintas publik hanya masuk lewat edge Railway.
+
+### Gejala bila salah satunya terlewat
+
+Peramban menampilkan `https://` di bilah alamat, tetapi Laravel membaca
+permintaannya sebagai HTTP. Akibatnya seluruh URL absolut, action formulir, dan
+URL aset lahir ber-skema `http://`:
+
+* panel Filament tampil sebagai HTML polos dengan ikon SVG seukuran layar —
+  asetnya diblokir peramban sebagai konten campuran;
+* tombol keluar memicu peringatan Chrome *"The information you're about to
+  submit is not secure"*;
+* pengalihan menjawab `Location: http://…` pada permintaan yang jelas HTTPS.
+
+### Smoke test sesudah deploy
+
+Konfigurasi Caddy tidak dapat diuji dari PHPUnit — `TrustedProxyTest` hanya
+menjamin lapisan Laravel. Yang memverifikasi hop pertama adalah permintaan
+sungguhan ke staging:
+
+```bash
+U=https://<host-staging>
+
+# 1. Pengalihan harus https
+curl -sI "$U/admin/login" | grep -i '^location'
+
+# 2. Harus NOL rujukan http://
+curl -sL "$U/login" | grep -coE '(src|href|action)="http://[^"]*"'
+
+# 3. Harus ada rujukan https://
+curl -sL "$U/login" | grep -coE '(src|href|action)="https://[^"]*"'
+```
+
+Cara mengurung lapisan mana yang salah bila masih gagal: kirim permintaan
+internal langsung ke Caddy/FrankenPHP dengan `X-Forwarded-Proto: https`. Kalau
+permintaan internal itu **sudah** menghasilkan `https://` sementara permintaan
+publik belum, yang belum benar adalah `CADDY_GLOBAL_OPTIONS`, bukan
+`TRUSTED_PROXIES`.
+
+---
+
 ## 6. Penyimpanan berkas
 
 | Kelas | Disk | Letak | Boleh publik? |

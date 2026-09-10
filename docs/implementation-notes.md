@@ -10117,6 +10117,126 @@ Terbukti dengan merusak pagarnya sengaja (`fallbackAllowed()` dibuat selalu
 `true`): kedua test menjadi merah, dan hijau kembali setelah dipulihkan.
 Sebelum perbaikan, hanya satu yang merah.
 
+### 583. Dua lapis proxy, dan hanya satu di antaranya ada di repositori ini
+
+Panel Filament di Railway tampil sebagai HTML polos dengan SVG seukuran layar,
+dan tombol keluar memicu peringatan "The information you're about to submit is
+not secure". Diukur sebelum perbaikan: permintaan HTTPS ke `/admin/login`
+menjawab `Location: http://…`, dan `/login` memuat enam rujukan absolut yang
+seluruhnya `http://` — nol `https://`.
+
+Semuanya mengalir dari satu titik. `url()`, `route()`, dan `asset()` membangun
+dari akar permintaan; `Css`, `Js`, dan `AlpineComponent` milik Filament
+seluruhnya memanggil `asset()`, dan `ASSET_URL` tidak diset. Halaman https yang
+memuat aset http diblokir sebagai konten campuran, dan yang tersisa adalah
+markup telanjang. Action formulir keluar lahir `http://` dari sumber yang sama.
+
+Skema permintaan dibaca dari `X-Forwarded-Proto` — tetapi hanya bila pengirimnya
+dipercaya. Dan di jalur Railway ada **dua** hop yang masing-masing harus
+memercayai hop sebelumnya:
+
+```
+Railway edge (TLS berhenti di sini)
+  → Caddy / FrankenPHP      ← harus memercayai edge Railway
+    → Laravel               ← harus memercayai Caddy
+      → aplikasi
+```
+
+Diagnosis pertama berhenti di hop kedua saja dan menyimpulkan `TRUSTED_PROXIES=*`
+sudah cukup. Deployment membuktikan sebaliknya, dan pembuktiannya rapi:
+`TRUSTED_PROXIES` terbaca `*` pada environment maupun pada
+`config('trustedproxy.proxies')`, permintaan internal langsung ke
+FrankenPHP/Caddy dengan `X-Forwarded-Proto: https` **sudah** menghasilkan
+`Location: https://…` — sementara permintaan publik lewat edge Railway tetap
+menghasilkan `http://`. Selisih itu mengurung sisa masalahnya persis pada hop
+pertama: Caddy tidak memercayai edge Railway, sehingga metadata yang diteruskan
+tidak pernah sampai ke Laravel untuk dinilai.
+
+Yang menutupnya, di sisi platform dan bukan di repositori ini:
+
+```
+CADDY_GLOBAL_OPTIONS:
+servers {
+    trusted_proxies static private_ranges 100.0.0.0/8
+}
+```
+
+Nilai `private_ranges 100.0.0.0/8` mengikuti contoh konfigurasi resmi
+Railway/Caddy untuk memercayai proxy Railway. Pengaturan ini
+**khusus Railway/Railpack** dan tidak boleh digeneralisasi ke penyedia lain;
+tempatnya di runbook staging, bukan di `.env.example`, karena ia bukan
+persyaratan Laravel.
+
+Yang ada di repositori ini hanya hop kedua: `config/trustedproxy.php` beserta
+`TRUSTED_PROXIES`, dengan bawaan tidak memercayai siapa pun. Itu tetap **wajib**
+— tanpanya perbaikan Caddy pun tidak berarti apa-apa — tetapi tidak pernah
+cukup sendirian di Railway.
+
+Yang benar-benar hilang selama ini adalah test. Mekanisme hop kedua sudah ada
+sejak butir 356-358 tanpa satu pun test yang mengambil URL yang dihasilkannya.
+`TrustedProxyTest` menutup itu dari kedua arah: dengan proxy tepercaya URL dan
+URL aset menjadi https, tanpa itu header yang diteruskan diabaikan sepenuhnya,
+dan lokal tidak pernah ikut dipaksa https. Ia **tidak** dan tidak dapat
+membuktikan hop pertama — itu konfigurasi platform, dan yang memverifikasinya
+adalah smoke test terhadap staging sungguhan.
+
+Yang sengaja tidak dipakai: `URL::forceScheme('https')`, yang memaksa skema
+tanpa pernah tahu skema sebenarnya dan ikut memaksanya di lokal; dan
+`trustProxies()` kedua di `bootstrap/app.php`, yang akan membuat dua sumber
+kebenaran untuk satu pengaturan — dan yang di provider akan menimpanya, karena
+boot provider berjalan belakangan.
+
+Satu koreksi kecil ikut ditemukan saat menulis testnya. Komentar lama menyebut
+header AWS ELB "tidak relevan pada topologi ini", seolah ia sesuatu yang
+dikecualikan. `HEADER_X_FORWARDED_AWS_ELB` bukan header tersendiri melainkan
+preset bernilai `FOR|PROTO|PORT` = 26 — persis kombinasi yang dipakai aplikasi
+ini. Mask-nya benar; kalimatnya yang menyesatkan, dan penegasan "AWS ELB tidak
+aktif" mustahil terpenuhi.
+
+### 584. Kegagalan test yang menumpahkan rahasianya
+
+Empat test di `StagingReadinessTest` gagal di mesin yang `.env`-nya memuat
+`SEED_ADMIN_PASSWORD` — keluarga yang sama dengan butir 582: keempatnya tidak
+pernah menyetel `config('seeding.admin_password')` dan menggantungkan diri pada
+config itu kebetulan kosong. Test yang menguji `.env` pengembang, bukan kode.
+
+Satu di antaranya lebih dari sekadar gagal:
+
+```php
+$this->assertSame(SeedPassword::FALLBACK, SeedPassword::resolve());
+```
+
+`assertSame` mencetak **kedua** sisinya ketika gagal, dan sisi kanan di sini
+adalah kata sandi seeder yang sedang berlaku. Di mesin yang `.env`-nya terisi,
+satu penegasan gagal menumpahkan rahasia itu ke keluaran test — dan ke log CI,
+tempat ia tersimpan.
+
+Perbaikannya dua lapis. Pertama, `withoutSeedPassword()` menyetel config-nya
+kosong secara eksplisit lalu memeriksa dirinya sendiri lewat
+`SeedPassword::isConfigured()`. Kedua — dan ini yang penting — perbandingannya
+tidak lagi memakai penegasan yang mencetak nilai:
+
+```php
+$this->assertTrue(hash_equals(SeedPassword::FALLBACK, SeedPassword::resolve()), "…");
+```
+
+`assertTrue` hanya mencetak pesannya. Aturan itu diberlakukan bahkan untuk nilai
+sintetis, supaya tidak ada pola yang menunggu disalin, dan dijaga sebuah test
+yang memindai berkas testnya sendiri untuk `assertSame`/`assertEquals` atas
+`SeedPassword::resolve()`.
+
+Terbukti: dengan isolasinya dilumpuhkan sengaja sehingga penegasannya gagal,
+kata sandi terkonfigurasi **tidak muncul** di keluaran test.
+
+Sisi aplikasinya bersih dan tetap dibiarkan apa adanya. `SeedPassword` hanya
+melempar ketika nilainya kosong, sehingga pesannya secara struktural tidak
+mungkin memuat nilai apa pun — ia menyebut nama variabel dan nama lingkungan
+saja. Kebocorannya murni di test.
+
+Satu bug butir 582 juga muncul lagi di sini dan ikut ditutup: `$this->fail()` di
+dalam `try` yang `catch (RuntimeException)`-nya menelan `AssertionFailedError`
+miliknya sendiri.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

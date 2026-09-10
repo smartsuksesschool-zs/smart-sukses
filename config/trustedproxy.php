@@ -48,14 +48,20 @@ return [
     | Header yang dipercaya dari proxy tersebut.
     |
     | Sengaja lebih sempit daripada bawaan Laravel, yang juga memercayai
-    | `X-Forwarded-Host`, `X-Forwarded-Prefix`, dan header AWS ELB.
+    | `X-Forwarded-Host` dan `X-Forwarded-Prefix`.
     |
     | `X-Forwarded-Host` yang dipercaya berarti proxy — atau siapa pun yang
     | dapat menjangkau origin — dapat menentukan host yang dipakai Laravel
     | membangun URL. Aplikasi ini mengirim tautan atur ulang kata sandi lewat
-    | surel, dan tautan itu dibangun dari host tersebut. Nginx sudah meneruskan
-    | `Host` yang benar, jadi tidak ada yang hilang dengan tidak memercayainya.
-    | Header AWS ELB tidak relevan pada topologi ini (butir 358).
+    | surel, dan tautan itu dibangun dari host tersebut. Proxy sudah meneruskan
+    | `Host` yang benar, jadi tidak ada yang hilang dengan tidak memercayainya
+    | (butir 358).
+    |
+    | Catatan bagi yang membacanya kelak: `HEADER_X_FORWARDED_AWS_ELB` bukan
+    | header tersendiri melainkan preset bernilai FOR|PROTO|PORT — yaitu persis
+    | kombinasi di bawah ini. Jadi "tidak memakai preset AWS" bukan pernyataan
+    | yang punya arti di sini, dan tidak perlu ada yang mencoba mengecualikannya
+    | (butir 583).
     */
     'headers' => Request::HEADER_X_FORWARDED_FOR
         | Request::HEADER_X_FORWARDED_PORT
