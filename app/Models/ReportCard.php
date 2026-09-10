@@ -28,6 +28,22 @@ class ReportCard extends Model
      */
     public const PDF_DISK = 'local';
 
+    /**
+     * Disk tempat PDF rapor benar-benar disimpan.
+     *
+     * Dibaca lewat config supaya web dan worker dapat diarahkan ke penyimpanan
+     * objek yang sama. Di Railway keduanya service terpisah dengan berkas
+     * sistem masing-masing, sehingga PDF yang ditulis worker tidak pernah
+     * terlihat oleh web yang harus menyajikannya (butir 585).
+     *
+     * Konstanta di atas tetap menjadi bawaannya: tanpa konfigurasi baru,
+     * perilakunya persis seperti sebelumnya.
+     */
+    public static function pdfDisk(): string
+    {
+        return (string) config('storage.report_card_disk', self::PDF_DISK);
+    }
+
     protected $fillable = [
         'school_id',
         'student_id',
@@ -107,7 +123,7 @@ class ReportCard extends Model
     {
         return $this->pdf_status?->isDownloadable() === true
             && filled($this->pdf_path)
-            && Storage::disk(self::PDF_DISK)->exists($this->pdf_path);
+            && Storage::disk(self::pdfDisk())->exists($this->pdf_path);
     }
 
     /**

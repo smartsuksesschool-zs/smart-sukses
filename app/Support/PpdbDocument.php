@@ -34,6 +34,19 @@ class PpdbDocument
     public const DISK = 'local';
 
     /**
+     * Disk privat yang berlaku. Dapat dikonfigurasi dengan alasan yang sama
+     * seperti bukti pembayaran: berkas sistem service Railway bersifat
+     * sementara, dan ini dokumen identitas pendaftar (butir 585).
+     *
+     * `LEGACY_DISK` sengaja tidak ikut — ia bukan tujuan penyimpanan melainkan
+     * sisa sejarah yang sedang dikosongkan.
+     */
+    public static function disk(): string
+    {
+        return (string) config('storage.ppdb_document_disk', self::DISK);
+    }
+
+    /**
      * Disk lama. Baris yang ditulis sebelum batch ini masih menunjuk ke sini,
      * dan tetap dapat diunduh lewat rute berwenang sampai
      * `ppdb:privatize-documents` dijalankan.
@@ -95,7 +108,7 @@ class PpdbDocument
      */
     public static function diskFor(string $path): ?string
     {
-        foreach ([self::DISK, self::LEGACY_DISK] as $disk) {
+        foreach ([self::disk(), self::LEGACY_DISK] as $disk) {
             if (Storage::disk($disk)->exists($path)) {
                 return $disk;
             }

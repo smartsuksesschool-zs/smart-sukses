@@ -354,7 +354,7 @@ class StudentFeeResource extends Resource
             Forms\Components\FileUpload::make('proof_url')
                 ->label(__('Bukti Pembayaran'))
                 // Disk privat: berkas ini tidak boleh punya URL statis.
-                ->disk(PaymentRecorder::PROOF_DISK)
+                ->disk(PaymentRecorder::proofDisk())
                 ->directory(PaymentRecorder::proofDirectory((int) $record->school_id))
                 ->visibility('private')
                 ->acceptedFileTypes(PaymentRecorder::PROOF_MIME_TYPES)

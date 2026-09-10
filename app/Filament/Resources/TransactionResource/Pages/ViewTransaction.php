@@ -29,7 +29,7 @@ class ViewTransaction extends ViewRecord
                 ->icon('heroicon-o-arrow-down-tray')
                 ->visible(fn (Transaction $record): bool => $record->hasDownloadableProof()
                     && (Auth::user()?->can('downloadProof', $record) ?? false))
-                ->action(fn (Transaction $record): StreamedResponse => Storage::disk(TransactionRecorder::PROOF_DISK)
+                ->action(fn (Transaction $record): StreamedResponse => Storage::disk(TransactionRecorder::proofDisk())
                     ->download($record->proof_url, TransactionResource::proofFilenameFor($record))),
 
             Actions\EditAction::make(),

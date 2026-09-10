@@ -254,7 +254,7 @@ class ReportCardResource extends Resource
             ->color('success')
             ->authorize('downloadPdf')
             ->visible(fn (ReportCard $record): bool => $record->hasDownloadablePdf())
-            ->action(fn (ReportCard $record): StreamedResponse => Storage::disk(ReportCard::PDF_DISK)
+            ->action(fn (ReportCard $record): StreamedResponse => Storage::disk(ReportCard::pdfDisk())
                 ->download($record->pdf_path, app(ReportCardPdfRenderer::class)->filenameFor($record)));
     }
 

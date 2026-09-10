@@ -76,6 +76,6 @@ class Payment extends Model
     public function hasDownloadableProof(): bool
     {
         return filled($this->proof_url)
-            && Storage::disk(PaymentRecorder::PROOF_DISK)->exists($this->proof_url);
+            && Storage::disk(PaymentRecorder::proofDisk())->exists($this->proof_url);
     }
 }

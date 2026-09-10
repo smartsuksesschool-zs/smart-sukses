@@ -125,7 +125,7 @@ class PaymentProofAttacher
             // baris mana pun; menghapusnya di sini menutup kasus yang paling
             // umum tanpa membangun sistem retensi baru (butir 120).
             if ($cleanUpOnFailure && is_string($path)) {
-                Storage::disk(PaymentRecorder::PROOF_DISK)->delete($path);
+                Storage::disk(PaymentRecorder::proofDisk())->delete($path);
             }
 
             throw $e;
@@ -231,7 +231,7 @@ class PaymentProofAttacher
         return $file->storeAs(
             PaymentRecorder::proofDirectory($schoolId),
             Str::uuid().'.'.$extension,
-            ['disk' => PaymentRecorder::PROOF_DISK]
+            ['disk' => PaymentRecorder::proofDisk()]
         );
     }
 }

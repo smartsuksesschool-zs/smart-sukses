@@ -160,7 +160,7 @@ class RegistrationForm extends Component
         $directory = PpdbDocument::directoryFor($this->school);
 
         foreach ($this->documents as $document) {
-            $paths[] = $document->store($directory, PpdbDocument::DISK);
+            $paths[] = $document->store($directory, PpdbDocument::disk());
         }
 
         return $paths;

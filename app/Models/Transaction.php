@@ -96,6 +96,6 @@ class Transaction extends Model
     public function hasDownloadableProof(): bool
     {
         return filled($this->proof_url)
-            && Storage::disk(TransactionRecorder::PROOF_DISK)->exists($this->proof_url);
+            && Storage::disk(TransactionRecorder::proofDisk())->exists($this->proof_url);
     }
 }

@@ -134,7 +134,7 @@ class PaymentsRelationManager extends RelationManager
                     ->required()
                     // Disk privat, aturan yang sama dengan pengunggahan saat
                     // pencatatan pembayaran.
-                    ->disk(PaymentRecorder::PROOF_DISK)
+                    ->disk(PaymentRecorder::proofDisk())
                     ->directory(fn (Payment $record): string => PaymentRecorder::proofDirectory((int) $record->school_id))
                     ->visibility('private')
                     ->acceptedFileTypes(PaymentRecorder::PROOF_MIME_TYPES)
@@ -168,7 +168,7 @@ class PaymentsRelationManager extends RelationManager
             ->icon('heroicon-o-arrow-down-tray')
             ->visible(fn (Payment $record): bool => $record->hasDownloadableProof()
                 && (Auth::user()?->can('downloadProof', $record) ?? false))
-            ->action(fn (Payment $record): StreamedResponse => Storage::disk(PaymentRecorder::PROOF_DISK)
+            ->action(fn (Payment $record): StreamedResponse => Storage::disk(PaymentRecorder::proofDisk())
                 ->download($record->proof_url, static::proofFilenameFor($record)));
     }
 

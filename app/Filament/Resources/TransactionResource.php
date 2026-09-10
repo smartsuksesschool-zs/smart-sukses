@@ -127,7 +127,7 @@ class TransactionResource extends Resource
             Forms\Components\FileUpload::make('proof_url')
                 ->label(__('Bukti Transaksi'))
                 // Disk privat: berkas ini tidak boleh punya URL statis.
-                ->disk(TransactionRecorder::PROOF_DISK)
+                ->disk(TransactionRecorder::proofDisk())
                 ->directory(fn (?Transaction $record): string => TransactionRecorder::proofDirectory(
                     (int) ($record?->school_id ?? Auth::user()?->school_id ?? 0),
                 ))
@@ -325,7 +325,7 @@ class TransactionResource extends Resource
             ->icon('heroicon-o-arrow-down-tray')
             ->visible(fn (Transaction $record): bool => $record->hasDownloadableProof()
                 && (Auth::user()?->can('downloadProof', $record) ?? false))
-            ->action(fn (Transaction $record): StreamedResponse => Storage::disk(TransactionRecorder::PROOF_DISK)
+            ->action(fn (Transaction $record): StreamedResponse => Storage::disk(TransactionRecorder::proofDisk())
                 ->download($record->proof_url, static::proofFilenameFor($record)));
     }
 

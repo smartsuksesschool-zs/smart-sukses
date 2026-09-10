@@ -61,7 +61,7 @@ class GenerateReportCardPdf implements ShouldQueue
         // Berkas ditulis lebih dulu, status menyusul. Urutan ini yang menjaga
         // agar READY tidak pernah menunjuk berkas yang tidak ada — bila render
         // atau penyimpanan gagal, statusnya tetap QUEUED lalu menjadi FAILED.
-        Storage::disk(ReportCard::PDF_DISK)->put($path, $renderer->render($reportCard));
+        Storage::disk(ReportCard::pdfDisk())->put($path, $renderer->render($reportCard));
 
         $reportCard->markPdfReady($path);
     }

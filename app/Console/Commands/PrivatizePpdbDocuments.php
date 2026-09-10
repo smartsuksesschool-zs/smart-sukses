@@ -116,7 +116,7 @@ class PrivatizePpdbDocuments extends Command
 
     protected function migrateOne(string $label, string $path, bool $apply): void
     {
-        $private = Storage::disk(PpdbDocument::DISK);
+        $private = Storage::disk(PpdbDocument::disk());
         $public = Storage::disk(PpdbDocument::LEGACY_DISK);
 
         $onPrivate = $private->exists($path);

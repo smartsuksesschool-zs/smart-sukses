@@ -38,6 +38,18 @@ class PaymentRecorder
      */
     public const PROOF_DISK = 'local';
 
+    /**
+     * Disk tempat bukti pembayaran disimpan.
+     *
+     * Dapat dikonfigurasi karena berkas sistem sebuah service Railway bersifat
+     * sementara, dan ini dokumen keuangan yang harus bertahan melewati
+     * redeploy. Konstanta di atas tetap bawaannya (butir 585).
+     */
+    public static function proofDisk(): string
+    {
+        return (string) config('storage.payment_proof_disk', self::PROOF_DISK);
+    }
+
     public const PROOF_DIRECTORY = 'payment-proofs';
 
     /** Security 3.4 — "Hanya JPG/PNG/PDF diperbolehkan"; SPP-03: maks 5 MB. */

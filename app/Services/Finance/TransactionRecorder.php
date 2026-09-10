@@ -38,6 +38,15 @@ class TransactionRecorder
      */
     public const PROOF_DISK = 'local';
 
+    /**
+     * Disk tempat bukti transaksi kas disimpan. Alasannya sama dengan bukti
+     * pembayaran; konstanta di atas tetap bawaannya (butir 585).
+     */
+    public static function proofDisk(): string
+    {
+        return (string) config('storage.transaction_proof_disk', self::PROOF_DISK);
+    }
+
     public const PROOF_DIRECTORY = 'transaction-proofs';
 
     /**
