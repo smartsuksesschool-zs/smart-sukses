@@ -43,6 +43,33 @@ class StagingReadinessTest extends TestCase
         parent::tearDown();
     }
 
+    /**
+     * Menyimulasikan SEED_ADMIN_PASSWORD yang benar-benar tidak disetel.
+     *
+     * Tuas yang menentukan adalah **config**, bukan env: `SeedPassword`
+     * membacanya lewat `config()` supaya pagarnya tetap benar sesudah
+     * `config:cache` (butir 511). Config itu sudah terisi dari `.env` mesin
+     * penjalannya saat aplikasi di-boot, sehingga test yang tidak menyetelnya
+     * sedang menguji `.env` pengembang, bukan kode yang dijaganya (butir 584).
+     *
+     * Lapisan env ikut dikosongkan sebagai pelengkap; nilainya tidak pernah
+     * dibaca maupun dicetak.
+     */
+    protected function withoutSeedPassword(): void
+    {
+        config([SeedPassword::CONFIG_KEY => null]);
+
+        putenv(SeedPassword::ENV_KEY);
+        unset($_ENV[SeedPassword::ENV_KEY], $_SERVER[SeedPassword::ENV_KEY]);
+
+        // Memakai ukuran milik kode produksinya sendiri: kalau suatu hari
+        // nilainya dibaca dari tempat lain, yang gagal adalah baris ini.
+        $this->assertFalse(
+            SeedPassword::isConfigured(),
+            'Keadaan "kata sandi tidak disetel" belum tercapai.',
+        );
+    }
+
     protected function asEnvironment(string $env): void
     {
         app()->detectEnvironment(fn (): string => $env);
@@ -54,10 +81,24 @@ class StagingReadinessTest extends TestCase
     {
         $this->assertSame(['local', 'testing'], SeedPassword::optionalEnvironments());
 
+        $this->withoutSeedPassword();
+
         foreach (SeedPassword::optionalEnvironments() as $env) {
             $this->asEnvironment($env);
 
-            $this->assertSame(SeedPassword::FALLBACK, SeedPassword::resolve());
+            /*
+             * Dibandingkan lewat assertTrue, bukan assertSame.
+             *
+             * `assertSame` mencetak kedua sisinya ketika gagal, dan sisi kanan
+             * di sini adalah kata sandi seeder yang sedang berlaku. Pada mesin
+             * yang `.env`-nya terisi, satu penegasan yang gagal menumpahkan
+             * rahasia itu ke keluaran test dan ke log CI. `assertTrue` hanya
+             * mencetak pesannya (butir 584).
+             */
+            $this->assertTrue(
+                hash_equals(SeedPassword::FALLBACK, SeedPassword::resolve()),
+                "Lingkungan {$env} seharusnya memakai nilai cadangan.",
+            );
         }
     }
 
@@ -68,24 +109,113 @@ class StagingReadinessTest extends TestCase
      */
     public function test_lingkungan_ber_hostname_menolak_kata_sandi_bawaan(): void
     {
+        $this->withoutSeedPassword();
+
         foreach (['staging', 'uat', 'demo', 'production'] as $env) {
             $this->asEnvironment($env);
 
+            /*
+             * Pengecualiannya ditangkap ke variabel dan diperiksa di luar
+             * `catch`. `$this->fail()` melempar AssertionFailedError yang
+             * mewarisi RuntimeException, sehingga `catch (RuntimeException)`
+             * akan menelan kegagalannya sendiri dan test ini lulus justru
+             * ketika penolakannya tidak terjadi (butir 582).
+             */
+            $exception = null;
+
             try {
                 SeedPassword::resolve();
-                $this->fail("lingkungan {$env} seharusnya menolak kata sandi bawaan");
-            } catch (RuntimeException $e) {
-                $this->assertStringContainsString(SeedPassword::ENV_KEY, $e->getMessage());
-                $this->assertStringContainsString($env, $e->getMessage());
-
-                // Kata sandinya sendiri tidak pernah ikut dicetak.
-                $this->assertStringNotContainsString(SeedPassword::FALLBACK, $e->getMessage());
+            } catch (RuntimeException $tertangkap) {
+                $exception = $tertangkap;
             }
+
+            $this->assertInstanceOf(
+                RuntimeException::class,
+                $exception,
+                "Lingkungan {$env} seharusnya menolak kata sandi bawaan.",
+            );
+
+            $this->assertStringContainsString(SeedPassword::ENV_KEY, $exception->getMessage());
+            $this->assertStringContainsString($env, $exception->getMessage());
+
+            // Kata sandinya sendiri tidak pernah ikut dicetak.
+            $this->assertStringNotContainsString(SeedPassword::FALLBACK, $exception->getMessage());
+        }
+    }
+
+    /**
+     * Nilai yang disetel tidak pernah sampai ke pesan galat mana pun.
+     *
+     * Dipakai nilai sintetis, bukan nilai sungguhan: yang diuji adalah jalurnya,
+     * dan menguji jalur dengan rahasia asli berarti menaruh rahasia asli di
+     * tempat yang persis sedang dicurigai.
+     */
+    public function test_kata_sandi_yang_disetel_tidak_pernah_muncul_di_pesan_galat(): void
+    {
+        $sintetis = 'NilaiSintetisKhususUji-tidak-dipakai-di-mana-pun';
+
+        config([SeedPassword::CONFIG_KEY => $sintetis]);
+
+        // Ketika terkonfigurasi, tidak ada jalur yang melempar sama sekali.
+        foreach (['staging', 'uat', 'production'] as $env) {
+            $this->asEnvironment($env);
+
+            $this->assertTrue(hash_equals($sintetis, SeedPassword::resolve()));
+        }
+
+        /*
+         * Dan ketika TIDAK terkonfigurasi, pesannya menyebut nama variabelnya
+         * beserta lingkungannya — tidak satu pun nilai. Inilah yang membuat
+         * pesan galat aman disalin ke catatan deployment (butir 362).
+         */
+        $this->withoutSeedPassword();
+        $this->asEnvironment('staging');
+
+        $exception = null;
+
+        try {
+            SeedPassword::resolve();
+        } catch (RuntimeException $tertangkap) {
+            $exception = $tertangkap;
+        }
+
+        $this->assertInstanceOf(RuntimeException::class, $exception);
+        $this->assertStringNotContainsString($sintetis, $exception->getMessage());
+        $this->assertStringNotContainsString(SeedPassword::FALLBACK, $exception->getMessage());
+    }
+
+    /**
+     * Tidak ada test yang membandingkan kata sandi terselesaikan dengan
+     * penegasan yang mencetak kedua sisinya.
+     *
+     * `assertSame` dan `assertEquals` menampilkan nilai yang diharapkan dan
+     * yang didapat ketika gagal. Sisi "didapat" di sini adalah kata sandi
+     * seeder yang sedang berlaku, sehingga satu penegasan yang gagal di mesin
+     * ber-`.env` terisi menumpahkannya ke keluaran test dan ke log CI —
+     * persis cara kebocoran ini pertama kali terjadi (butir 584).
+     */
+    public function test_tidak_ada_penegasan_yang_dapat_mencetak_kata_sandi(): void
+    {
+        $berkas = [
+            __FILE__,
+            base_path('tests/Feature/Security/ProductionCheckCommandTest.php'),
+        ];
+
+        foreach ($berkas as $file) {
+            $this->assertFileExists($file);
+
+            $this->assertDoesNotMatchRegularExpression(
+                '/assert(?:Same|Equals|NotSame)\([^;]*SeedPassword::resolve\(\)/s',
+                (string) file_get_contents($file),
+                basename($file).' membandingkan SeedPassword::resolve() dengan penegasan '
+                    .'yang mencetak nilainya saat gagal.',
+            );
         }
     }
 
     public function test_lingkungan_yang_belum_dikenal_ikut_terpagari(): void
     {
+        $this->withoutSeedPassword();
         $this->asEnvironment('sandbox');
 
         $this->expectException(RuntimeException::class);
@@ -108,7 +238,9 @@ class StagingReadinessTest extends TestCase
         config([SeedPassword::CONFIG_KEY => 'KataSandiStagingKarangan']);
 
         $this->assertTrue(SeedPassword::isConfigured());
-        $this->assertSame('KataSandiStagingKarangan', SeedPassword::resolve());
+        // Dibandingkan tanpa mencetak: aturannya berlaku bahkan untuk nilai
+        // sintetis, supaya tidak ada pola yang menunggu disalin (butir 584).
+        $this->assertTrue(hash_equals('KataSandiStagingKarangan', SeedPassword::resolve()));
     }
 
     /**
@@ -179,6 +311,7 @@ class StagingReadinessTest extends TestCase
         $this->seed(RolePermissionSeeder::class);
         $this->seed(SchoolSeeder::class);
 
+        $this->withoutSeedPassword();
         $this->asEnvironment('staging');
 
         $this->expectException(RuntimeException::class);
