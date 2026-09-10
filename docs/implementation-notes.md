@@ -10237,6 +10237,67 @@ Satu bug butir 582 juga muncul lagi di sini dan ikut ditutup: `$this->fail()` di
 dalam `try` yang `catch (RuntimeException)`-nya menelan `AssertionFailedError`
 miliknya sendiri.
 
+### 585. Berkas yang tidak pernah ada di tempat yang membutuhkannya
+
+Di Railway, `smart-sukses` (web) dan `smart-sukses-worker` adalah dua service
+dengan berkas sistem masing-masing, dan keduanya sementara. `ReportCard` selama
+ini menetapkan `PDF_DISK = 'local'`, sehingga `GenerateReportCardPdf` menulis
+PDF ke berkas sistem **worker** — lalu web memeriksa keberadaannya di berkas
+sistem **web**, dan tidak menemukannya.
+
+Yang membuat cacat ini sunyi: tidak ada galat. `hasDownloadablePdf()` hanya
+mengembalikan `false`, tombol unduhnya tidak muncul, dan statusnya tetap READY.
+Basis data mengatakan berkasnya siap; disknya tidak pernah ditanya di tempat
+yang benar.
+
+Empat kategori punya persoalan yang sama, walau hanya satu yang benar-benar
+dibagi dua service: PDF rapor (dibagi), bukti pembayaran, bukti transaksi kas,
+dan dokumen pendukung PPDB (ketiganya web saja, tetapi sama-sama harus bertahan
+melewati redeploy).
+
+**Yang ditolak: satu sakelar global.** `FILESYSTEM_DISK=s3` akan menyelesaikan
+keempatnya sekaligus — dan sekaligus merusak impor Excel, yang memanggil
+`Storage::disk('local')->path()`. Itu lintasan berkas sungguhan; objek S3 tidak
+punya lintasan. Sakelar global menukar satu masalah yang terlihat dengan satu
+masalah yang lebih sunyi.
+
+Yang dipakai: satu nama disk per kategori di `config/storage.php`, dengan
+konstanta lamanya sebagai bawaan. Pemasangan tanpa satu pun variabel baru
+berperilaku persis seperti sebelumnya, dan konstantanya tetap sah — puluhan test
+memakainya sebagai nama disk. Sebuah test menjaga agar konstanta dan bawaan
+config tidak pernah menyimpang, karena begitu menyimpang, test-test itu diam-diam
+menguji disk yang berbeda dari yang dipakai aplikasi.
+
+Nilainya dibaca lewat `config()` di dalam resolver (`ReportCard::pdfDisk()` dan
+seterusnya), tidak pernah lewat `env()` dari kelas aplikasi — `env()` di luar
+berkas config mengembalikan NULL begitu `config:cache` dijalankan (butir 357).
+
+**Cacat yang paling mungkin bukan salah nama disk, melainkan setengah jalur ikut
+pindah.** Menulis ke S3 sementara `exists()` masih memeriksa berkas lokal
+menghasilkan gejala yang sama persis dengan sebelum perbaikan. Karena itu yang
+diuji bukan "disk terbaca benar" melainkan segitiganya: job menulis, model
+memeriksa, dan aksi mengunduh harus menunjuk disk yang sama. Terbukti menangkap
+regresinya — dengan `hasDownloadablePdf()` sengaja dikembalikan ke konstanta,
+dua test menjadi merah.
+
+Satu temuan yang hampir terlewat: `config/filesystems.php` **sudah** memuat blok
+disk `s3` lengkap, tetapi `league/flysystem-aws-s3-v3` tidak pernah terpasang.
+Blok config yang ada tidak berarti adapternya ada; `Storage::disk('s3')` akan
+melempar. Adapternya ditambahkan dengan `composer update` tanpa
+`--with-dependencies`, sehingga nol paket lama ikut naik versi — lima paket baru,
+tidak satu pun yang lama berubah.
+
+Media situs publik sengaja **tidak** ikut. Ia disajikan lewat `Storage::url()`
+dan mengandalkan disk publik, sedangkan bucket-nya privat; kontrak penyajiannya
+berbeda dan menuntut keputusan tersendiri.
+
+Terakhir, yang tidak dikerjakan kode: kesiapan ini tidak memindahkan satu berkas
+pun. Membuat bucket, menghubungkan kredensialnya ke kedua service, dan
+membuktikan berkas bertahan **melewati redeploy** tetap langkah operator —
+lihat `docs/deployment/staging-uat.md` §5c. Membuktikannya dengan mengunduh
+sesaat setelah menulis tidak membuktikan apa pun; berkas di penyimpanan
+sementara pun lulus uji itu.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

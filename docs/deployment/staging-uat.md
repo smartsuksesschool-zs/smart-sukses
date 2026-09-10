@@ -275,6 +275,113 @@ publik belum, yang belum benar adalah `CADDY_GLOBAL_OPTIONS`, bukan
 
 ---
 
+## 5c. Railway — penyimpanan berkas privat yang bertahan
+
+Berkas sistem sebuah service Railway bersifat **sementara**: setiap redeploy
+mengembalikannya ke isi image. Lebih tajam lagi, `smart-sukses` (web) dan
+`smart-sukses-worker` berjalan sebagai service terpisah dengan berkas sistem
+masing-masing.
+
+Akibatnya bukan berkas yang hilang nanti, melainkan berkas yang **tidak pernah
+ada di tempat yang membutuhkannya**: `GenerateReportCardPdf` menulis PDF rapor
+dari worker, dan web-lah yang harus menyajikannya. Tanpa penyimpanan bersama,
+tombol unduhnya tidak pernah muncul dan tidak ada satu pun galat yang
+menjelaskan mengapa.
+
+### Empat disk yang dapat dikonfigurasi
+
+| Variabel | Bawaan | Isi berkas | Dibagi web+worker? |
+| --- | --- | --- | --- |
+| `REPORT_CARD_DISK` | `local` | PDF rapor | **ya** |
+| `PAYMENT_PROOF_DISK` | `local` | bukti pembayaran | tidak |
+| `TRANSACTION_PROOF_DISK` | `local` | bukti transaksi kas | tidak |
+| `PPDB_PRIVATE_DISK` | `local` | dokumen pendaftar PPDB | tidak |
+
+Tiga yang terakhir tidak dibagi antar service, tetapi ketahanannya sama
+pentingnya — itu dokumen keuangan dan dokumen identitas.
+
+Kosongkan seluruhnya untuk pemasangan dengan berkas sistem yang menetap; di
+sana `local` tetap jawaban yang benar.
+
+### Yang TIDAK ikut pindah
+
+`FILESYSTEM_DISK` **tetap `local`**. Jalur impor Excel memanggil
+`Storage::disk('local')->path()` — lintasan berkas sungguhan yang tidak dimiliki
+objek S3. Menyetel `FILESYSTEM_DISK=s3` akan menukar satu masalah dengan masalah
+lain yang lebih sunyi.
+
+Media situs publik (`SiteSetting::MEDIA_DISK`, `School::LOGO_DISK`) juga tidak
+ikut. Keduanya disajikan lewat `Storage::url()` dan mengandalkan disk publik,
+sedangkan Railway Storage Bucket bersifat privat. Memindahkannya menuntut
+keputusan penyajian tersendiri — lihat §5d.
+
+### Variabel pada KEDUA service
+
+Setel pada `smart-sukses` **dan** `smart-sukses-worker`, dengan nilai yang sama:
+
+```
+REPORT_CARD_DISK=s3
+PAYMENT_PROOF_DISK=s3
+TRANSACTION_PROOF_DISK=s3
+PPDB_PRIVATE_DISK=s3
+```
+
+Kredensial bucket masuk lewat **referensi variabel Railway**, bukan disalin:
+
+| Variabel Laravel | Referensi ke bucket |
+| --- | --- |
+| `AWS_BUCKET` | `BUCKET` |
+| `AWS_ACCESS_KEY_ID` | `ACCESS_KEY_ID` |
+| `AWS_SECRET_ACCESS_KEY` | `SECRET_ACCESS_KEY` |
+| `AWS_DEFAULT_REGION` | `REGION` |
+| `AWS_ENDPOINT` | `ENDPOINT` |
+| `AWS_USE_PATH_STYLE_ENDPOINT` | lihat tab Credentials bucket |
+
+Nilai `AWS_USE_PATH_STYLE_ENDPOINT` **ditentukan tab Credentials bucket itu
+sendiri**, tidak ditebak dan tidak diasumsikan `true`. Salah menebaknya
+menghasilkan galat penandatanganan yang sulit dibaca.
+
+Bucket-nya **privat** dan harus tetap privat. Rapor dan bukti keuangan tetap
+disajikan lewat aksi yang sudah melewati policy — tidak ada `Storage::url()`,
+tidak ada tautan bertanda tangan tanpa penjagaan, tidak ada symlink publik.
+
+### Kesiapan kode bukan pemindahan berkas
+
+Batch ini hanya membuat kodenya siap. Setelah di-deploy, langkah operator masih:
+
+1. buat Railway Storage Bucket;
+2. hubungkan kredensialnya ke `smart-sukses`;
+3. hubungkan kredensial yang **sama** ke `smart-sukses-worker`;
+4. setel keempat variabel disk di atas menjadi `s3` pada kedua service;
+5. redeploy keduanya;
+6. terbitkan rapor **baru** yang sintetis;
+7. pastikan worker menulisnya;
+8. pastikan web dapat mengunduhnya;
+9. redeploy sekali lagi;
+10. pastikan berkas itu **masih** dapat diunduh.
+
+Langkah 9–10 yang membuktikannya, bukan langkah 8: berkas di berkas sistem
+sementara pun dapat diunduh sesaat setelah ditulis.
+
+PDF yang sudah telanjur ada di berkas sistem sementara **tidak perlu
+dipindahkan**. Isinya data UAT sintetis dan seluruhnya dapat dibuat ulang dengan
+menerbitkan rapornya lagi.
+
+---
+
+## 5d. Media situs publik — masih terbuka
+
+`SiteSetting::MEDIA_DISK` dan `School::LOGO_DISK` memakai disk `public`, dan
+URL-nya dibangun `Storage::url()`. Di Railway berkas itu ikut sementara: foto
+yang diunggah lewat panel akan hilang pada redeploy berikutnya.
+
+Ini **tidak** diselesaikan di sini, dan tidak boleh diselesaikan dengan
+mengarahkannya ke bucket privat yang sama — kontrak penyajiannya berbeda.
+Pilihannya nanti antara Railway Volume pada service web, atau penyajian lewat
+backend/presigned dari penyimpanan objek. Keputusan itu batch tersendiri.
+
+---
+
 ## 6. Penyimpanan berkas
 
 | Kelas | Disk | Letak | Boleh publik? |
