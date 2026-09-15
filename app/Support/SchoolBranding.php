@@ -87,7 +87,12 @@ class SchoolBranding
             return $path;
         }
 
-        return Storage::disk(School::LOGO_DISK)->url($path);
+        // Berkas yang tercatat tetapi hilang jatuh ke perilaku "belum ada
+        // logo" — nama cabang sebagai teks — bukan ikon gambar rusak di setiap
+        // halaman panel (butir 587).
+        $disk = Storage::disk(School::LOGO_DISK);
+
+        return $disk->exists($path) ? $disk->url($path) : null;
     }
 
     public function brandName(): string

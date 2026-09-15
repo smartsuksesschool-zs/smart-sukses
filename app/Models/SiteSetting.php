@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ReplacedMedia;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 
@@ -19,11 +20,14 @@ use Illuminate\Support\Facades\Cache;
  */
 class SiteSetting extends Model
 {
-    /** Disk berkas publik — sama dengan logo cabang dan foto siswa. */
+    /** Disk berkas publik — sama dengan logo cabang. */
     public const MEDIA_DISK = 'public';
 
     /** Direktori berkas halaman muka di dalam disk publik. */
     public const MEDIA_DIRECTORY = 'site';
+
+    /** Kunci yang nilainya jalur berkas di MEDIA_DISK, bukan teks. */
+    public const IMAGE_KEYS = ['logo_path', 'hero_image_path'];
 
     protected const CACHE_KEY = 'site_settings.all';
 
@@ -73,5 +77,13 @@ class SiteSetting extends Model
         // — form Filament, seeder, tinker — melewati sini.
         static::saved(fn () => self::forget());
         static::deleted(fn () => self::forget());
+
+        // Logo dan gambar utama yang diganti atau dikosongkan membuang berkas
+        // lamanya sesudah nilai barunya tersimpan (butir 587).
+        static::updated(function (self $setting): void {
+            if (in_array($setting->key, self::IMAGE_KEYS, true)) {
+                ReplacedMedia::afterUpdate($setting, 'value', self::MEDIA_DISK, self::MEDIA_DIRECTORY);
+            }
+        });
     }
 }

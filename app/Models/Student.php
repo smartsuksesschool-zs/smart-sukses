@@ -6,6 +6,8 @@ use App\Enums\Gender;
 use App\Enums\StudentClassStatus;
 use App\Enums\StudentStatus;
 use App\Models\Concerns\BelongsToSchool;
+use App\Support\ReplacedMedia;
+use App\Support\StudentPhoto;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -40,6 +42,22 @@ class Student extends Model
         'status',
         'notes',
     ];
+
+    /**
+     * Foto yang diganti atau dikosongkan dibuang dari disk privatnya sesudah
+     * nilai barunya tersimpan: foto anak yang sudah tidak dipakai tidak punya
+     * alasan untuk tetap disimpan (butir 587).
+     */
+    protected static function booted(): void
+    {
+        static::updated(fn (self $student) => ReplacedMedia::afterUpdate(
+            $student, 'photo_url', StudentPhoto::disk(), StudentPhoto::DIRECTORY,
+        ));
+
+        static::deleted(fn (self $student) => ReplacedMedia::afterDelete(
+            $student, 'photo_url', StudentPhoto::disk(), StudentPhoto::DIRECTORY,
+        ));
+    }
 
     protected function casts(): array
     {

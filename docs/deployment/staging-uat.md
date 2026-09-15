@@ -288,7 +288,7 @@ dari worker, dan web-lah yang harus menyajikannya. Tanpa penyimpanan bersama,
 tombol unduhnya tidak pernah muncul dan tidak ada satu pun galat yang
 menjelaskan mengapa.
 
-### Empat disk yang dapat dikonfigurasi
+### Lima disk yang dapat dikonfigurasi
 
 | Variabel | Bawaan | Isi berkas | Dibagi web+worker? |
 | --- | --- | --- | --- |
@@ -296,9 +296,15 @@ menjelaskan mengapa.
 | `PAYMENT_PROOF_DISK` | `local` | bukti pembayaran | tidak |
 | `TRANSACTION_PROOF_DISK` | `local` | bukti transaksi kas | tidak |
 | `PPDB_PRIVATE_DISK` | `local` | dokumen pendaftar PPDB | tidak |
+| `STUDENT_PHOTO_DISK` | `local` | foto siswa | tidak |
 
-Tiga yang terakhir tidak dibagi antar service, tetapi ketahanannya sama
-pentingnya — itu dokumen keuangan dan dokumen identitas.
+Empat yang terakhir tidak dibagi antar service, tetapi ketahanannya sama
+pentingnya — itu dokumen keuangan, dokumen identitas, dan foto anak.
+
+Foto siswa baru masuk daftar ini di butir 587. Sebelumnya ia di disk publik dan
+dapat dibuka siapa pun yang memegang URL-nya; kini ia hanya disajikan lewat rute
+panel `/admin/siswa/{id}/foto`, yang memeriksa cabang, kelas ajar guru, dan
+`StudentPolicy::view` pada setiap permintaan.
 
 Kosongkan seluruhnya untuk pemasangan dengan berkas sistem yang menetap; di
 sana `local` tetap jawaban yang benar.
@@ -310,10 +316,10 @@ sana `local` tetap jawaban yang benar.
 objek S3. Menyetel `FILESYSTEM_DISK=s3` akan menukar satu masalah dengan masalah
 lain yang lebih sunyi.
 
-Media situs publik (`SiteSetting::MEDIA_DISK`, `School::LOGO_DISK`) juga tidak
-ikut. Keduanya disajikan lewat `Storage::url()` dan mengandalkan disk publik,
-sedangkan Railway Storage Bucket bersifat privat. Memindahkannya menuntut
-keputusan penyajian tersendiri — lihat §5d.
+Media publik (`SiteSetting::MEDIA_DISK`, `School::LOGO_DISK`,
+`User::AVATAR_DISK`) juga tidak ikut. Ketiganya disajikan lewat URL disk publik,
+sedangkan Railway Storage Bucket bersifat privat. Ketahanannya lewat Railway
+Volume — lihat §5d.
 
 ### Variabel pada KEDUA service
 
@@ -324,7 +330,12 @@ REPORT_CARD_DISK=s3
 PAYMENT_PROOF_DISK=s3
 TRANSACTION_PROOF_DISK=s3
 PPDB_PRIVATE_DISK=s3
+STUDENT_PHOTO_DISK=s3
 ```
+
+`STUDENT_PHOTO_DISK` hanya dibaca web, tetapi menyetelnya juga di worker tidak
+berbahaya dan menjaga kedua daftar variabel tetap identik. Tidak ada kredensial
+baru: foto siswa memakai bucket dan referensi variabel yang sama persis.
 
 Kredensial bucket masuk lewat **referensi variabel Railway**, bukan disalin:
 
@@ -352,7 +363,7 @@ Batch ini hanya membuat kodenya siap. Setelah di-deploy, langkah operator masih:
 1. buat Railway Storage Bucket;
 2. hubungkan kredensialnya ke `smart-sukses`;
 3. hubungkan kredensial yang **sama** ke `smart-sukses-worker`;
-4. setel keempat variabel disk di atas menjadi `s3` pada kedua service;
+4. setel kelima variabel disk di atas menjadi `s3` pada kedua service;
 5. redeploy keduanya;
 6. terbitkan rapor **baru** yang sintetis;
 7. pastikan worker menulisnya;
@@ -367,18 +378,151 @@ PDF yang sudah telanjur ada di berkas sistem sementara **tidak perlu
 dipindahkan**. Isinya data UAT sintetis dan seluruhnya dapat dibuat ulang dengan
 menerbitkan rapornya lagi.
 
+Untuk foto siswa, buktinya sama: unggah foto **sintetis** (bukan foto anak
+sungguhan) pada satu siswa sintetis, pastikan tampil di Data Siswa, redeploy,
+pastikan masih tampil — lalu pastikan URL gambarnya `/admin/siswa/{id}/foto`,
+dan bahwa URL itu dibuka tanpa login berakhir di halaman masuk.
+
 ---
 
-## 5d. Media situs publik — masih terbuka
+## 5d. Media publik — Railway Volume pada service web
 
-`SiteSetting::MEDIA_DISK` dan `School::LOGO_DISK` memakai disk `public`, dan
-URL-nya dibangun `Storage::url()`. Di Railway berkas itu ikut sementara: foto
-yang diunggah lewat panel akan hilang pada redeploy berikutnya.
+Semua media publik ditulis ke disk `public` dan disajikan lewat
+`Storage::url()` → `/storage/…`. Di Railway berkas itu ikut sementara: gambar
+yang diunggah lewat panel hilang pada redeploy berikutnya, sementara basis data
+tetap menyimpan lintasannya — hasilnya gambar rusak, bukan galat.
 
-Ini **tidak** diselesaikan di sini, dan tidak boleh diselesaikan dengan
-mengarahkannya ke bucket privat yang sama — kontrak penyajiannya berbeda.
-Pilihannya nanti antara Railway Volume pada service web, atau penyajian lewat
-backend/presigned dari penyimpanan objek. Keputusan itu batch tersendiri.
+Jawabannya **Railway Volume pada service web, dipasang tepat di akar disk
+publik**. Volume sendiri tidak menuntut perubahan kode; kontrak yang
+diandalkannya dijaga `tests/Feature/Ops/PublicMediaStorageContractTest.php`
+(butir 586).
+
+### Yang tersimpan di disk publik — dan hanya itu isi Volume
+
+| Kategori | Ditulis dari | Direktori |
+| --- | --- | --- |
+| Gambar blok halaman muka | Panel → Blok Situs | `site/` |
+| Logo & gambar utama situs | Panel → Pengaturan Situs Publik | `site/` |
+| Logo cabang | Panel → Cabang / Pengaturan Tampilan | `schools/logos/` |
+| Foto profil pengguna | Panel → Pengguna | `avatars/` |
+
+**Foto siswa bukan isi Volume ini.** Ia data pribadi anak dan sejak butir 587
+tinggal di disk privat `STUDENT_PHOTO_DISK` (§5c), disajikan hanya lewat rute
+panel berwenang.
+
+Keempatnya ditulis **hanya oleh service web** (unggahan Filament). Tidak ada job
+antrean yang menulis maupun membaca berkas publik, dan templat PDF rapor — yang
+dirender worker — tidak menyematkan satu pun gambar. Karena itu Volume **tidak**
+dipasang pada `smart-sukses-worker`. Bila kelak sebuah job mulai menyentuh media
+publik, test kontrak di atas menjadi merah lebih dulu.
+
+Berkas privat (§5c) tidak pernah menyentuh disk publik dan tidak terpengaruh
+Volume ini.
+
+### Lintasan mount: `/app/storage/app/public`
+
+Akar aplikasi di image Railpack adalah `/app`, dan akar disk publik adalah
+`storage_path('app/public')`. Lintasannya karena itu **`/app/storage/app/public`**
+— bukan `/app/storage`, dan bukan `/app/public/storage`.
+
+| Lintasan | Mengapa tidak |
+| --- | --- |
+| `/app/storage` | Ikut mempersistenkan `app/private` (temp impor Excel yang memuat data siswa, unggahan sementara Livewire, PDF rapor bawaan), `framework/` (cache view dan temp laravel-excel), serta log — semuanya ke Volume yang dimaksudkan untuk gambar publik. |
+| `/app/public/storage` | Itu tautan simbolik yang dibuat `storage:link`, bukan direktori. Volume di sana menutupi tautannya, dan unggahan tetap ditulis ke direktori sementara. |
+
+Satu-satunya berkas repositori di `storage/app/public` adalah `.gitignore`, dan
+Volume akan menutupinya (Volume tidak dipasang sebagai overlay). Itu tidak
+berpengaruh apa pun terhadap aplikasi.
+
+### Tautan `/storage` sudah dibuat Railpack
+
+`public/storage` di-gitignore dan tidak ada skrip composer yang menjalankan
+`storage:link`. Yang membuatnya adalah skrip start Railpack: setiap container
+start ia menjalankan `migrate --force`, lalu `php artisan storage:link`, lalu
+`optimize`. Terbukti di staging yang berjalan: `/storage/.gitignore` menjawab
+200 dengan isi berkas repositori.
+
+Volume dipasang saat container start, bukan saat build — tautannya menunjuk
+direktori mount itu sendiri, jadi urutan ini tetap benar tanpa perubahan.
+
+### Batasan Railway Volume (dokumentasi resmi)
+
+- **Satu Volume per service.** Service web tidak dapat punya Volume kedua kelak.
+- **Replika tidak dapat dipakai bersama Volume.** Service web terkunci pada satu
+  instance selama Volume terpasang.
+- **Redeploy menimbulkan jeda singkat**, bahkan dengan healthcheck, karena
+  Volume harus dilepas dari container lama sebelum dipasang ke yang baru.
+- **Image non-root** membutuhkan `RAILWAY_RUN_UID=0` agar dapat menulis ke
+  Volume. Setel hanya bila unggahan gagal dengan galat izin tulis.
+- **Ukuran** mengikuti paket: 0,5 GB (Free/Trial), 5 GB (Hobby), 50 GB (Pro).
+  Batas unggahan di panel 2–4 MB per berkas. Harga tidak dicantumkan di sini —
+  lihat halaman Railway.
+- **Backup** Volume tersedia (manual dan terjadwal); aktifkan sebelum data
+  sungguhan masuk.
+
+Dokumentasi Railway tidak menyatakan secara eksplisit bahwa isi Volume bertahan
+melewati redeploy. Itu yang dibuktikan langkah 9–10 di bawah, bukan diasumsikan.
+
+### Langkah operator (belum dijalankan)
+
+0. **Prasyarat:** commit yang memindahkan foto siswa ke disk privat (butir 587)
+   sudah ter-deploy di `smart-sukses`. Memasang Volume lebih dulu berarti foto
+   siswa yang diunggah di antaranya ikut menetap di Volume publik.
+1. Tambahkan Volume pada service **`smart-sukses`** saja — bukan worker.
+2. Lintasan mount: `/app/storage/app/public`.
+3. `FILESYSTEM_DISK` **tetap `local`**.
+4. Variabel penyimpanan privat §5c (`REPORT_CARD_DISK` dan seterusnya, serta
+   kredensial bucket) **tidak disentuh**.
+5. Tidak ada variabel baru untuk media publik; `storage:link` sudah dijalankan
+   Railpack.
+6. Redeploy `smart-sukses`. Sesudahnya, `/storage/.gitignore` kini menjawab
+   **403** (404 bila `APP_ENV=production`), bukan 200 — tanda Volume yang masih
+   kosong sudah menutupi direktorinya. Bila masih 200, Volume belum terpasang di
+   lintasan yang benar.
+7. Unggah satu gambar **sintetis** (bukan foto orang) sebagai gambar blok
+   halaman muka.
+8. Pastikan gambarnya tampil di halaman muka dan URL `/storage/site/…`-nya
+   menjawab 200.
+9. Redeploy `smart-sukses` sekali lagi.
+10. Pastikan gambar yang **sama** masih tampil dan URL yang sama masih 200.
+11. Ganti gambarnya dengan gambar sintetis kedua: yang baru tampil, URL lama
+    menjawab 403/404 (berkas lama dibuang sesudah penggantinya tersimpan).
+    Hapus bloknya: URL-nya ikut hilang. Logo situs, logo cabang, dan foto
+    profil berperilaku sama sejak butir 587.
+12. Pastikan penyimpanan privat tidak terpengaruh: terbitkan rapor sintetis,
+    unduh dari web, dan pastikan tidak ada berkas privat yang dapat diambil
+    lewat `/storage/…` tanpa tanda tangan. Foto siswa sintetis tampil di Data
+    Siswa lewat `/admin/siswa/{id}/foto`, **tidak pernah** lewat `/storage/…`,
+    dan Volume tidak memuat direktori `student-photos/` maupun `students/`.
+
+Langkah 9–10 yang membuktikannya. Gambar yang baru ditulis ke berkas sistem
+sementara pun tampil sesaat setelah diunggah.
+
+**Gambar yang diunggah sebelum Volume terpasang sudah hilang** — lintasannya
+masih di basis data, berkasnya tidak. Logo situs, gambar utama, gambar blok,
+dan logo cabang perlu **diunggah ulang** sesudah langkah 10. Sampai itu terjadi,
+aplikasi tidak menampilkan gambar rusak: logo situs jatuh ke logo bawaan di
+`public/images/brand` (ikut image), gambar blok ke penandanya, dan logo cabang
+ke nama cabang sebagai teks (butir 587).
+
+### Rollback
+
+Lepaskan Volume dari service lalu redeploy. **Jangan hapus Volume-nya**: isinya
+tetap utuh dan dapat dipasang kembali di lintasan yang sama. Selama terlepas,
+aplikasi kembali ke perilaku sebelumnya — unggahan baru hilang pada redeploy
+berikutnya — tanpa satu pun perubahan kode atau variabel yang perlu dibatalkan.
+
+### Catatan: foto siswa lama
+
+Sebelum butir 587 foto siswa disimpan di disk publik (`students/…`). Baris yang
+masih menyimpan jalur lama itu kini diperlakukan sebagai **belum punya foto** —
+tidak disajikan, dan tidak dicari di disk publik. Di Railway berkasnya memang
+sudah tidak ada: berkas sistem sementara dikosongkan oleh deploy yang membawa
+perubahan ini, sebelum Volume mana pun terpasang. Fotonya cukup diunggah ulang
+lewat panel, dan akan mendarat di disk privat.
+
+Foto anak sungguhan tetap tidak diunggah ke staging; UAT memakai gambar
+sintetis.
 
 ---
 
@@ -386,7 +530,9 @@ backend/presigned dari penyimpanan objek. Keputusan itu batch tersendiri.
 
 | Kelas | Disk | Letak | Boleh publik? |
 | --- | --- | --- | --- |
-| Logo & galeri halaman muka | `public` | `storage/app/public` | ya, lewat `storage:link` |
+| Logo & galeri halaman muka, logo cabang, foto profil | `public` | `storage/app/public` | ya, lewat `storage:link` (§5d) |
+| Foto siswa | `local` (`STUDENT_PHOTO_DISK`) | `storage/app/private/student-photos` | **tidak** — hanya lewat rute panel berwenang |
+| PDF rapor | `local` (`REPORT_CARD_DISK`) | `storage/app/private` | **tidak** |
 | Dokumen PPDB | `local` | `storage/app/private` | **tidak** |
 | Bukti pembayaran | `local` | `storage/app/private` | **tidak** |
 | Bukti transaksi kas | `local` | `storage/app/private` | **tidak** |

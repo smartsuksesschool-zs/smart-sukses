@@ -9,6 +9,7 @@ use App\Filament\Resources\StudentResource\Pages;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\StudentPhoto;
 use App\Support\TeacherClassVisibility;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -18,6 +19,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\Unique;
 
 /**
@@ -97,12 +99,17 @@ class StudentResource extends Resource
             Forms\Components\Section::make(__('Foto'))
                 ->schema([
                     // SIS-03: JPG/PNG/WEBP, maks 2 MB, auto-resize 400x400.
+                    //
+                    // Disk privat; pratinjaunya dimuat lewat rute berwenang,
+                    // bukan URL disk dan bukan URL bertanda tangan (butir 587).
                     Forms\Components\FileUpload::make('photo_url')
                         ->label(__('Foto Siswa'))
                         ->image()
                         ->avatar()
-                        ->disk('public')
-                        ->directory('students')
+                        ->disk(fn () => StudentPhoto::disk())
+                        ->directory(StudentPhoto::DIRECTORY)
+                        ->visibility('private')
+                        ->getUploadedFileUsing(fn (?Student $record, string $file): ?array => static::storedPhotoPreview($record, $file))
                         ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
                         ->maxSize(2048)
                         ->imageResizeMode('cover')
@@ -169,10 +176,12 @@ class StudentResource extends Resource
     {
         return $table
             ->columns([
+                // Status kolomnya URL rute berwenang, sehingga ImageColumn
+                // tidak pernah membangun URL dari disk (butir 587).
                 Tables\Columns\ImageColumn::make('photo_url')
                     ->label(__('Foto'))
                     ->circular()
-                    ->disk('public')
+                    ->getStateUsing(fn (Student $record): ?string => StudentPhoto::url($record))
                     ->defaultImageUrl(fn () => null),
 
                 Tables\Columns\TextColumn::make('nis')
@@ -265,6 +274,39 @@ class StudentResource extends Resource
     protected static function currentSchoolId(): ?int
     {
         return Auth::user()?->school_id;
+    }
+
+    /**
+     * Pratinjau foto tersimpan pada form edit.
+     *
+     * Pengganti bawaan Filament, yang untuk visibilitas privat membuat URL
+     * bertanda tangan lima menit — tautan yang dapat dibuka siapa pun yang
+     * memegangnya. Di sini URL-nya rute berwenang, dan hanya untuk berkas yang
+     * memang milik record ini.
+     *
+     * @return array{name: string, size: int, type: ?string, url: string}|null
+     */
+    protected static function storedPhotoPreview(?Student $record, string $file): ?array
+    {
+        if ($record === null || $file !== $record->photo_url) {
+            return null;
+        }
+
+        $path = StudentPhoto::storedPath($record);
+        $url = StudentPhoto::url($record);
+
+        if ($path === null || $url === null) {
+            return null;
+        }
+
+        $disk = Storage::disk(StudentPhoto::disk());
+
+        return [
+            'name' => basename($path),
+            'size' => $disk->size($path),
+            'type' => $disk->mimeType($path) ?: null,
+            'url' => $url,
+        ];
     }
 
     /**

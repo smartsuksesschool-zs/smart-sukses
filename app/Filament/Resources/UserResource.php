@@ -65,8 +65,13 @@ class UserResource extends Resource
                         ->label(__('Foto Profil'))
                         ->image()
                         ->avatar()
-                        ->disk('public')
-                        ->directory('avatars')
+                        ->disk(User::AVATAR_DISK)
+                        ->directory(User::AVATAR_DIRECTORY)
+                        // `->image()` saja menghasilkan `mimetypes:image/*`, yang
+                        // meloloskan SVG — berkas yang dapat membawa skrip dan
+                        // disajikan dari origin aplikasi. Batasnya disamakan
+                        // dengan unggahan gambar lain (butir 587).
+                        ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
                         ->maxSize(2048),
                 ]),
 

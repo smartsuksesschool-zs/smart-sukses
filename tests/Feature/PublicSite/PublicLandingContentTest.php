@@ -11,6 +11,7 @@ use Database\Seeders\PublicSiteSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -154,6 +155,11 @@ class PublicLandingContentTest extends TestCase
 
     public function test_logo_dapat_diganti_dari_pengaturan(): void
     {
+        // Berkasnya harus benar-benar ada: jalur saja jatuh ke logo bawaan
+        // (butir 587).
+        Storage::fake(SiteSetting::MEDIA_DISK);
+        Storage::disk(SiteSetting::MEDIA_DISK)->put('site/logo-baru.webp', 'logo-sintetis');
+
         SiteSetting::set('logo_path', 'site/logo-baru.webp');
 
         $html = $this->html();
@@ -385,6 +391,9 @@ class PublicLandingContentTest extends TestCase
 
     public function test_foto_yang_diunggah_menggantikan_penandanya(): void
     {
+        Storage::fake(SiteSetting::MEDIA_DISK);
+        Storage::disk(SiteSetting::MEDIA_DISK)->put('site/contoh.webp', 'foto-sintetis');
+
         SiteBlock::create([
             'type' => SiteBlockType::Gallery->value,
             'title' => 'Kegiatan Contoh',

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ReplacedMedia;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -15,11 +16,14 @@ class School extends Model
     use HasFactory;
 
     /**
-     * Disk penyimpanan logo white-label. Mengikuti pola `students.photo_url`
-     * dan berkas PPDB (butir 17): logo memang harus dapat dimuat browser tanpa
-     * otorisasi, karena ikut tampil di halaman publik PPDB.
+     * Disk penyimpanan logo white-label. Logo memang harus dapat dimuat browser
+     * tanpa otorisasi, karena ikut tampil di halaman publik PPDB (butir 42).
+     * Foto siswa dan berkas PPDB yang dulu berbagi disk ini sudah pindah ke
+     * disk privat (butir 411, 587).
      */
     public const LOGO_DISK = 'public';
+
+    public const LOGO_DIRECTORY = 'schools/logos';
 
     protected $fillable = [
         'name',
@@ -46,6 +50,18 @@ class School extends Model
             'attitude_scale' => 'array',
             'is_active' => 'boolean',
         ];
+    }
+
+    /**
+     * Logo yang diganti atau dikosongkan — dari Master Cabang maupun Pengaturan
+     * Tampilan — membuang berkas lamanya sesudah nilai barunya tersimpan. Logo
+     * berupa URL penuh tidak pernah disentuh (butir 587).
+     */
+    protected static function booted(): void
+    {
+        static::updated(fn (self $school) => ReplacedMedia::afterUpdate(
+            $school, 'logo_url', self::LOGO_DISK, self::LOGO_DIRECTORY,
+        ));
     }
 
     public function users(): HasMany

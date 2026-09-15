@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\AuthProvider;
 use App\Enums\RoleName;
 use App\Models\Concerns\BelongsToSchool;
+use App\Support\ReplacedMedia;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasAvatar;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -25,6 +27,15 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
 {
     /** @use HasFactory<UserFactory> */
     use BelongsToSchool, HasApiTokens, HasFactory, HasRoles, Notifiable;
+
+    /**
+     * Foto profil tetap media publik: tidak ada dokumen yang menuntutnya
+     * privat, dan panel memuatnya di bilah atas setiap halaman. Yang dijaga
+     * adalah formatnya — hanya gambar raster (butir 587).
+     */
+    public const AVATAR_DISK = 'public';
+
+    public const AVATAR_DIRECTORY = 'avatars';
 
     /**
      * The attributes that are mass assignable.
@@ -57,6 +68,16 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
                 $user->must_change_password = false;
             }
         });
+
+        // Foto profil yang diganti, dikosongkan, atau ikut terhapus bersama
+        // akunnya tidak meninggalkan berkas yatim di disk publik (butir 587).
+        static::updated(fn (self $user) => ReplacedMedia::afterUpdate(
+            $user, 'avatar_url', self::AVATAR_DISK, self::AVATAR_DIRECTORY,
+        ));
+
+        static::deleted(fn (self $user) => ReplacedMedia::afterDelete(
+            $user, 'avatar_url', self::AVATAR_DISK, self::AVATAR_DIRECTORY,
+        ));
     }
 
     /**
@@ -141,9 +162,26 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         return $this->is_active && (bool) $this->primaryRole()?->canAccessAdminPanel();
     }
 
+    /**
+     * URL foto profil untuk panel, atau NULL agar Filament memakai avatar
+     * inisialnya.
+     *
+     * Kolomnya menyimpan jalur di disk publik (`avatars/…`), bukan URL.
+     * Mengembalikannya mentah membuat peramban memuat jalur relatif terhadap
+     * halaman yang sedang dibuka, sehingga foto yang diunggah tidak pernah
+     * tampil. Berkas yang tercatat tetapi hilang juga NULL — bukan gambar rusak
+     * di bilah atas setiap halaman (butir 587).
+     */
     public function getFilamentAvatarUrl(): ?string
     {
-        return $this->avatar_url;
+        $path = ReplacedMedia::within($this->avatar_url, self::AVATAR_DIRECTORY);
+        $disk = Storage::disk(self::AVATAR_DISK);
+
+        if ($path === null || ! $disk->exists($path)) {
+            return null;
+        }
+
+        return $disk->url($path);
     }
 
     public function scopeActive(Builder $query): Builder
