@@ -4,14 +4,16 @@ use App\Models\ReportCard;
 use App\Services\Finance\PaymentRecorder;
 use App\Services\Finance\TransactionRecorder;
 use App\Support\PpdbDocument;
+use App\Support\StudentPhoto;
 
 /*
 |------------------------------------------------------------------------------
 | Disk untuk berkas privat yang harus bertahan
 |------------------------------------------------------------------------------
 |
-| Empat kategori berkas di aplikasi ini bersifat privat **dan** harus bertahan:
-| PDF rapor, bukti pembayaran, bukti transaksi kas, dan dokumen pendukung PPDB.
+| Lima kategori berkas di aplikasi ini bersifat privat **dan** harus bertahan:
+| PDF rapor, bukti pembayaran, bukti transaksi kas, dokumen pendukung PPDB, dan
+| foto siswa.
 | Seluruhnya kini memakai disk `local` (storage/app/private), dan di server
 | sungguhan itu tetap jawaban yang benar.
 |
@@ -66,5 +68,12 @@ return [
     | mengundang berkas baru lahir di sana lagi (M-1).
     */
     'ppdb_document_disk' => env('PPDB_PRIVATE_DISK', PpdbDocument::DISK),
+
+    /*
+    | Foto siswa. Diunggah admin lewat panel, disajikan hanya lewat rute
+    | berwenang — foto anak di bawah umur bukan media publik (butir 587).
+    | Web saja; tidak ada job yang membacanya.
+    */
+    'student_photo_disk' => env('STUDENT_PHOTO_DISK', StudentPhoto::DISK),
 
 ];

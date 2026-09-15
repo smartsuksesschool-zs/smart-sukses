@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Http\Controllers\Admin\PpdbDocumentController;
+use App\Http\Controllers\Admin\StudentPhotoController;
 use App\Http\Controllers\Admin\StudentTemplateController;
 use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\RecordAuditIpAddress;
@@ -143,6 +144,10 @@ class AdminPanelProvider extends PanelProvider
             ->authenticatedRoutes(fn () => Route::get(
                 'siswa/template-import',
                 StudentTemplateController::class,
-            )->name('students.import-template'));
+            )->name('students.import-template'))
+            ->authenticatedRoutes(fn () => Route::get(
+                'siswa/{student}/foto',
+                StudentPhotoController::class,
+            )->whereNumber('student')->name('students.photo'));
     }
 }

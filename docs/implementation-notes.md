@@ -10298,6 +10298,175 @@ lihat `docs/deployment/staging-uat.md` §5c. Membuktikannya dengan mengunduh
 sesaat setelah menulis tidak membuktikan apa pun; berkas di penyimpanan
 sementara pun lulus uji itu.
 
+### 586. Media publik bertahan lewat Volume, bukan lewat kode
+
+Butir 585 menyisakan satu kategori: berkas di disk `public`. Di Railway ia sama
+sementaranya dengan berkas privat — logo, gambar utama, dan gambar blok yang
+diunggah lewat panel hilang pada redeploy, sementara basis data tetap menyimpan
+lintasannya. Gejalanya gambar rusak, bukan galat.
+
+**Audit seluruh penulis disk publik.** Ada lima, dan kelimanya unggahan Filament
+di service web: gambar blok situs dan logo/gambar utama situs (`site/`), logo
+cabang (`schools/logos/`), foto profil pengguna (`avatars/`), dan foto siswa
+(`students/` — sejak butir 587 pindah ke disk privat, sehingga isi Volume
+tinggal empat). Basis data menyimpan lintasan relatif; logo cabang boleh juga
+URL penuh dan `SchoolBranding` meneruskannya apa adanya. Di luar itu disk
+publik hanya disentuh `ppdb:privatize-documents`, yang **mengosongkan** sisa
+dokumen PPDB lama dari sana.
+
+Yang **tidak** ada di disk publik: keempat kategori privat M10A, temp impor Excel
+dan unggahan sementara Livewire (disk `local`), serta ekspor dan PDF portal yang
+dialirkan langsung tanpa pernah ditulis.
+
+**Keputusannya: Railway Volume pada service web, dipasang di
+`/app/storage/app/public`. Volume sendiri tidak menuntut perubahan kode
+aplikasi.** Tiga fakta yang membuatnya cukup, dan ketiganya tinggal di
+repositori ini:
+
+1. Seluruh media publik mendarat di satu direktori, akar disk `public`, sehingga
+   satu Volume di sana menangkap semuanya.
+2. `storage:link` menautkan `public/storage` ke direktori itu — dan skrip start
+   Railpack menjalankannya setiap container start, sesudah Volume terpasang.
+   Terbukti di staging: `/storage/.gitignore` menjawab 200 dengan isi berkas
+   repositori. Tidak perlu skrip composer atau langkah deploy baru.
+3. Tidak ada job yang menulis atau membaca berkas publik, dan templat PDF rapor
+   yang dirender worker tidak menyematkan satu pun gambar. Volume cukup di web.
+
+**Yang ditolak.** Memasang di `/app/storage` akan mempersistenkan
+`app/private` — temp impor Excel yang memuat data siswa, unggahan sementara
+Livewire — serta cache view, temp laravel-excel, dan log, ke Volume yang
+dimaksudkan untuk gambar publik dan dibatasi 0,5 GB di paket Trial. Memasang di
+`/app/public/storage` menutupi tautannya sendiri. Memindahkan media publik ke
+bucket M10A ditolak karena bucket-nya privat: `Storage::url()` akan menghasilkan
+URL yang tidak dapat dibuka, dan menyajikannya lewat backend atau URL presigned
+adalah perubahan kontrak untuk berkas yang memang dimaksudkan publik.
+
+**Test menjaga kontrak, bukan Volume-nya.** Railway Volume tidak dapat diuji dari
+sini, dan fakta 1–3 dapat rusak tanpa satu pun galat: akar disk dipindah,
+tautan diarahkan ke tempat lain, atau sebuah job mulai menyematkan logo cabang —
+berkasnya hanya diam-diam berhenti bertahan. `PublicMediaStorageContractTest`
+menjaga ketiganya, ditambah bentuk URL `/storage/…` tanpa tanda tangan dan
+jaminan tidak satu pun kategori privat jatuh ke disk publik. Terbukti menangkap
+regresinya: dengan job sintetis yang menulis ke disk publik dan `<img>` yang
+disisipkan ke templat rapor, dua test menjadi merah; keduanya dipulihkan sesudah
+itu.
+
+**Foto siswa tidak ikut Volume.** Ia di disk publik dengan nama acak,
+penyimpangan yang sudah tercatat (butir 17, 42). Volume tidak mengubah sifat
+itu, tetapi membuatnya bertahan — foto yang dulu ikut hilang pada redeploy akan
+menetap dan tetap dapat dibuka siapa pun yang memegang URL-nya. Keputusannya:
+foto siswa pindah ke disk privat (butir 587).
+
+Audit ini juga menemukan empat cacat di sekitar media publik — SVG lolos sebagai
+foto profil, URL foto profil yang tidak pernah tampil, pembaca gambar yang tidak
+memeriksa keberadaan berkas, dan berkas yatim saat diganti. Keempatnya
+diperbaiki di butir 587.
+
+Langkah operator, batasan Volume, dan rollback-nya: `docs/deployment/staging-uat.md`
+§5d. Gambar yang diunggah sebelum Volume terpasang sudah hilang dan perlu
+diunggah ulang.
+
+### 587. Foto siswa pindah ke disk privat; media publik diperketat
+
+**Foto siswa bukan media publik.** Penyimpangan dari butir 17 dan 42 ditunda
+selama berkasnya ikut hilang pada setiap redeploy Railway. Volume publik (butir
+586) akan membuatnya menetap — foto anak di bawah umur, dapat dibuka siapa pun
+yang memegang URL-nya. Penundaannya berakhir di sini.
+
+Audit pemakainya lebih dulu, sebelum memilih cara penyajian:
+
+- **Pengunggah:** Admin Sekolah lewat panel (SIS-03). Tidak ada unggahan dari
+  API — `POST /students/{id}/photo` di dokumen API belum pernah dibuat.
+- **Penampil:** hanya panel staf — kolom foto di Data Siswa dan pratinjau form
+  edit. Portal siswa dan orang tua, maupun API-nya, hanya menerima `has_photo`
+  (butir 118) — tidak pernah fotonya.
+- **Tidak ada** halaman publik, ekspor, PDF rapor, atau job antrean yang
+  memakai foto siswa.
+- **Kolom** menyimpan jalur relatif. **Batas cabang** sudah ada: SchoolScope
+  pada model, visibilitas kelas guru di StudentResource, dan
+  `StudentPolicy::view`.
+
+Karena satu-satunya pemakai adalah panel staf, penyajiannya rute panel juga,
+dengan pola yang sudah dipakai berkas PPDB: `GET /admin/siswa/{student}/foto`,
+didaftarkan lewat `authenticatedRoutes()` sehingga melewati sesi dan middleware
+panel yang persis sama. Pagarnya tiga — route model binding dengan SchoolScope
+(cabang lain 404), TeacherClassVisibility (guru hanya melihat siswa yang juga
+tampil di daftarnya), dan `StudentPolicy::view` (Super Admin lolos lewat
+`Gate::before`). Tidak ada izin baru. SISWA dan ORANG_TUA ditolak panel sebelum
+sampai ke sana, dan itu disengaja: produknya memang tidak menampilkan foto di
+portal.
+
+**Yang ditolak: URL bertanda tangan.** Untuk visibilitas privat, FileUpload dan
+ImageColumn Filament membuat `temporaryUrl()` lima menit — pada disk `local` itu
+tautan bertanda tangan ke rute `/storage/{path}`, pada S3 URL presigned.
+Keduanya dapat dibuka siapa pun yang memegangnya selama masih berlaku, tanpa
+sesi. Pratinjau form dan kolom tabel karena itu diganti dengan URL rute
+berwenang. URL itu membawa parameter `v` dari hash jalur, sehingga foto yang
+diganti tidak tampil dari cache peramban; responsnya `Cache-Control: private`.
+
+**Disk:** `config('storage.student_photo_disk')`, variabel `STUDENT_PHOTO_DISK`,
+bawaan `local`. Nilai kosong berarti bawaan, bukan string kosong — terbukti
+`Storage::disk('')` diam-diam jatuh ke `FILESYSTEM_DISK`, dan foto anak tidak
+boleh ikut ke mana pun disk bawaan itu kelak diarahkan. Direktorinya **baru**
+(`student-photos/`), bukan `students/` lama: jalur lama menunjuk disk publik,
+dan baris yang masih menyimpannya diperlakukan sebagai belum punya foto — tidak
+pernah dicari di disk publik. Tidak ada perintah pemindahan: basis data lokal
+tidak punya satu pun foto siswa, dan di Railway berkas sistem sementara
+dikosongkan oleh deploy yang membawa perubahan ini. Ekstensi dibatasi ke
+jpg/jpeg/png/webp, di pengunggah maupun di jalur baca.
+
+**Empat temuan butir 586, diperbaiki:**
+
+1. *SVG lolos sebagai foto profil.* `->image()` saja menghasilkan
+   `mimetypes:image/*`. Kini `acceptedFileTypes` JPG/PNG/WEBP, sama dengan
+   unggahan gambar lain. Kelima unggahan gambar sudah diaudit dan seluruhnya
+   berbatas.
+2. *Foto profil tidak pernah tampil.* `getFilamentAvatarUrl()` mengembalikan
+   `avatars/…` mentah; kini URL disk publik, dan NULL untuk berkas yang hilang
+   atau jalur di luar `avatars/` — Filament lalu memakai avatar inisialnya.
+   Foto profil tetap publik: tidak ada dokumen yang menuntutnya privat.
+3. *Pembaca gambar tidak memeriksa berkas.* `SiteBlock::imageUrl()` (dan
+   `hasImage()`), `PublicSite::logoUrl()`/`heroImageUrl()`, serta
+   `SchoolBranding::logoUrl()` kini memastikan berkasnya ada. Yang hilang jatuh
+   ke bawaan yang sudah ada: penanda foto, logo bawaan, atau nama cabang sebagai
+   teks. Tampilan tidak berubah.
+4. *Berkas yatim.* Satu pembantu, `ReplacedMedia`, dipakai logo & gambar utama
+   situs, logo cabang, foto profil, foto siswa, dan — menggantikan kodenya
+   sendiri — blok situs. Berkas lama dibuang dari event `updated`/`deleted`
+   lewat `DB::afterCommit`, jadi tidak pernah lebih dulu dari baris yang
+   merujuknya. Blok situs sebelumnya membuang dari `updating`, **sebelum**
+   perubahan tersimpan; penggantian yang gagal meninggalkan baris yang merujuk
+   berkas yang sudah dihapus. Pagarnya: hanya jalur di dalam direktori kolom
+   itu, tanpa `..`; URL penuh tidak disentuh; berkas yang masih dirujuk baris
+   lain — di cabang mana pun — tidak dihapus; kunci teks situs tidak pernah
+   menghapus apa pun. Tidak ada penyapuan massal.
+
+**Terbukti menangkap regresinya.** Sembilan mutasi dipasang satu per satu, dan
+setiap mutasi membuat test merah: filter SVG dicabut, URL avatar mentah,
+pemeriksaan berkas di blok dan logo situs dicabut, penghapusan tanpa menunggu
+commit, foto siswa tanpa pembuangan, disk foto kembali `public`, pagar kelas
+guru dicabut, dan pratinjau kembali ke URL bertanda tangan. Seluruhnya
+dipulihkan sesudahnya.
+
+**Test kontrak Volume** kini menegaskan isi Volume hanya empat kategori publik,
+foto siswa di disk privat yang dapat dikonfigurasi, dan hanya empat pembaca
+media publik yang membangun URL disk — dipindai dari kode `app/` tanpa
+komentar, sehingga `Storage::url()` atau `temporaryUrl()` baru di tempat lain
+langsung merah.
+
+**Catatan di luar cakupan, tidak diubah:**
+
+- Keempat resolver disk privat M10A membaca config mentah. `REPORT_CARD_DISK=`
+  yang kosong menghasilkan `''`, lalu `Storage::disk('')` jatuh ke
+  `FILESYSTEM_DISK`. Aman selama `FILESYSTEM_DISK=local`, seperti yang memang
+  diwajibkan runbook; perbaikannya menyentuh penyimpanan M10A dan menunggu batch
+  tersendiri.
+- API `GET /auth/me` (`Api\UserResource`) masih mengembalikan `avatar_url`
+  mentah. Mengubahnya mengubah kontrak API.
+- `has_photo` di portal masih `filled(photo_url)`, sehingga baris dengan jalur
+  lama `students/…` masih melaporkan `true`. Tidak ada fotonya yang tampil di
+  portal mana pun.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

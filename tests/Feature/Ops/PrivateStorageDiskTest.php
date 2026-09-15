@@ -252,6 +252,7 @@ class PrivateStorageDiskTest extends TestCase
             'storage.payment_proof_disk',
             'storage.transaction_proof_disk',
             'storage.ppdb_document_disk',
+            'storage.student_photo_disk',
         ] as $kunci) {
             $disk = (string) config($kunci);
 

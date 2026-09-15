@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\SiteBlockType;
+use App\Support\ReplacedMedia;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -70,11 +71,16 @@ class SiteBlock extends Model
      */
     public function imageUrl(): ?string
     {
-        if (blank($this->image_path)) {
+        $path = ReplacedMedia::within($this->image_path, SiteSetting::MEDIA_DIRECTORY);
+
+        // Kolom yang terisi tidak cukup. Berkas yang tercatat tetapi hilang —
+        // di Railway: setiap redeploy tanpa Volume — dirender sebagai "belum
+        // ada foto", bukan gambar rusak di halaman yang dibuka tamu (butir 587).
+        if ($path === null || ! Storage::disk(SiteSetting::MEDIA_DISK)->exists($path)) {
             return null;
         }
 
-        return Storage::disk(SiteSetting::MEDIA_DISK)->url($this->image_path);
+        return Storage::disk(SiteSetting::MEDIA_DISK)->url($path);
     }
 
     public function hasImage(): bool
@@ -89,41 +95,20 @@ class SiteBlock extends Model
      * meninggalkan berkas lama yang tidak lagi dirujuk siapa pun, tetap dapat
      * diunduh siapa pun yang pernah menyimpan alamatnya, dan tidak ada satu
      * pun tempat di antarmuka untuk membuangnya.
+     *
+     * Penghapusan tidak pernah keluar dari `site/` — sebuah nilai seperti
+     * `../../.env` tidak menghapus apa pun, ia hanya ditolak (butir 474). Sejak
+     * butir 587 berkas lama dibuang sesudah penggantinya tersimpan, bukan
+     * sebelumnya, lewat pagar yang sama dengan kolom berkas lainnya.
      */
     protected static function booted(): void
     {
-        static::updating(function (self $block): void {
-            if (! $block->isDirty('image_path')) {
-                return;
-            }
+        static::updated(fn (self $block) => ReplacedMedia::afterUpdate(
+            $block, 'image_path', SiteSetting::MEDIA_DISK, SiteSetting::MEDIA_DIRECTORY,
+        ));
 
-            $block->deleteStoredImage($block->getOriginal('image_path'));
-        });
-
-        static::deleted(fn (self $block) => $block->deleteStoredImage($block->image_path));
-    }
-
-    /**
-     * Menghapus satu berkas, hanya bila ia memang berada di dalam direktori
-     * media halaman muka.
-     *
-     * Path-nya berasal dari kolom basis data, dan kolom basis data dapat diisi
-     * dari mana saja seiring waktu. Pagar ini memastikan penghapusan tidak
-     * pernah keluar dari `site/` — sebuah nilai seperti `../../.env` tidak
-     * menghapus apa pun, ia hanya ditolak (butir 474).
-     */
-    protected function deleteStoredImage(?string $path): void
-    {
-        if (blank($path)) {
-            return;
-        }
-
-        $prefix = SiteSetting::MEDIA_DIRECTORY.'/';
-
-        if (! str_starts_with($path, $prefix) || str_contains($path, '..')) {
-            return;
-        }
-
-        Storage::disk(SiteSetting::MEDIA_DISK)->delete($path);
+        static::deleted(fn (self $block) => ReplacedMedia::afterDelete(
+            $block, 'image_path', SiteSetting::MEDIA_DISK, SiteSetting::MEDIA_DIRECTORY,
+        ));
     }
 }

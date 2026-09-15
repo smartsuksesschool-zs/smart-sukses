@@ -150,7 +150,7 @@ class SchoolResource extends Resource
                     ->label(__('Logo Cabang'))
                     ->image()
                     ->disk(School::LOGO_DISK)
-                    ->directory('schools/logos')
+                    ->directory(School::LOGO_DIRECTORY)
                     // Arsitektur 3.4 — "Validasi MIME + ukuran | Hanya JPG/PNG/PDF
                     // diperbolehkan". Tidak ada requirement khusus logo di seluruh
                     // blueprint, jadi aturan global itulah yang berlaku. PDF tidak

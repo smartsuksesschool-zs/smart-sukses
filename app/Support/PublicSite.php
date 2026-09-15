@@ -178,24 +178,36 @@ class PublicSite
         return $this->externalUrl('contact_maps_url');
     }
 
+    /**
+     * Logo unggahan pemilik, atau logo bawaan bila belum ada — termasuk bila
+     * berkasnya tercatat tetapi sudah hilang dari disk (butir 587).
+     */
     public function logoUrl(): string
     {
-        $path = SiteSetting::get('logo_path');
-
-        if ($path !== null) {
-            return Storage::disk(SiteSetting::MEDIA_DISK)->url($path);
-        }
-
-        return asset(self::DEFAULT_LOGO);
+        return $this->storedMediaUrl('logo_path') ?? asset(self::DEFAULT_LOGO);
     }
 
     public function heroImageUrl(): ?string
     {
-        $path = SiteSetting::get('hero_image_path');
+        return $this->storedMediaUrl('hero_image_path');
+    }
 
-        return $path === null
-            ? null
-            : Storage::disk(SiteSetting::MEDIA_DISK)->url($path);
+    /**
+     * URL berkas media situs yang tercatat pada satu kunci, hanya bila
+     * berkasnya benar-benar ada. Nilai kolom saja tidak cukup: tanpa pemeriksaan
+     * ini berkas yang hilang dirender sebagai gambar rusak di halaman yang
+     * paling sering dibuka tamu, dan logo bawaannya tidak pernah dipakai.
+     */
+    protected function storedMediaUrl(string $key): ?string
+    {
+        $path = ReplacedMedia::within(SiteSetting::get($key), SiteSetting::MEDIA_DIRECTORY);
+        $disk = Storage::disk(SiteSetting::MEDIA_DISK);
+
+        if ($path === null || ! $disk->exists($path)) {
+            return null;
+        }
+
+        return $disk->url($path);
     }
 
     /**
