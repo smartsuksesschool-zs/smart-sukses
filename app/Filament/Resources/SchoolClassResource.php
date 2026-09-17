@@ -41,9 +41,44 @@ class SchoolClassResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
+            // Cabang wajib dipilih Super Admin; tanpa itu penyimpanan berakhir
+            // sebagai school_id NULL (butir 588). Peran School Level tidak
+            // melihat field ini dan tetap terikat cabang akunnya.
+            Forms\Components\Select::make('school_id')
+                ->label(__('Cabang Sekolah'))
+                ->relationship(
+                    name: 'school',
+                    titleAttribute: 'name',
+                    modifyQueryUsing: fn ($query) => $query->where('is_active', true),
+                )
+                ->searchable()
+                ->preload()
+                ->required()
+                ->live()
+                // Tahun ajaran dan wali kelas milik cabang lama tidak berlaku.
+                ->afterStateUpdated(function (Forms\Set $set): void {
+                    $set('academic_year_id', null);
+                    $set('homeroom_teacher_id', null);
+                })
+                ->visible(fn () => Auth::user()?->isSuperAdmin())
+                ->disabledOn('edit')
+                ->columnSpanFull()
+                ->helperText(__('Rombel ini milik cabang tersebut.')),
+
             Forms\Components\Select::make('academic_year_id')
                 ->label(__('Tahun Ajaran'))
-                ->relationship('academicYear', 'name')
+                ->relationship(
+                    name: 'academicYear',
+                    titleAttribute: 'name',
+                    // Super Admin melihat seluruh cabang (SchoolScope memang
+                    // melepas batas untuk mereka), jadi daftarnya disaring ke
+                    // cabang yang sedang dipilih.
+                    modifyQueryUsing: fn (Builder $query, Forms\Get $get) => $query
+                        ->when(
+                            static::resolveSchoolId($get('school_id')),
+                            fn (Builder $years, int $schoolId) => $years->where('school_id', $schoolId),
+                        ),
+                )
                 ->default(fn () => AcademicYear::current()?->id)
                 ->required()
                 ->preload()
@@ -81,7 +116,9 @@ class SchoolClassResource extends Resource
 
             Forms\Components\Select::make('homeroom_teacher_id')
                 ->label(__('Wali Kelas'))
-                ->options(fn () => static::homeroomTeacherOptions())
+                ->options(fn (Forms\Get $get) => static::homeroomTeacherOptions(
+                    static::resolveSchoolId($get('school_id')),
+                ))
                 ->searchable()
                 // KELAS-01 poin 3: satu guru hanya boleh menjadi wali kelas
                 // satu kelas per tahun ajaran.
@@ -163,14 +200,32 @@ class SchoolClassResource extends Resource
      *
      * @return array<int, string>
      */
-    protected static function homeroomTeacherOptions(): array
+    protected static function homeroomTeacherOptions(?int $schoolId = null): array
     {
         return User::query()
             ->active()
             ->whereHas('roles', fn (Builder $query) => $query->where('name', RoleName::WaliKelas->value))
+            // Super Admin tidak dibatasi SchoolScope, sehingga daftarnya
+            // disaring ke cabang yang dipilih di form (butir 588).
+            ->when($schoolId, fn (Builder $query, int $id) => $query->where('school_id', $id))
             ->orderBy('name')
             ->pluck('name', 'id')
             ->all();
+    }
+
+    /**
+     * Cabang yang berlaku untuk form ini: pilihan Super Admin, atau cabang
+     * akun bagi peran School Level.
+     */
+    protected static function resolveSchoolId(mixed $formValue = null): ?int
+    {
+        $user = Auth::user();
+
+        if ($user?->isSuperAdmin() && filled($formValue)) {
+            return (int) $formValue;
+        }
+
+        return $user?->school_id;
     }
 
     public static function getRelations(): array

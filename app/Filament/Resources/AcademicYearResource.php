@@ -10,6 +10,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * API 4.6 — /academic-years. Modul "Kelas & Jadwal" pada matriks izin.
@@ -33,6 +34,25 @@ class AcademicYearResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
+            // Cabang wajib dipilih Super Admin; tanpa itu penyimpanan berakhir
+            // sebagai school_id NULL (butir 588).
+            Forms\Components\Select::make('school_id')
+                ->label(__('Cabang Sekolah'))
+                ->relationship(
+                    name: 'school',
+                    titleAttribute: 'name',
+                    modifyQueryUsing: fn ($query) => $query->where('is_active', true),
+                )
+                ->searchable()
+                ->preload()
+                ->required()
+                ->visible(fn () => Auth::user()?->isSuperAdmin())
+                // Tahun ajaran yang pindah cabang akan memutus kelas, nilai,
+                // dan rapor yang terikat padanya.
+                ->disabledOn('edit')
+                ->columnSpanFull()
+                ->helperText(__('Tahun ajaran ini berlaku untuk cabang tersebut.')),
+
             Forms\Components\TextInput::make('name')
                 ->label(__('Nama Tahun Ajaran'))
                 ->required()

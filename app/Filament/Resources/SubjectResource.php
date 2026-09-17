@@ -9,6 +9,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * API 4.6 — /subjects. Modul "Kelas & Jadwal" pada matriks izin.
@@ -32,6 +33,25 @@ class SubjectResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
+            // Cabang wajib dipilih Super Admin; tanpa itu penyimpanan berakhir
+            // sebagai school_id NULL (butir 588).
+            Forms\Components\Select::make('school_id')
+                ->label(__('Cabang Sekolah'))
+                ->relationship(
+                    name: 'school',
+                    titleAttribute: 'name',
+                    modifyQueryUsing: fn ($query) => $query->where('is_active', true),
+                )
+                ->searchable()
+                ->preload()
+                ->required()
+                ->visible(fn () => Auth::user()?->isSuperAdmin())
+                // Mata pelajaran yang pindah cabang akan memutus penugasan
+                // kelas, nilai, dan jadwal yang memakainya.
+                ->disabledOn('edit')
+                ->columnSpanFull()
+                ->helperText(__('Mata pelajaran ini milik cabang tersebut.')),
+
             Forms\Components\TextInput::make('name')
                 ->label(__('Nama Mata Pelajaran'))
                 ->required()
