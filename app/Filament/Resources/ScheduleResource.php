@@ -39,9 +39,31 @@ class ScheduleResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
+            // Cabang wajib dipilih Super Admin; tanpa itu penyimpanan berakhir
+            // sebagai school_id NULL (butir 588).
+            Forms\Components\Select::make('school_id')
+                ->label(__('Cabang Sekolah'))
+                ->relationship(
+                    name: 'school',
+                    titleAttribute: 'name',
+                    modifyQueryUsing: fn ($query) => $query->where('is_active', true),
+                )
+                ->searchable()
+                ->preload()
+                ->required()
+                ->live()
+                // Penugasan kelas milik cabang lama tidak berlaku lagi.
+                ->afterStateUpdated(fn (Forms\Set $set) => $set('class_subject_id', null))
+                ->visible(fn () => Auth::user()?->isSuperAdmin())
+                ->disabledOn('edit')
+                ->columnSpanFull()
+                ->helperText(__('Jadwal ini milik cabang tersebut.')),
+
             Forms\Components\Select::make('class_subject_id')
                 ->label(__('Kelas & Mata Pelajaran'))
-                ->options(fn () => static::classSubjectOptions())
+                ->options(fn (Forms\Get $get) => static::classSubjectOptions(
+                    static::resolveSchoolId($get('school_id')),
+                ))
                 ->searchable()
                 ->required()
                 ->live()
@@ -190,10 +212,28 @@ class ScheduleResource extends Resource
     /**
      * @return array<int, string>
      */
-    protected static function classSubjectOptions(): array
+    /**
+     * Cabang yang berlaku untuk form ini: pilihan Super Admin, atau cabang
+     * akun bagi peran School Level.
+     */
+    protected static function resolveSchoolId(mixed $formValue = null): ?int
+    {
+        $user = Auth::user();
+
+        if ($user?->isSuperAdmin() && filled($formValue)) {
+            return (int) $formValue;
+        }
+
+        return $user?->school_id;
+    }
+
+    protected static function classSubjectOptions(?int $schoolId = null): array
     {
         return ClassSubject::query()
             ->with(['schoolClass', 'subject', 'teacher'])
+            // Super Admin tidak dibatasi SchoolScope, sehingga daftarnya
+            // disaring ke cabang yang dipilih di form (butir 588).
+            ->when($schoolId, fn ($query, int $id) => $query->where('school_id', $id))
             ->get()
             ->mapWithKeys(fn (ClassSubject $classSubject) => [
                 $classSubject->id => sprintf(

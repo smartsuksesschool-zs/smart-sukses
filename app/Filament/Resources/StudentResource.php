@@ -46,6 +46,31 @@ class StudentResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
+            // Super Admin tidak memiliki school_id (SchoolScope::currentSchoolId()
+            // sengaja NULL untuk mereka), sehingga cabang harus dipilih di sini.
+            // Tanpa field ini penyimpanan berakhir sebagai INSERT dengan
+            // school_id NULL dan galat basis data mentah (butir 588).
+            //
+            // Polanya sama persis dengan FeeTypeResource dan GradeConfigResource:
+            // field hanya dirender untuk Super Admin, sedangkan peran School
+            // Level tetap terikat cabang akunnya sendiri di server.
+            Forms\Components\Select::make('school_id')
+                ->label(__('Cabang Sekolah'))
+                ->relationship(
+                    name: 'school',
+                    titleAttribute: 'name',
+                    modifyQueryUsing: fn ($query) => $query->where('is_active', true),
+                )
+                ->searchable()
+                ->preload()
+                ->required()
+                ->visible(fn () => Auth::user()?->isSuperAdmin())
+                // Memindahkan siswa antar cabang akan memutusnya dari kelas,
+                // nilai, rapor, dan tagihannya sendiri.
+                ->disabledOn('edit')
+                ->columnSpanFull()
+                ->helperText(__('Siswa terdaftar pada cabang ini.')),
+
             Forms\Components\Section::make(__('Identitas Siswa'))
                 ->columns(2)
                 ->schema([
@@ -53,10 +78,15 @@ class StudentResource extends Resource
                         ->label(__('NIS'))
                         ->required()
                         ->maxLength(20)
-                        // SIS-01 poin 3: NIS unik dalam satu sekolah.
+                        // SIS-01 poin 3: NIS unik dalam satu sekolah. Cabangnya
+                        // diambil dari field di atas bila Super Admin yang
+                        // mengisi — `currentSchoolId()` NULL untuk mereka, dan
+                        // aturan unik yang menyaring `school_id IS NULL` tidak
+                        // menguji apa pun (butir 588).
                         ->unique(
                             ignoreRecord: true,
-                            modifyRuleUsing: fn (Unique $rule) => $rule->where('school_id', static::currentSchoolId()),
+                            modifyRuleUsing: fn (Unique $rule, Forms\Get $get) => $rule
+                                ->where('school_id', static::resolveSchoolId($get('school_id'))),
                         )
                         ->helperText(__('Nomor Induk Siswa, unik dalam satu cabang.')),
 
@@ -271,9 +301,21 @@ class StudentResource extends Resource
             ->all();
     }
 
-    protected static function currentSchoolId(): ?int
+    /**
+     * Cabang yang berlaku untuk validasi form ini.
+     *
+     * Super Admin memilihnya sendiri; peran School Level selalu memakai cabang
+     * akunnya, apa pun yang dikirim klien.
+     */
+    protected static function resolveSchoolId(mixed $formValue = null): ?int
     {
-        return Auth::user()?->school_id;
+        $user = Auth::user();
+
+        if ($user?->isSuperAdmin() && filled($formValue)) {
+            return (int) $formValue;
+        }
+
+        return $user?->school_id;
     }
 
     /**
