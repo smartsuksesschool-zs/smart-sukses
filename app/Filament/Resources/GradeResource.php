@@ -185,7 +185,16 @@ class GradeResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->with(['student', 'classSubject.subject', 'classSubject.schoolClass']);
+            ->with([
+                // Siswa yang diarsipkan tetap punya nilai, dan nilainya
+                // tidak berguna tanpa nama pemiliknya. Yang dilonggarkan
+                // hanya pemuatan untuk ditampilkan — `student()` sendiri
+                // tidak berubah, sehingga whereHas('student') dan seluruh
+                // query aktif tetap mengecualikan arsip (butir 589).
+                'student' => fn ($query) => $query->withTrashed(),
+                'classSubject.subject',
+                'classSubject.schoolClass',
+            ]);
     }
 
     public static function getPages(): array
