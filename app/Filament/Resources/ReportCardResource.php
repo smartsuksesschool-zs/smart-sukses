@@ -261,7 +261,12 @@ class ReportCardResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->with(['student', 'schoolClass', 'academicYear']);
+            ->with([
+                // Rapor siswa terarsip tetap terbaca lengkap (butir 589).
+                'student' => fn ($query) => $query->withTrashed(),
+                'schoolClass',
+                'academicYear',
+            ]);
     }
 
     public static function getPages(): array

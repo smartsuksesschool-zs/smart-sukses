@@ -14,13 +14,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * ERD 2.2 — students. Data induk siswa.
  */
 class Student extends Model
 {
-    use BelongsToSchool, HasFactory;
+    use BelongsToSchool, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'school_id',
@@ -47,6 +48,13 @@ class Student extends Model
      * Foto yang diganti atau dikosongkan dibuang dari disk privatnya sesudah
      * nilai barunya tersimpan: foto anak yang sudah tidak dipakai tidak punya
      * alasan untuk tetap disimpan (butir 587).
+     *
+     * Pembersihannya sengaja pada `forceDeleted`, **bukan** `deleted`. Laravel
+     * memicu `deleted` juga saat soft delete, sehingga pemasangan di sana akan
+     * membuat setiap pengarsipan menghapus fotonya — dan siswa yang dipulihkan
+     * kembali tanpa foto. Arsip harus dapat dipulihkan utuh, jadi berkasnya
+     * baru dibuang bila barisnya benar-benar dihapus permanen; jalur itu tidak
+     * tersedia di panel mana pun (butir 589).
      */
     protected static function booted(): void
     {
@@ -54,7 +62,7 @@ class Student extends Model
             $student, 'photo_url', StudentPhoto::disk(), StudentPhoto::DIRECTORY,
         ));
 
-        static::deleted(fn (self $student) => ReplacedMedia::afterDelete(
+        static::forceDeleted(fn (self $student) => ReplacedMedia::afterDelete(
             $student, 'photo_url', StudentPhoto::disk(), StudentPhoto::DIRECTORY,
         ));
     }

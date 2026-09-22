@@ -98,6 +98,11 @@ class StudentRosterSummary
             ->join('classes', 'student_classes.class_id', '=', 'classes.id')
             ->join('academic_years', 'classes.academic_year_id', '=', 'academic_years.id')
             ->join('students', 'student_classes.student_id', '=', 'students.id')
+            // Join mengambil tabelnya langsung, sehingga global scope
+            // SoftDeletes milik Student tidak ikut berlaku: siswa yang
+            // diarsipkan harus dikecualikan di sini secara eksplisit,
+            // kalau tidak ia tetap terhitung di ringkasan (butir 589).
+            ->whereNull('students.deleted_at')
             ->where('student_classes.status', StudentClassStatus::Active->value)
             ->where('academic_years.is_active', true)
             ->where('students.status', StudentStatus::Active->value)
@@ -125,6 +130,11 @@ class StudentRosterSummary
             ->join('classes', 'student_classes.class_id', '=', 'classes.id')
             ->join('academic_years', 'classes.academic_year_id', '=', 'academic_years.id')
             ->join('students', 'student_classes.student_id', '=', 'students.id')
+            // Join mengambil tabelnya langsung, sehingga global scope
+            // SoftDeletes milik Student tidak ikut berlaku: siswa yang
+            // diarsipkan harus dikecualikan di sini secara eksplisit,
+            // kalau tidak ia tetap terhitung di ringkasan (butir 589).
+            ->whereNull('students.deleted_at')
             ->where('student_classes.status', StudentClassStatus::Active->value)
             ->where('academic_years.is_active', true)
             ->where('students.status', StudentStatus::Active->value)
@@ -158,6 +168,11 @@ class StudentRosterSummary
             ->join('classes', 'student_classes.class_id', '=', 'classes.id')
             ->join('academic_years', 'classes.academic_year_id', '=', 'academic_years.id')
             ->join('students', 'student_classes.student_id', '=', 'students.id')
+            // Join mengambil tabelnya langsung, sehingga global scope
+            // SoftDeletes milik Student tidak ikut berlaku: siswa yang
+            // diarsipkan harus dikecualikan di sini secara eksplisit,
+            // kalau tidak ia tetap terhitung di ringkasan (butir 589).
+            ->whereNull('students.deleted_at')
             ->join('schools', 'classes.school_id', '=', 'schools.id')
             ->where('student_classes.status', StudentClassStatus::Active->value)
             ->where('academic_years.is_active', true)

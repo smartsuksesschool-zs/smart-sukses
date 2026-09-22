@@ -87,7 +87,12 @@ class AttemptsRelationManager extends RelationManager
             ->defaultSort('submitted_at', 'desc')
             // NFR 1.4 — siswa dan nilai yang tertaut dimuat sekali, bukan sekali
             // per baris (butir 335).
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['student', 'grade']))
+            // Percobaan ujian siswa terarsip tetap menampilkan namanya
+            // (butir 589).
+            ->modifyQueryUsing(fn (Builder $query) => $query->with([
+                'student' => fn ($studentQuery) => $studentQuery->withTrashed(),
+                'grade',
+            ]))
             ->columns([
                 Tables\Columns\TextColumn::make('student.full_name')
                     ->label(__('Siswa'))

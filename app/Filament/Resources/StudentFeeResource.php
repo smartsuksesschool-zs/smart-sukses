@@ -520,7 +520,11 @@ class StudentFeeResource extends Resource
      */
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->with(['student', 'feeType']);
+        return parent::getEloquentQuery()->with([
+            // Tagihan siswa terarsip tetap terbaca lengkap (butir 589).
+            'student' => fn ($query) => $query->withTrashed(),
+            'feeType',
+        ]);
     }
 
     public static function getRelations(): array

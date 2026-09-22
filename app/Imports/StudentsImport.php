@@ -314,6 +314,14 @@ class StudentsImport implements ToCollection, WithEvents, WithHeadingRow
                 'entry_year' => ['nullable', 'integer', 'min:1900', 'max:2200'],
                 'status' => ['required', Rule::in(array_column(StudentStatus::cases(), 'value'))],
             ], [
+                /*
+                 * Siswa yang diarsipkan tetap memesan NIS-nya, dan ia tidak
+                 * muncul di daftar mana pun — sehingga "NIS sudah digunakan"
+                 * saja membuat operator mencarinya dan tidak menemukan apa-apa
+                 * (butir 589).
+                 */
+                'nis.unique' => __('NIS sudah digunakan oleh siswa yang aktif atau diarsipkan di cabang ini. Pulihkan data siswa lama bila itu siswa yang sama.'),
+
                 // Nilai yang keliru di kolom status paling sering angka tingkat
                 // kelas ("10"). Pesannya menyebut nilai yang diterima, karena
                 // "pilihan status tidak sah" tidak memberi tahu apa pun tentang

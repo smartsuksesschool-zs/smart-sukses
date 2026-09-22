@@ -13,6 +13,8 @@ use App\Support\StudentPhoto;
 use App\Support\TeacherClassVisibility;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Infolists;
+use Filament\Infolists\Infolist;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -83,11 +85,24 @@ class StudentResource extends Resource
                         // mengisi — `currentSchoolId()` NULL untuk mereka, dan
                         // aturan unik yang menyaring `school_id IS NULL` tidak
                         // menguji apa pun (butir 588).
+                        /*
+                         * Aturan unik membaca tabelnya langsung, sehingga siswa
+                         * yang **diarsipkan** tetap memesan NIS-nya — dan itu
+                         * memang yang diinginkan: dua siswa tidak boleh berbagi
+                         * satu NIS historis, dan indeks unik di basis data pun
+                         * akan menolaknya. Yang perlu diperbaiki hanya
+                         * kalimatnya: siswa itu tidak terlihat di daftar mana
+                         * pun, sehingga "NIS sudah digunakan" terdengar seperti
+                         * kesalahan sistem (butir 589).
+                         */
                         ->unique(
                             ignoreRecord: true,
                             modifyRuleUsing: fn (Unique $rule, Forms\Get $get) => $rule
                                 ->where('school_id', static::resolveSchoolId($get('school_id'))),
                         )
+                        ->validationMessages([
+                            'unique' => __('NIS sudah digunakan oleh siswa yang aktif atau diarsipkan di cabang ini. Pulihkan data siswa lama bila itu siswa yang sama.'),
+                        ])
                         ->helperText(__('Nomor Induk Siswa, unik dalam satu cabang.')),
 
                     Forms\Components\TextInput::make('nisn')
@@ -202,6 +217,121 @@ class StudentResource extends Resource
         ]);
     }
 
+    /**
+     * Detail siswa, hanya baca.
+     *
+     * Isinya kolom yang memang sudah dimiliki `students` dan sudah tampil di
+     * form-nya sendiri. Tidak ada kolom internal yang ditambahkan di sini:
+     * `school_id` dirender sebagai nama cabang dan hanya untuk Super Admin,
+     * dan foto siswa memakai rute berwenang yang sama dengan tabelnya
+     * (butir 587) — tidak pernah URL disk.
+     */
+    public static function infolist(Infolist $infolist): Infolist
+    {
+        return $infolist->schema([
+            Infolists\Components\Section::make(__('Identitas Siswa'))
+                ->columns(2)
+                ->schema([
+                    Infolists\Components\TextEntry::make('nis')
+                        ->label(__('NIS'))
+                        ->copyable(),
+
+                    Infolists\Components\TextEntry::make('nisn')
+                        ->label(__('NISN'))
+                        ->placeholder('—'),
+
+                    Infolists\Components\TextEntry::make('full_name')
+                        ->label(__('Nama Lengkap'))
+                        ->columnSpanFull(),
+
+                    Infolists\Components\TextEntry::make('gender')
+                        ->label(__('Jenis Kelamin'))
+                        ->formatStateUsing(fn (Gender $state) => $state->label()),
+
+                    Infolists\Components\TextEntry::make('religion')
+                        ->label(__('Agama'))
+                        ->placeholder('—'),
+
+                    Infolists\Components\TextEntry::make('birth_place')
+                        ->label(__('Tempat Lahir'))
+                        ->placeholder('—'),
+
+                    Infolists\Components\TextEntry::make('birth_date')
+                        ->label(__('Tanggal Lahir'))
+                        ->date('d M Y')
+                        ->placeholder('—'),
+
+                    Infolists\Components\TextEntry::make('address')
+                        ->label(__('Alamat'))
+                        ->placeholder('—')
+                        ->columnSpanFull(),
+
+                    Infolists\Components\TextEntry::make('school.name')
+                        ->label(__('Cabang Sekolah'))
+                        ->visible(fn () => Auth::user()?->isSuperAdmin())
+                        ->columnSpanFull(),
+                ]),
+
+            Infolists\Components\Section::make(__('Foto'))
+                ->schema([
+                    Infolists\Components\ImageEntry::make('photo_url')
+                        ->label(__('Foto Siswa'))
+                        ->circular()
+                        // Rute berwenang, bukan URL disk: fotonya privat.
+                        ->getStateUsing(fn (Student $record): ?string => StudentPhoto::url($record))
+                        ->placeholder(__('Belum ada foto')),
+                ]),
+
+            Infolists\Components\Section::make(__('Status Akademik'))
+                ->columns(2)
+                ->schema([
+                    Infolists\Components\TextEntry::make('status')
+                        ->label(__('Status'))
+                        ->badge()
+                        ->formatStateUsing(fn (StudentStatus $state) => $state->label())
+                        ->color(fn (StudentStatus $state) => $state->color()),
+
+                    Infolists\Components\TextEntry::make('entry_year')
+                        ->label(__('Tahun Masuk'))
+                        ->placeholder('—'),
+
+                    Infolists\Components\TextEntry::make('activeStudentClass.schoolClass.name')
+                        ->label(__('Kelas'))
+                        ->badge()
+                        ->placeholder(__('Belum ada kelas')),
+
+                    Infolists\Components\TextEntry::make('user.name')
+                        ->label(__('Akun Portal Siswa'))
+                        ->placeholder(__('Belum terhubung')),
+
+                    Infolists\Components\TextEntry::make('notes')
+                        ->label(__('Catatan'))
+                        ->placeholder('—')
+                        ->columnSpanFull(),
+                ]),
+
+            Infolists\Components\Section::make(__('Data Orang Tua / Wali'))
+                ->columns(2)
+                ->schema([
+                    Infolists\Components\TextEntry::make('parent_name')
+                        ->label(__('Nama Orang Tua / Wali'))
+                        ->placeholder('—'),
+
+                    Infolists\Components\TextEntry::make('parent_phone')
+                        ->label(__('No. HP Orang Tua'))
+                        ->placeholder('—'),
+
+                    Infolists\Components\TextEntry::make('parent_email')
+                        ->label(__('Email Orang Tua'))
+                        ->placeholder('—'),
+
+                    Infolists\Components\TextEntry::make('parentUser.name')
+                        ->label(__('Akun Portal Orang Tua'))
+                        ->placeholder(__('Belum terhubung')),
+                ]),
+        ]);
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -250,6 +380,12 @@ class StudentResource extends Resource
                     ->label(__('Status'))
                     ->options(StudentStatus::options()),
 
+                // Arsip disembunyikan secara bawaan; "Dengan arsip" dan "Hanya
+                // arsip" ada di sini supaya siswa yang diarsipkan dapat
+                // ditemukan kembali untuk dipulihkan (butir 589).
+                Tables\Filters\TrashedFilter::make()
+                    ->label(__('Arsip')),
+
                 // API 4.5 — filter class_id.
                 Tables\Filters\SelectFilter::make('class')
                     ->label(__('Kelas'))
@@ -259,14 +395,25 @@ class StudentResource extends Resource
                         : $query),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                // Siswa terarsip hanya menawarkan "Pulihkan": halaman detail dan
+                // form-nya mengambil record lewat query yang memang tidak
+                // memuat arsip, dan menawarkan tombol yang berakhir 404 bukan
+                // pilihan yang jujur (butir 589).
+                Tables\Actions\ViewAction::make()
+                    ->label(__('Lihat'))
+                    ->hidden(fn (Student $record): bool => $record->trashed()),
+
+                Tables\Actions\EditAction::make()
+                    ->label(__('Ubah'))
+                    ->hidden(fn (Student $record): bool => $record->trashed()),
 
                 // API 4.5 — PATCH /students/{id}/status.
                 Tables\Actions\Action::make('changeStatus')
                     ->label(__('Ubah Status'))
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')
-                    ->visible(fn (Student $record) => Auth::user()?->can('changeStatus', $record))
+                    ->visible(fn (Student $record) => ! $record->trashed()
+                        && Auth::user()?->can('changeStatus', $record))
                     ->form([
                         Forms\Components\Select::make('status')
                             ->label(__('Status Baru'))
@@ -282,9 +429,62 @@ class StudentResource extends Resource
                             ->success()
                             ->send();
                     }),
+
+                static::archiveAction(),
+
+                Tables\Actions\RestoreAction::make()
+                    ->label(__('Pulihkan'))
+                    ->modalHeading(__('Pulihkan siswa dari arsip'))
+                    ->modalDescription(__('Siswa akan kembali muncul di daftar siswa beserta seluruh histori dan fotonya.'))
+                    ->successNotificationTitle(__('Siswa dipulihkan')),
             ])
+            // Baris terarsip tidak punya halaman detail, jadi barisnya tidak
+            // dapat diklik menuju 404.
+            ->recordUrl(fn (Student $record): ?string => $record->trashed()
+                ? null
+                : static::getUrl('view', ['record' => $record]))
+            /*
+             * Tidak ada satu pun aksi massal, dan itu disengaja.
+             *
+             * Mengarsipkan siswa harus satu per satu dengan konfirmasi yang
+             * menyebut nama dan NIS-nya; aksi massal menghilangkan justru
+             * bagian yang membuat keputusannya dapat diperiksa. Tidak ada
+             * `DeleteBulkAction`, tidak ada `ForceDeleteBulkAction`, dan tidak
+             * ada `RestoreBulkAction` (butir 589).
+             */
             ->bulkActions([])
             ->defaultSort('full_name');
+    }
+
+    /**
+     * "Arsipkan" — soft delete, dan kata itu dihindari di layar.
+     *
+     * Yang dilakukan tombol ini hanya mengisi `deleted_at`: barisnya tetap ada,
+     * nilai, rapor, tagihan, pembayaran, kelas, percobaan ujian, dan permintaan
+     * akun miliknya tidak tersentuh, dan fotonya tetap di penyimpanan privat
+     * supaya pemulihan mengembalikan siswa yang utuh. Karena itu modalnya
+     * menyebut "diarsipkan", bukan "dihapus permanen" — tidak ada jalur
+     * penghapusan permanen di panel mana pun (butir 589).
+     *
+     * Tidak ada pagar "harus tanpa histori": justru histori itulah yang
+     * dipertahankan arsip.
+     */
+    protected static function archiveAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\DeleteAction::make('archive')
+            ->label(__('Arsipkan'))
+            ->icon('heroicon-m-archive-box-arrow-down')
+            ->color('danger')
+            ->modalHeading(__('Arsipkan siswa'))
+            // Satu literal utuh, bukan sambungan: kunci terjemahan dipindai
+            // dari kode, dan sambungan membuat yang terbaca hanya penggalan
+            // pertamanya (butir 589).
+            ->modalDescription(fn (Student $record): string => __('Siswa :name (NIS :nis) akan diarsipkan, bukan dihapus permanen. Data siswa dan seluruh histori akademik, kelas, tagihan, pembayaran, rapor, serta ujiannya tetap tersimpan dan dapat dipulihkan.', [
+                'name' => $record->full_name,
+                'nis' => $record->nis,
+            ]))
+            ->modalSubmitActionLabel(__('Arsipkan siswa'))
+            ->successNotificationTitle(__('Siswa diarsipkan'));
     }
 
     /**
@@ -380,6 +580,7 @@ class StudentResource extends Resource
         return [
             'index' => Pages\ListStudents::route('/'),
             'create' => Pages\CreateStudent::route('/create'),
+            'view' => Pages\ViewStudent::route('/{record}'),
             'edit' => Pages\EditStudent::route('/{record}/edit'),
         ];
     }

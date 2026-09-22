@@ -19,6 +19,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -412,6 +413,17 @@ class AccountClaimResource extends Resource
                     ->title(__('Permintaan ditolak'))
                     ->send();
             });
+    }
+
+    /**
+     * Permintaan akun milik siswa yang sudah diarsipkan tetap terbaca
+     * lengkap dengan identitas siswanya; `student()` sendiri tidak
+     * diubah, sehingga query aktif tetap mengecualikan arsip (butir 589).
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->with(['student' => fn ($query) => $query->withTrashed()]);
     }
 
     public static function getPages(): array

@@ -49,9 +49,40 @@ class StudentPolicy
     }
 
     /**
-     * SIS-02 poin 2: siswa dinonaktifkan (status), tidak dihapus dari database.
+     * "Hapus" pada siswa berarti **arsip**, bukan penghapusan baris.
+     *
+     * SIS-02 poin 2 tetap berlaku apa adanya: barisnya tidak pernah hilang dari
+     * basis data, dan tujuh FK `cascadeOnDelete` ke `students` tidak pernah
+     * berjalan. Yang diberikan izin ini hanyalah menyembunyikan siswa salah
+     * input atau data uji dari seluruh daftar, dengan `restore()` sebagai
+     * jalan pulangnya (butir 589).
+     *
+     * Kewenangannya sama dengan mengubah siswa — `student.manage` pada cabang
+     * yang sama — bukan izin baru.
      */
     public function delete(User $user, Student $student): bool
+    {
+        return $this->update($user, $student);
+    }
+
+    /**
+     * Memulihkan siswa yang diarsipkan. Kewenangannya sama dengan
+     * mengarsipkannya, dan pagarnya sama: hanya cabang sendiri.
+     */
+    public function restore(User $user, Student $student): bool
+    {
+        return $this->update($user, $student);
+    }
+
+    /**
+     * Penghapusan permanen tidak pernah tersedia, untuk siapa pun.
+     *
+     * Inilah yang menjaga SIS-02 poin 2 tetap benar secara harfiah, dan yang
+     * membuat FK cascade ke nilai, rapor, tagihan, pembayaran, kelas, ujian,
+     * dan permintaan akun tidak punya satu pun jalur untuk terpicu dari
+     * aplikasi.
+     */
+    public function forceDelete(User $user, Student $student): bool
     {
         return false;
     }

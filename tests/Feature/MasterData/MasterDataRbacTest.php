@@ -11,6 +11,7 @@ use App\Filament\Resources\SubjectResource;
 use App\Models\School;
 use App\Models\Student;
 use App\Models\User;
+use App\Policies\StudentPolicy;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -86,11 +87,28 @@ class MasterDataRbacTest extends TestCase
 
     public function test_students_are_never_hard_deleted(): void
     {
-        // SIS-02 poin 2: siswa dinonaktifkan, tidak dihapus dari database.
+        /*
+         * SIS-02 poin 2: siswa dinonaktifkan, tidak dihapus dari database.
+         *
+         * Sejak butir 589 panel punya tombol "Arsipkan", dan izin `delete`
+         * karena itu bukan lagi NULL — tetapi artinya soft delete: barisnya
+         * tetap ada dan dapat dipulihkan. Yang menjaga janji SIS-02 sekarang
+         * `forceDelete`, yang ditolak policy untuk siapa pun dan tidak punya
+         * satu pun tombol di panel mana pun.
+         */
         $school = School::factory()->create();
         $admin = User::factory()->forSchool($school)->withRole(RoleName::SchoolAdmin)->create();
         $student = Student::factory()->create(['school_id' => $school->id]);
 
-        $this->assertFalse($admin->can('delete', $student));
+        $this->assertFalse(app(StudentPolicy::class)->forceDelete($admin, $student));
+
+        // Arsip diizinkan bagi yang memang boleh mengubah siswa cabangnya.
+        $this->assertTrue($admin->can('delete', $student));
+
+        $student->delete();
+
+        // Arsip, bukan penghapusan: barisnya masih ada di tabelnya.
+        $this->assertDatabaseHas('students', ['id' => $student->getKey()]);
+        $this->assertSame(1, Student::withTrashed()->whereKey($student->getKey())->count());
     }
 }
