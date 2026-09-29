@@ -10572,6 +10572,60 @@ pengujiannya menemukan cacat pada skrip itu sendiri: pola `--exclude` beruntun
 `./` tidak cocok dengan nama anggota tar, sehingga arsip memuat seluruh dump lama
 **termasuk dirinya sendiri**. Kini `private/backups` dikecualikan tanpa syarat.
 
+### 591. Reset yang tidak mengakhiri apa pun
+
+Sumber kebenaran requirement selama ini hidup di luar version control, di
+direktori yang bahkan bukan git repo. Sejak batch ini ia ada di
+`docs/blueprint/` sebagai salinan byte-for-byte dengan checksum tercatat — dan
+hal pertama yang ditemukan sesudah ia dapat dibaca dengan tenang adalah sebuah
+requirement yang disebut **empat kali** dan tidak dipenuhi satu kali pun.
+
+AUTH-04 AC-3 dan CON-30 berbunyi "seluruh sesi aktif di-invalidate setelah reset
+berhasil". Ia diulang di CON-30 (`01-PRD.md:317`), di AC-nya sendiri (`:485`), di
+AC-M0-10 (`:1008`), dan digambar sebagai satu kotak tersendiri pada diagram alur
+(`03-USER_FLOW.md:917`). Tidak ada satu pun bagian yang membuatnya ambigu.
+
+Yang sebelumnya terjadi: Filament memperbarui `remember_token`, sehingga cookie
+"ingat saya" mati — dan **hanya** itu. Baris sesi di basis data dan token Sanctum
+tetap hidup, sehingga peramban yang sudah masuk di perangkat lain tetap masuk
+memakai sandi yang sudah tidak berlaku. Reset sandi yang tidak mengeluarkan
+siapa pun adalah reset yang tidak mengakhiri persoalan yang membuat orang
+mereset sandinya.
+
+Pendengarnya dipasang pada `PasswordReset`, dan titik itu dipilih setelah membaca
+halaman reset Filament dan bukan setelah menduganya: halaman itu memanggil
+`event(new PasswordReset($user))` dan **tidak** memanggil `Auth::login`. Karena
+yang baru mereset tidak sedang masuk, menghapus seluruh baris sesi miliknya tidak
+memutus alurnya sendiri — kalau ia login di sana, pencabutan menyeluruh akan
+mengeluarkannya dari halaman yang baru saja berhasil.
+
+Sesi hanya dapat dicabut ketika penyimpanannya dapat dijangkau, yaitu driver
+`database` seperti yang diwajibkan kedua berkas `.env` contoh. Pada driver lain
+tidak ada yang dapat dikerjakan dari sana, dan mendiamkannya lebih jujur daripada
+berpura-pura: token Sanctum tetap dicabut. `phpunit.xml` sendiri memakai
+`SESSION_DRIVER=array`, sehingga testnya menyetel driver seperti produksi —
+bukan listener-nya yang dilonggarkan supaya test lulus.
+
+Uji mutasinya menangkap tiga hal, dan yang ketiga yang paling berguna:
+menghilangkan filter `user_id` membuat reset satu orang mencabut sesi **seluruh**
+pengguna. Tanpa pagar lintas-pengguna, perbaikan keamanan itu sendiri akan
+menjadi gangguan layanan.
+
+Satu perbaikan kecil menyertainya, dan asalnya dari arah berlawanan: kalimat yang
+ditujukan kepada siswa dan orang tua menyuruh mereka memakai tautan lupa kata
+sandi, sedangkan halaman masuk sengaja tidak pernah menampilkannya — dan ada test
+yang menegaskan ketiadaannya. Petunjuk yang menunjuk sesuatu yang tidak ada di
+layar lebih buruk daripada penolakan tanpa petunjuk sama sekali: ia membuat orang
+mengira dirinya yang kurang teliti. Kalimatnya kini menunjuk admin sekolah, yaitu
+jalan yang memang bekerja — menyetel sandi lewat Ubah Pengguna melepas penanda
+wajib-ganti pada penyimpanan yang sama.
+
+Yang **tidak** dikerjakan: menyembunyikan tombol "Reset Password" untuk peran
+portal. Tombol itu memang menghasilkan akun yang tidak dapat masuk sampai
+sandinya disetel ulang, tetapi menyembunyikannya adalah keputusan tentang cara
+sekolah bekerja, bukan tentang kebenaran kode. Ia dicatat sebagai OD-11 di
+`docs/requirements/owner-decisions.md`.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung
