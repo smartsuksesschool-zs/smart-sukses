@@ -9,3 +9,9 @@
 /.github export-ignore
 CHANGELOG.md export-ignore
 .styleci.yml export-ignore
+
+# Snapshot source-of-truth: disimpan apa adanya, byte demi byte.
+# Dokumen ini adalah salinan verbatim berkas di luar repo, dan checksum-nya
+# dicatat di docs/blueprint/README.md. Normalisasi newline akan membuat
+# checksum itu tidak lagi cocok, sehingga snapshot kehilangan gunanya.
+docs/blueprint/** -text
