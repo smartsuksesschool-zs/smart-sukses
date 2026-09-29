@@ -42,12 +42,108 @@ class BackupArtifactsTest extends TestCase
     {
         foreach ([
             'ops/backup-database.sh',
+            'ops/backup-storage.sh',
             'ops/restore-database.sh',
             'ops/smartsukses-worker.conf',
             'ops/smartsukses-cron',
+            'ops/nginx-smartsukses.conf',
+            'ops/php-smartsukses.ini',
+            'ops/php-fpm-smartsukses.conf',
+            'ops/mysql-smartsukses.cnf',
+            'ops/logrotate-smartsukses',
         ] as $artifact) {
             $this->assertFileExists(base_path($artifact));
         }
+    }
+
+    /**
+     * Batas unggah di tiga tempat tidak boleh bergeser sendiri-sendiri.
+     *
+     * Keberadaan berkas templat tidak membuktikan apa pun; yang membuktikan
+     * sesuatu adalah **hubungan angkanya**. Satu pendaftaran PPDB yang sah dapat
+     * memuat 5 dokumen × 2 MB dalam satu permintaan, dan rantainya hanya sekuat
+     * mata rantai terkecil: Nginx menolak lebih dulu bila `client_max_body_size`
+     * lebih kecil daripada `post_max_size`, dan yang dilihat pendaftar adalah
+     * 413 tanpa jejak apa pun di log aplikasi (butir 592).
+     */
+    public function test_the_upload_limits_of_nginx_and_php_stay_consistent(): void
+    {
+        $nginx = (string) file_get_contents(base_path('ops/nginx-smartsukses.conf'));
+        $ini = (string) file_get_contents(base_path('ops/php-smartsukses.ini'));
+
+        $this->assertSame(1, preg_match('/^\s*client_max_body_size\s+(\d+)m;/mi', $nginx, $n));
+        $this->assertSame(1, preg_match('/^\s*post_max_size\s*=\s*(\d+)M/mi', $ini, $p));
+        $this->assertSame(1, preg_match('/^\s*upload_max_filesize\s*=\s*(\d+)M/mi', $ini, $u));
+
+        $nginxMb = (int) $n[1];
+        $postMb = (int) $p[1];
+        $fileMb = (int) $u[1];
+
+        // Batas terbesar yang berlaku di aplikasi: impor Excel 5120 KB.
+        $this->assertGreaterThanOrEqual(5, $fileMb);
+
+        // PPDB: 5 dokumen × 2 MB dalam satu permintaan.
+        $this->assertGreaterThanOrEqual(10, $postMb);
+
+        // Nginx memutus lebih dulu bila ia yang paling kecil.
+        $this->assertGreaterThanOrEqual($postMb, $nginxMb);
+        $this->assertGreaterThanOrEqual($fileMb, $postMb);
+    }
+
+    /**
+     * Nginx harus menunggu lebih lama daripada PHP, bukan sebaliknya.
+     *
+     * Bila Nginx yang memutus lebih dulu, yang terlihat adalah 504 tanpa jejak
+     * di log aplikasi; bila PHP yang memutus, galatnya tercatat beserta
+     * permintaannya.
+     */
+    public function test_nginx_waits_longer_than_php_executes(): void
+    {
+        $nginx = (string) file_get_contents(base_path('ops/nginx-smartsukses.conf'));
+        $ini = (string) file_get_contents(base_path('ops/php-smartsukses.ini'));
+
+        $this->assertSame(1, preg_match('/^\s*fastcgi_read_timeout\s+(\d+)s;/mi', $nginx, $n));
+        $this->assertSame(1, preg_match('/^\s*max_execution_time\s*=\s*(\d+)/mi', $ini, $p));
+
+        $this->assertGreaterThan((int) $p[1], (int) $n[1]);
+    }
+
+    /**
+     * CON-22 — MySQL tidak pernah diekspos ke publik.
+     */
+    public function test_the_mysql_template_binds_to_localhost_only(): void
+    {
+        $cnf = (string) file_get_contents(base_path('ops/mysql-smartsukses.cnf'));
+
+        $this->assertMatchesRegularExpression('/^\s*bind-address\s*=\s*127\.0\.0\.1\s*$/m', $cnf);
+        $this->assertDoesNotMatchRegularExpression('/bind-address\s*=\s*0\.0\.0\.0/', $cnf);
+
+        /*
+         * Binlog adalah satu-satunya jalan menuju point-in-time recovery.
+         *
+         * Yang dicari **direktif aktif**, bukan kemunculan katanya: berkas itu
+         * sendiri memuat peringatan "JANGAN menambahkan --disable-log-bin di
+         * sini", dan pencarian polos akan tersandung pada peringatannya sendiri.
+         */
+        $this->assertDoesNotMatchRegularExpression('/^\s*(?!#)\S*disable-log-bin/m', $cnf);
+    }
+
+    /**
+     * Backup berkas mengecualikan direktori backup itu sendiri.
+     *
+     * Tanpa pengecualian ini setiap arsip memuat seluruh dump lama — termasuk
+     * dirinya sendiri — dan tumbuh berlipat sampai disk 40 GB penuh.
+     */
+    public function test_the_storage_backup_never_archives_the_backup_directory(): void
+    {
+        $script = (string) file_get_contents(base_path('ops/backup-storage.sh'));
+
+        $this->assertStringContainsString('--exclude=private/backups', $script);
+        $this->assertStringNotContainsString('--exclude=./private/backups', $script);
+
+        // Arsip diperiksa sebelum disimpan, dan yang gagal diperiksa dibuang.
+        $this->assertStringContainsString('tar tzf', $script);
+        $this->assertMatchesRegularExpression('/rm -f "\$\{TARGET\}"/', $script);
     }
 
     // ------------------------------------------------------------ kredensial

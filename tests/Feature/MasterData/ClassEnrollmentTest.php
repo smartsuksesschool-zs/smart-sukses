@@ -105,6 +105,101 @@ class ClassEnrollmentTest extends TestCase
         $this->makeClass(['homeroom_teacher_id' => $teacher->id]);
     }
 
+    // ============================================ AC-KELAS-05 — guru aktif
+
+    /**
+     * AC-KELAS-05 / KELAS-01 butir 2 — wali kelas hanya dari guru **aktif**.
+     *
+     * Diuji dengan benar-benar mengirim id guru nonaktif ke form, bukan dengan
+     * membaca daftar pilihannya: daftar yang benar tidak menjamin apa pun bila
+     * nilai di luar daftar tetap diterima saat disimpan — dan itulah bentuk
+     * kegagalan yang sesungguhnya mungkin terjadi, mis. ketika guru
+     * dinonaktifkan sementara form masih terbuka di layar admin (butir 592).
+     */
+    public function test_guru_nonaktif_ditolak_sebagai_wali_kelas(): void
+    {
+        $nonaktif = User::factory()
+            ->forSchool($this->school)
+            ->withRole(RoleName::WaliKelas)
+            ->create(['is_active' => false]);
+
+        $this->actingAs(
+            User::factory()->forSchool($this->school)->withRole(RoleName::SchoolAdmin)->create()
+        );
+
+        Livewire::test(CreateSchoolClass::class)
+            ->fillForm([
+                'academic_year_id' => $this->year->id,
+                'name' => 'X-A',
+                'grade_level' => 10,
+                'capacity' => 30,
+                'homeroom_teacher_id' => $nonaktif->id,
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['homeroom_teacher_id']);
+
+        $this->assertSame(0, SchoolClass::query()->count());
+    }
+
+    /**
+     * Pagar arah sebaliknya: guru **aktif** memang diterima. Tanpa ini,
+     * penolakan di atas dapat lolos hanya karena seluruh wali kelas ditolak.
+     */
+    public function test_guru_aktif_diterima_sebagai_wali_kelas(): void
+    {
+        $aktif = User::factory()
+            ->forSchool($this->school)
+            ->withRole(RoleName::WaliKelas)
+            ->create(['is_active' => true]);
+
+        $this->actingAs(
+            User::factory()->forSchool($this->school)->withRole(RoleName::SchoolAdmin)->create()
+        );
+
+        Livewire::test(CreateSchoolClass::class)
+            ->fillForm([
+                'academic_year_id' => $this->year->id,
+                'name' => 'X-B',
+                'grade_level' => 10,
+                'capacity' => 30,
+                'homeroom_teacher_id' => $aktif->id,
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame($aktif->id, SchoolClass::query()->value('homeroom_teacher_id'));
+    }
+
+    /**
+     * Guru aktif milik **cabang lain** juga bukan pilihan yang sah, dan ini
+     * pagar tenant — bukan sekadar pagar status aktif.
+     */
+    public function test_guru_cabang_lain_ditolak_sebagai_wali_kelas(): void
+    {
+        $cabangLain = School::factory()->create();
+        $asing = User::factory()
+            ->forSchool($cabangLain)
+            ->withRole(RoleName::WaliKelas)
+            ->create(['is_active' => true]);
+
+        $this->actingAs(
+            User::factory()->forSchool($this->school)->withRole(RoleName::SchoolAdmin)->create()
+        );
+
+        Livewire::test(CreateSchoolClass::class)
+            ->fillForm([
+                'academic_year_id' => $this->year->id,
+                'name' => 'X-C',
+                'grade_level' => 10,
+                'capacity' => 30,
+                'homeroom_teacher_id' => $asing->id,
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['homeroom_teacher_id']);
+
+        $this->assertSame(0, SchoolClass::query()->count());
+    }
+
     public function test_the_same_teacher_may_lead_a_class_in_a_different_year(): void
     {
         $teacher = User::factory()->forSchool($this->school)->withRole(RoleName::WaliKelas)->create();

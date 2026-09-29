@@ -196,9 +196,50 @@ baris di enum pilihan, dan pemeriksaan apakah sudah ada jenis tagihan non-bulana
 yang terpakai.
 
 **Catatan pemblokiran.** Butir ini memblokir rilis **hanya bila** sudah ada jenis
-tagihan `YEARLY` atau `ONCE` di basis data produksi. Bila seluruh jenis tagihan
-bulanan, ia tidak memblokir apa pun hari ini. Pemeriksaannya satu kueri, dan
-sebaiknya dilakukan sebelum rilis.
+tagihan `YEARLY` atau `ONCE` di basis data produksi.
+
+### Hasil audit 29 September 2026
+
+Seluruh tempat `frequency` disentuh sudah ditelusuri. Ia **disimpan**
+(`fee_types.frequency`, enum di migration), **divalidasi** (`FeeTypeController`
+memakai `Rule::enum`), **ditampilkan** (form, kolom tabel, filter, dan label pada
+pratinjau `GenerateTagihan:200`) — dan **tidak pernah dibaca** oleh
+`StudentFeeGenerator`. Satu-satunya pemakaian pada alur penerbitan adalah label
+tampilan.
+
+Bentuk risikonya karena itu presisi: penerbitan sepenuhnya digerakkan string
+`period` yang diketik operator, dengan anti-ganda `school_id + student_id +
+fee_type_id + period`. Sebuah jenis `YEARLY` atau `ONCE` dapat diterbitkan
+**sekali untuk setiap periode yang berbeda** — yaitu berulang — tanpa satu pun
+penjaga yang menyadari frekuensinya.
+
+Apakah jenis non-bulanan dapat benar-benar ada: **ya**. `FeeTypeResource`
+menawarkan ketiganya pada `Select`, dan API menerimanya. Yang **tidak** dapat
+memunculkannya di produksi adalah seeding: `SimulationSeeder` — satu-satunya
+seeder yang membuat jenis `ONCE` — berpagar `app()->environment('production')`
+dan sengaja tidak dipanggil `DatabaseSeeder`.
+
+Kueri pemeriksaannya dijalankan pada **basis data dev lokal** (`127.0.0.1`,
+`smartsukses`, `APP_ENV=local`), dan hasilnya **tidak kosong**: satu jenis `ONCE`
+bernama "Uang Kegiatan Simulasi" dari SimulationSeeder, dengan **0 baris tagihan
+terbit**.
+
+**Basis data produksi tidak dapat dijangkau dari mesin ini** — Railway tidak
+menyediakan proxy TCP MySQL dan `railway ssh` terblokir. Karena itu pertanyaan
+yang sesungguhnya belum terjawab, dan butir ini **tidak** boleh dinyatakan aman.
+Yang harus dijalankan pemilik terhadap produksi, read-only:
+
+```sql
+SELECT id, name, frequency FROM fee_types WHERE frequency <> 'MONTHLY';
+```
+
+Kosong ⇒ OD-05 tidak memblokir rilis pada keadaan saat diperiksa, dan
+semantiknya tetap belum diratifikasi. Ada isinya ⇒ **RELEASE BLOCKER**: jangan
+menjalankan generate massal untuk jenis itu sampai semantiknya diputuskan.
+
+Tidak ada semantik YEARLY/ONCE yang diimplementasikan pada batch ini, dan itu
+disengaja: menebaknya berarti memutuskan atas nama pemilik hal yang menghasilkan
+uang tertagih.
 
 ---
 

@@ -8,6 +8,7 @@ use App\Filament\Resources\SchoolClassResource\RelationManagers;
 use App\Models\AcademicYear;
 use App\Models\SchoolClass;
 use App\Models\User;
+use Closure;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -120,6 +121,40 @@ class SchoolClassResource extends Resource
                     static::resolveSchoolId($get('school_id')),
                 ))
                 ->searchable()
+                /*
+                 * AC-KELAS-05: wali kelas **hanya** dapat dipilih dari daftar
+                 * guru aktif.
+                 *
+                 * Daftar pilihan saja tidak menegakkan apa pun. `options()`
+                 * membentuk apa yang terlihat, bukan apa yang diterima saat
+                 * disimpan — dan sebelum pagar ini ada, id guru nonaktif atau
+                 * guru cabang lain yang sampai ke permintaan simpan tetap
+                 * tersimpan tanpa satu pun galat. Bentuk kegagalannya bukan
+                 * rekaan: seorang guru dinonaktifkan sementara form wali kelas
+                 * masih terbuka di layar admin, lalu form itu disimpan.
+                 *
+                 * Aturannya membaca **daftar yang sama persis** dengan yang
+                 * ditampilkan, sehingga keduanya tidak mungkin berbeda. Nilai
+                 * kosong dilewati: kelas memang boleh tidak berwali
+                 * (butir 592).
+                 */
+                ->rule(static fn (Forms\Get $get): Closure => static function (
+                    string $attribute,
+                    mixed $value,
+                    Closure $fail,
+                ) use ($get): void {
+                    if (blank($value)) {
+                        return;
+                    }
+
+                    $allowed = array_keys(static::homeroomTeacherOptions(
+                        static::resolveSchoolId($get('school_id')),
+                    ));
+
+                    if (! in_array((int) $value, $allowed, true)) {
+                        $fail(__('Wali kelas harus dipilih dari daftar guru aktif di cabang ini.'));
+                    }
+                })
                 // KELAS-01 poin 3: satu guru hanya boleh menjadi wali kelas
                 // satu kelas per tahun ajaran.
                 ->unique(

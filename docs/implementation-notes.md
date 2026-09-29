@@ -10626,6 +10626,68 @@ sandinya disetel ulang, tetapi menyembunyikannya adalah keputusan tentang cara
 sekolah bekerja, bukan tentang kebenaran kode. Ia dicatat sebagai OD-11 di
 `docs/requirements/owner-decisions.md`.
 
+### 592. Empat kesenjangan terakhir, dan dua di antaranya ternyata cacat
+
+Keempatnya masuk daftar sebagai "kode benar, test belum ada". Dua ternyata
+memang begitu. Dua lainnya tidak — dan yang membedakannya hanyalah bentuk
+testnya: test yang membaca penyetelan komponen akan melaporkan keduanya sehat.
+
+**AC-SIS-07 — batas foto.** Benar, dan kini terbukti dengan mengunggah:
+berkas 3 MB ditolak, 1 MB diterima, WEBP diterima, PDF ditolak. `maxSize()` dan
+`acceptedFileTypes()` Filament memang diturunkan menjadi aturan validasi sisi
+server, jadi klausul 1 dan 2 punya penegak yang sesungguhnya.
+
+Klausul 3 — "menghasilkan file ter-resize 400×400" — **tidak** punya penegak
+sisi server, dan itu perlu dikatakan terus terang: pengubahan ukuran dikerjakan
+FilePond di peramban, dan tidak ada satu baris pemrosesan gambar di sisi server
+aplikasi ini. Berkas yang tiba lewat permintaan buatan tersimpan apa adanya.
+Untuk alur yang sesungguhnya — admin mengunggah lewat panel — klausul itu
+terpenuhi; untuk jaminan sisi server, ia tidak ada. Yang dijaga test karena itu
+hanya sasarannya tidak bergeser, dan keterbatasannya dicatat sebagai temuan.
+
+**AC-SIS-09 — nama berkas ekspor.** Benar, dan kini terbukti lewat nama yang
+benar-benar diserahkan ke unduhan. Pagar keduanya yang membuat tes itu bernilai:
+cabang berbeda harus menghasilkan nama berbeda, sebab tanpa itu nama yang
+di-hardcode akan lulus.
+
+**AC-KELAS-05 — wali kelas hanya dari guru aktif.** Ternyata **salah**.
+`options()` membentuk apa yang terlihat, bukan apa yang diterima saat disimpan.
+Mengirim id guru **nonaktif** langsung ke form menghasilkan kelas yang tersimpan
+tanpa satu pun galat — dan begitu pula id guru **cabang lain**, yang berarti
+kebocoran batas tenant pada kolom itu. Keduanya bukan keadaan rekaan: seorang
+guru dinonaktifkan sementara form wali kelas masih terbuka di layar admin, lalu
+form itu disimpan.
+
+Pagarnya membaca daftar yang sama persis dengan yang ditampilkan, sehingga
+keduanya tidak mungkin berbeda, dan nilai kosong dilewati karena kelas memang
+boleh tidak berwali.
+
+**AC-KELAS-03 — mata pelajaran per cabang.** Ternyata **salah** pula, dengan
+bentuk yang berbeda. `subjects_school_id_code_unique` memang menolak kode ganda
+— tetapi penolakan itu tiba sebagai `UniqueConstraintViolationException`, yaitu
+layar galat 500. Admin yang mengetik kode yang sudah dipakai tidak diberi tahu
+apa yang harus ia perbaiki. Aturan uniknya kini ada di form, berlingkup cabang,
+sehingga kode yang sama tetap boleh dipakai cabang lain seperti bunyi
+requirement-nya.
+
+Pelajaran yang sama muncul dua kali di batch ini: **indeks unik di basis data
+bukan pengganti validasi di form.** Ia menjaga data, bukan menjaga orang yang
+memakainya.
+
+### Test yang membaca komentarnya sendiri
+
+Penjaga batas unggah untuk VPS hampir lolos dalam keadaan rusak. Regex-nya
+mencari `post_max_size\s*=\s*(\d+)M` di `ops/php-smartsukses.ini` dan menemukan
+angka **8** — bukan dari direktifnya, melainkan dari baris komentar yang
+menerangkan bahwa bawaan PHP adalah `post_max_size=8M`. Hal yang sama terjadi
+pada `my.cnf`, yang memuat peringatan "JANGAN menambahkan `--disable-log-bin`"
+sehingga pencarian polos menemukan larangan itu sendiri.
+
+Keduanya kini dijangkarkan ke awal baris dan mengabaikan baris berkomentar. Yang
+membuatnya terlihat bukan ketelitian membaca, melainkan menjalankan testnya: ia
+gagal dengan "8 is not equal to 10", dan angka 8 itu tidak ada di mana pun
+kecuali di dalam kalimat penjelasan.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

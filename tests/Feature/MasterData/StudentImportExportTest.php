@@ -67,6 +67,45 @@ class StudentImportExportTest extends TestCase
         $this->assertSame('P', $row[3]);
     }
 
+    /**
+     * AC-SIS-09 butir 2 — `siswa_[kode_sekolah]_[tanggal].xlsx`.
+     *
+     * Diuji lewat nama berkas yang benar-benar diserahkan ke unduhan, bukan
+     * dengan memanggil method pembentuk namanya: yang dijanjikan requirement
+     * kepada operator adalah nama berkas yang ia terima (butir 592).
+     */
+    public function test_nama_berkas_ekspor_mengikuti_ac_sis_09(): void
+    {
+        Student::factory()->create(['school_id' => $this->school->id]);
+
+        Excel::fake();
+
+        Livewire::test(ListStudents::class)->callAction('export');
+
+        Excel::assertDownloaded('siswa_PUSAT_'.now()->format('Y-m-d').'.xlsx');
+    }
+
+    /**
+     * Pagar yang membedakan: potongan tengahnya memang **kode cabang milik yang
+     * mengekspor**, bukan kata yang kebetulan tertulis di kode. Tanpa tes ini,
+     * nama yang di-hardcode `siswa_PUSAT_…` akan lulus tes di atas.
+     */
+    public function test_nama_berkas_ekspor_memakai_kode_cabang_pengekspor(): void
+    {
+        $cabangLain = School::factory()->create(['code' => 'CABANG2']);
+        Student::factory()->create(['school_id' => $cabangLain->id]);
+
+        $this->actingAs(
+            User::factory()->forSchool($cabangLain)->withRole(RoleName::SchoolAdmin)->create()
+        );
+
+        Excel::fake();
+
+        Livewire::test(ListStudents::class)->callAction('export');
+
+        Excel::assertDownloaded('siswa_CABANG2_'.now()->format('Y-m-d').'.xlsx');
+    }
+
     public function test_valid_rows_are_imported(): void
     {
         $path = $this->makeSheet([
