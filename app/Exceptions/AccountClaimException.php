@@ -72,4 +72,12 @@ class AccountClaimException extends RuntimeException
     {
         return new self(__('Permintaan ini tidak menunjuk data siswa mana pun.'));
     }
+
+    /**
+     * Siswa yang ditunjuk sudah diarsipkan sesudah permintaannya masuk.
+     */
+    public static function studentArchived(): self
+    {
+        return new self(__('Data siswa yang ditunjuk sudah diarsipkan. Pulihkan siswa tersebut lebih dahulu bila permintaan ini memang sah.'));
+    }
 }

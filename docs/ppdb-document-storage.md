@@ -181,7 +181,13 @@ pemindahan berlaku untuk seluruh cabang. Lingkupnya ditulis eksplisit dengan
 `withoutGlobalScopes()`, bukan diserahkan kepada kebetulan.
 
 Jalankan **setelah** backup basis data dan berkas, dan sebaiknya saat tidak ada
-pendaftaran masuk.
+pendaftaran masuk. Keduanya kini punya skripnya sendiri, dan backup berkas itulah
+yang menjadi satu-satunya jalan pulang bila `--apply` ternyata keliru:
+
+```sh
+ops/backup-database.sh && ops/backup-storage.sh
+php artisan ppdb:privatize-documents            # simulasi
+```
 
 ---
 

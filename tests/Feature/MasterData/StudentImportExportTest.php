@@ -67,6 +67,45 @@ class StudentImportExportTest extends TestCase
         $this->assertSame('P', $row[3]);
     }
 
+    /**
+     * AC-SIS-09 butir 2 — `siswa_[kode_sekolah]_[tanggal].xlsx`.
+     *
+     * Diuji lewat nama berkas yang benar-benar diserahkan ke unduhan, bukan
+     * dengan memanggil method pembentuk namanya: yang dijanjikan requirement
+     * kepada operator adalah nama berkas yang ia terima (butir 592).
+     */
+    public function test_nama_berkas_ekspor_mengikuti_ac_sis_09(): void
+    {
+        Student::factory()->create(['school_id' => $this->school->id]);
+
+        Excel::fake();
+
+        Livewire::test(ListStudents::class)->callAction('export');
+
+        Excel::assertDownloaded('siswa_PUSAT_'.now()->format('Y-m-d').'.xlsx');
+    }
+
+    /**
+     * Pagar yang membedakan: potongan tengahnya memang **kode cabang milik yang
+     * mengekspor**, bukan kata yang kebetulan tertulis di kode. Tanpa tes ini,
+     * nama yang di-hardcode `siswa_PUSAT_…` akan lulus tes di atas.
+     */
+    public function test_nama_berkas_ekspor_memakai_kode_cabang_pengekspor(): void
+    {
+        $cabangLain = School::factory()->create(['code' => 'CABANG2']);
+        Student::factory()->create(['school_id' => $cabangLain->id]);
+
+        $this->actingAs(
+            User::factory()->forSchool($cabangLain)->withRole(RoleName::SchoolAdmin)->create()
+        );
+
+        Excel::fake();
+
+        Livewire::test(ListStudents::class)->callAction('export');
+
+        Excel::assertDownloaded('siswa_CABANG2_'.now()->format('Y-m-d').'.xlsx');
+    }
+
     public function test_valid_rows_are_imported(): void
     {
         $path = $this->makeSheet([
@@ -109,6 +148,39 @@ class StudentImportExportTest extends TestCase
         $this->assertStringStartsWith('Baris 3:', $import->errors[0]);
         $this->assertStringStartsWith('Baris 4:', $import->errors[1]);
         $this->assertStringStartsWith('Baris 5:', $import->errors[2]);
+    }
+
+    /**
+     * NIS yang dipegang siswa terarsip tetap dipesan pada impor Excel.
+     *
+     * `Rule::unique` membaca tabel dan bukan model, sehingga ia memang tidak
+     * ikut tersaring oleh arsip — tetapi tidak ada satu pun tes yang
+     * membuktikannya, dan sifat itu justru yang menahan impor dari membuat NIS
+     * kembar yang tidak akan pernah bisa disimpan (butir 590).
+     */
+    public function test_nis_siswa_terarsip_tetap_dipesan_saat_impor_excel(): void
+    {
+        $arsip = Student::factory()->create(['school_id' => $this->school->id, 'nis' => '3020']);
+        $arsip->delete();
+
+        $path = $this->makeSheet([
+            ['nis', 'nisn', 'nama_lengkap', 'jenis_kelamin', 'status'],
+            ['3020', '6666666666', 'Siswa Baru Memakai NIS Terpakai', 'L', 'ACTIVE'],
+        ]);
+
+        $import = new StudentsImport($this->school->id);
+        Excel::import($import, $path);
+
+        $this->assertSame(0, $import->imported);
+        $this->assertCount(1, $import->errors);
+
+        // Pesannya menyebut arsip, karena operator tidak akan menemukan
+        // siswa itu di daftar mana pun.
+        $this->assertStringContainsString('diarsipkan', $import->errors[0]);
+
+        // Satu baris fisik saja, dan ia tetap terarsip.
+        $this->assertSame(1, Student::withTrashed()->where('nis', '3020')->count());
+        $this->assertTrue($arsip->fresh()->trashed());
     }
 
     /**

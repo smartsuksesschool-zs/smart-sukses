@@ -81,6 +81,7 @@ class LegacyDryRun
         $missing = [];
         $create = [];
         $match = [];
+        $archived = [];
         $duplicates = [];
         $nameCollisions = [];
         $readiness = [self::MASTER_READY => 0, self::ACCOUNT_READY => 0, self::ACCOUNT_BLOCKED => 0];
@@ -146,12 +147,23 @@ class LegacyDryRun
             $valid++;
             $readiness[self::MASTER_READY]++;
 
-            $existing = Student::query()
+            // Tiga keadaan, bukan dua. Sebuah NIS yang dipegang siswa terarsip
+            // tidak akan dibuat (indeks unik menghitung arsip) dan tidak akan
+            // dicocokkan pula, jadi menghitungnya sebagai salah satu dari
+            // keduanya membuat laporan ini menjanjikan yang tidak akan terjadi
+            // (butir 590).
+            $existing = Student::withTrashed()
                 ->where('school_id', $this->school->id)
                 ->where('nis', $nis)
-                ->exists();
+                ->first(['deleted_at']);
 
-            $existing ? $match[] = $line : $create[] = $line;
+            if ($existing === null) {
+                $create[] = $line;
+            } elseif ($existing->trashed()) {
+                $archived[] = $line;
+            } else {
+                $match[] = $line;
+            }
 
             [$state, $blocker] = $this->accountReadiness($row);
 
@@ -168,6 +180,8 @@ class LegacyDryRun
             'valid_rows' => $valid,
             'create_candidates' => count($create),
             'match_candidates' => count($match),
+            'archived_candidates' => count($archived),
+            'archived' => $archived,
             'rejected_rows' => count($rejected),
             'rejected' => $rejected,
             'duplicates' => $duplicates,

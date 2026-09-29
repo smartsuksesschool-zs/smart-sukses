@@ -22,3 +22,14 @@
 # Keluarannya disimpan supaya kegagalan backup dapat ditemukan; tanpa log,
 # backup yang berhenti bekerja tidak terlihat sampai ada yang membutuhkannya.
 0 2 * * * cd /var/www/smartsukses && ops/backup-database.sh >> storage/logs/backup.log 2>&1
+
+# Backup berkas unggahan, 20 menit sesudahnya (CON-25, retensi 30 hari).
+#
+# Terpisah dan berselang, bukan digabung: dump basis data yang gagal tidak boleh
+# ikut membatalkan backup berkas, dan menjalankan keduanya sekaligus membuat dua
+# proses berebut I/O pada VPS 2 Core.
+#
+# Basis data yang dipulihkan tanpa berkasnya menghasilkan sistem yang tampak
+# utuh dengan setiap tautan berkasnya mati — foto siswa, bukti pembayaran,
+# dokumen PPDB, dan PDF rapor.
+20 2 * * * cd /var/www/smartsukses && ops/backup-storage.sh >> storage/logs/backup.log 2>&1

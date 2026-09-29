@@ -183,6 +183,34 @@ class LegacyDryRunTest extends TestCase
         $this->assertSame(1, $report['valid_rows']);
     }
 
+    /**
+     * Siswa terarsip adalah keadaan **ketiga**, bukan salah satu dari dua.
+     *
+     * NIS-nya tidak dapat dibuat (indeks unik menghitung arsip) dan tidak dapat
+     * dicocokkan pula, jadi menaruhnya di salah satu ember membuat laporan ini
+     * menjanjikan yang tidak akan terjadi (butir 590).
+     */
+    public function test_nis_milik_siswa_terarsip_dihitung_terpisah(): void
+    {
+        $school = $this->school();
+        $arsip = Student::factory()->for($school)->create(['nis' => '2024001']);
+        $arsip->delete();
+
+        $report = (new LegacyDryRun(
+            $this->workbook(
+                [[['1', 'Siswa Satu', '10', 'Jl. Contoh 1', '2024001', 'P']]],
+                [],
+                ['No.', 'Nama', 'Kelas', 'Alamat', 'NIS', 'Jenis Kelamin'],
+            ),
+            $school,
+        ))->students();
+
+        $this->assertSame(1, $report['archived_candidates']);
+        $this->assertSame(0, $report['create_candidates']);
+        $this->assertSame(0, $report['match_candidates']);
+        $this->assertSame([5], $report['archived']);
+    }
+
     public function test_nama_kembar_adalah_peringatan_bukan_identitas(): void
     {
         $report = (new LegacyDryRun(

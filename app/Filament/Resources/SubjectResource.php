@@ -10,6 +10,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rules\Unique;
 
 /**
  * API 4.6 — /subjects. Modul "Kelas & Jadwal" pada matriks izin.
@@ -62,6 +63,24 @@ class SubjectResource extends Resource
                 ->label(__('Kode'))
                 ->required()
                 ->maxLength(20)
+                /*
+                 * AC-KELAS-03 "per cabang": `subjects_school_id_code_unique`
+                 * sudah menolak kode ganda di lapis basis data, tetapi
+                 * penolakan itu tiba sebagai UniqueConstraintViolationException
+                 * — layar galat 500 yang tidak memberi tahu admin apa yang
+                 * harus ia perbaiki. Pagar ini memindahkan penolakan yang sama
+                 * ke tempat yang dapat dibaca, dan lingkupnya **cabang**
+                 * sehingga kode yang sama tetap boleh dipakai cabang lain
+                 * (butir 592).
+                 */
+                ->unique(
+                    ignoreRecord: true,
+                    modifyRuleUsing: fn (Unique $rule, Forms\Get $get) => $rule
+                        ->where('school_id', static::resolveSchoolId($get('school_id'))),
+                )
+                ->validationMessages([
+                    'unique' => __('Kode mata pelajaran ini sudah dipakai di cabang tersebut.'),
+                ])
                 ->placeholder('MTK'),
 
             Forms\Components\TextInput::make('credit_hours')
@@ -79,6 +98,21 @@ class SubjectResource extends Resource
                 ->rows(3)
                 ->columnSpanFull(),
         ])->columns(2);
+    }
+
+    /**
+     * Cabang yang berlaku untuk form ini: pilihan Super Admin, atau cabang akun
+     * bagi peran School Level (butir 588).
+     */
+    protected static function resolveSchoolId(mixed $formValue = null): ?int
+    {
+        $user = Auth::user();
+
+        if ($user?->isSuperAdmin() && filled($formValue)) {
+            return (int) $formValue;
+        }
+
+        return $user?->school_id;
     }
 
     public static function table(Table $table): Table

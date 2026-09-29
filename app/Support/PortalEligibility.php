@@ -31,8 +31,22 @@ class PortalEligibility
      */
     public const REFUSED = 'Akun ini tidak memiliki akses ke portal ini.';
 
+    /**
+     * Kalimat ini menunjuk **admin sekolah**, bukan tautan lupa kata sandi.
+     *
+     * Sebelumnya ia menyuruh siswa dan orang tua memakai tautan lupa kata sandi,
+     * dan tautan itu memang tidak ada: halaman masuk sengaja tidak
+     * mengiklankannya (`UnifiedLoginTest::test_no_password_recovery_is_advertised`).
+     * Petunjuk yang menyuruh seseorang menekan sesuatu yang tidak ada di layar
+     * lebih buruk daripada penolakan tanpa petunjuk — ia membuat orang mengira
+     * dirinya yang tidak teliti.
+     *
+     * Admin menyetel kata sandi baru lewat Ubah Pengguna, dan penanda "wajib
+     * ganti" terlepas sendiri pada penyimpanan yang sama (`User::booted`),
+     * sehingga akunnya langsung dapat dipakai (butir 591).
+     */
     public const PASSWORD_CHANGE_REQUIRED = 'Kata sandi sementara wajib diganti sebelum masuk. '
-        .'Gunakan tautan lupa kata sandi untuk menyetel kata sandi baru.';
+        .'Hubungi admin sekolah untuk memperoleh kata sandi baru.';
 
     /**
      * Alasan menolak akun ini, atau NULL bila ia memang berhak masuk.

@@ -1,0 +1,78 @@
+# Penyetelan MySQL Smart Sukses School.
+#
+# Pasang:
+#   sudo cp ops/mysql-smartsukses.cnf /etc/mysql/mysql.conf.d/99-smartsukses.cnf
+#   sudo systemctl restart mysql
+#
+# Verifikasi SESUDAH restart (jangan menganggap berkas terbaca):
+#   sudo mysql -e "SELECT @@bind_address, @@innodb_buffer_pool_size, @@max_connections, @@log_bin;"
+#
+# Nilai di sini mengasumsikan MySQL berbagi satu VPS 2 Core / 2 GB dengan Nginx,
+# PHP-FPM, dan queue worker (CON-20, CON-21). Anggaran RAM per komponen
+# diuraikan di ops/php-fpm-smartsukses.conf — kedua berkas harus diubah bersama.
+
+[mysqld]
+
+# ------------------------------------------------------------------ jangkauan
+#
+# CON-22: MySQL hanya boleh dijangkau dari localhost, tidak pernah diekspos ke
+# publik. Baris ini yang menegakkannya; firewall adalah lapis kedua, bukan
+# pengganti. Aplikasi terhubung lewat 127.0.0.1, satu mesin yang sama.
+bind-address = 127.0.0.1
+skip-name-resolve
+
+# --------------------------------------------------------------------- memori
+#
+# 512M, bukan 70-80% RAM seperti anjuran umum: anjuran itu untuk server yang
+# HANYA menjalankan MySQL. Di sini basis datanya kecil (puluhan ribu baris),
+# sehingga buffer pool sebesar ini sudah memuat hampir seluruh indeks aktif,
+# dan RAM sisanya lebih berguna untuk PHP-FPM.
+innodb_buffer_pool_size = 512M
+innodb_log_file_size = 128M
+
+# Menulis ke disk pada setiap commit. Lebih lambat daripada nilai 2, dan itu
+# disengaja: kehilangan transaksi terakhir pada pemadaman berarti pembayaran
+# yang tercatat di layar tetapi tidak ada di basis data.
+innodb_flush_log_at_trx_commit = 1
+
+max_connections = 60
+thread_cache_size = 16
+table_open_cache = 400
+
+# -------------------------------------------------------------------- binlog
+#
+# DIBIARKAN AKTIF (bawaan MySQL 8). Tanpa binlog tidak ada point-in-time
+# recovery: satu-satunya titik pulih adalah dump harian pukul 02:00, sehingga
+# kesalahan pada pukul 16:00 berarti kehilangan pekerjaan sehari penuh.
+# Retensi 7 hari menjaga pertumbuhannya tetap terikat pada disk 40 GB.
+#
+# JANGAN menambahkan --disable-log-bin di sini. Bila nanti perlu dimatikan
+# karena disk, keputusannya harus dicatat lebih dulu bahwa PITR ikut hilang.
+binlog_expire_logs_seconds = 604800
+max_binlog_size = 100M
+
+# ------------------------------------------------------------------- diagnosa
+#
+# Tanpa log ini, "sistem lambat" tidak dapat ditelusuri. long_query_time = 1
+# detik: cukup longgar untuk tidak membanjiri log, cukup ketat untuk menangkap
+# kueri laporan keuangan dan roster yang kehilangan indeksnya.
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/smartsukses-slow.log
+long_query_time = 1
+log_queries_not_using_indexes = 0
+
+# ------------------------------------------------------------------ karakter
+#
+# Harus cocok dengan config/database.php aplikasi. Nama siswa memuat karakter di
+# luar latin1, dan utf8mb4 juga yang membuat emoji pada pengumuman tidak
+# memotong baris.
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+
+# Mode ketat. Nilai yang tidak sesuai kolom menjadi galat, bukan dipotong diam-
+# diam — yang jika tidak berarti NIS 20 karakter tersimpan terpenggal.
+sql_mode = STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+# Zona waktu disimpan UTC di basis data; Laravel yang menerjemahkannya. Jangan
+# menyetel default-time-zone ke +07:00 — kolom timestamp yang sudah ada ditulis
+# dengan asumsi UTC.

@@ -434,6 +434,48 @@ class ProductionImportGateTest extends TestCase
         $this->assertSame(0, Student::query()->count());
     }
 
+    /**
+     * NIS yang dipegang siswa **terarsip** menghalangi impor produksi.
+     *
+     * Bukan sekadar kerapian laporan. Indeks unik `school_id + nis` ikut
+     * menghitung baris terarsip, jadi baris seperti ini dahulu lolos sebagai
+     * READY_CREATE dan pecah sebagai QueryException di tengah penulisan — di
+     * produksi, sesudah sebagian baris masuk. Yang diuji di sini adalah bahwa
+     * penolakannya terjadi **sebelum** satu baris pun ditulis (butir 590).
+     */
+    public function test_nis_milik_siswa_terarsip_menghalangi_impor_produksi(): void
+    {
+        $this->asProduction();
+        $school = $this->school();
+        $year = $this->year($school);
+        $this->rombel($school, $year);
+
+        $arsip = Student::factory()->for($school)->create(['nis' => 'Z0001']);
+        $arsip->delete();
+
+        $path = $this->workbook([
+            ['1', 'Z0001', '0088888881', 'Siswa Karangan Satu', 'L', 'SMART', 'X Terbuka - 2'],
+        ]);
+
+        $plan = $this->planFor($path, $school, $year);
+
+        $this->assertSame(1, $plan['outcomes'][StudentImportPlan::PENDING_ARCHIVED_STUDENT]);
+        $this->assertArrayNotHasKey(StudentImportPlan::READY_CREATE, $plan['outcomes']);
+
+        $refusals = ProductionImportAuthorization::refusals($plan, $year);
+        $this->assertNotSame([], array_filter(
+            $refusals,
+            fn (string $r): bool => str_contains($r, StudentImportPlan::PENDING_ARCHIVED_STUDENT),
+        ));
+
+        $this->runCommand($path, ['--konfirmasi' => true])->assertExitCode(1);
+
+        // Tidak ada siswa baru, dan yang terarsip tetap terarsip.
+        $this->assertSame(0, Student::query()->count());
+        $this->assertSame(1, Student::withTrashed()->count());
+        $this->assertTrue($arsip->fresh()->trashed());
+    }
+
     public function test_nisn_ganda_setelah_normalisasi_menghalangi_impor_produksi(): void
     {
         $this->asProduction();

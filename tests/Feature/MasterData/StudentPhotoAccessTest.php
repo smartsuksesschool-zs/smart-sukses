@@ -2,7 +2,10 @@
 
 namespace Tests\Feature\MasterData;
 
+use App\Enums\Gender;
 use App\Enums\RoleName;
+use App\Enums\StudentStatus;
+use App\Filament\Resources\StudentResource\Pages\CreateStudent;
 use App\Filament\Resources\StudentResource\Pages\EditStudent;
 use App\Models\AcademicYear;
 use App\Models\School;
@@ -150,6 +153,122 @@ class StudentPhotoAccessTest extends TestCase
         $this->assertCount(1, $files);
         $this->assertStringStartsWith($this->photoRoute($student), $files[0]['url']);
         $this->assertStringNotContainsString('signature=', $files[0]['url']);
+    }
+
+    /**
+     * AC-SIS-07 butir 2 / CON-43 — berkas di atas 2 MB ditolak.
+     *
+     * Diuji dengan benar-benar mengunggah, bukan dengan membaca penyetelan
+     * komponennya: `maxSize()` Filament diturunkan menjadi aturan validasi sisi
+     * server, dan yang perlu dibuktikan adalah **penolakannya** — bukan bahwa
+     * ada angka 2048 tertulis di suatu tempat (butir 592).
+     */
+    public function test_foto_di_atas_dua_megabita_ditolak(): void
+    {
+        $this->actingAs($this->userWith(RoleName::SchoolAdmin));
+
+        Livewire::test(CreateStudent::class)
+            ->fillForm([
+                'nis' => 'FOTO-3MB',
+                'full_name' => 'Siswa Uji Foto Besar',
+                'gender' => Gender::Male->value,
+                'status' => StudentStatus::Active->value,
+                'photo_url' => UploadedFile::fake()->image('besar.jpg')->size(3072),
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['photo_url']);
+
+        $this->assertFalse(Student::withTrashed()->where('nis', 'FOTO-3MB')->exists());
+    }
+
+    /**
+     * AC-SIS-07 butir 2 — berkas di bawah batas diterima.
+     *
+     * Pagar arah sebaliknya: tanpa ini, penolakan pada tes di atas dapat lolos
+     * hanya karena seluruh unggahan ditolak.
+     */
+    public function test_foto_di_bawah_dua_megabita_diterima(): void
+    {
+        $this->actingAs($this->userWith(RoleName::SchoolAdmin));
+
+        Livewire::test(CreateStudent::class)
+            ->fillForm([
+                'nis' => 'FOTO-1MB',
+                'full_name' => 'Siswa Uji Foto Wajar',
+                'gender' => Gender::Male->value,
+                'status' => StudentStatus::Active->value,
+                'photo_url' => UploadedFile::fake()->image('wajar.jpg')->size(1024),
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertTrue(Student::where('nis', 'FOTO-1MB')->exists());
+    }
+
+    /**
+     * AC-SIS-07 butir 1 — WEBP diterima, dan berkas bukan gambar ditolak.
+     *
+     * WEBP disebut eksplisit oleh CON-43 sedangkan §3.4 blueprint hanya menyebut
+     * JPG/PNG/PDF. CON-43 yang lebih spesifik, dan tes ini yang memastikan
+     * pilihan itu tidak bergeser diam-diam.
+     */
+    public function test_webp_diterima_dan_pdf_ditolak(): void
+    {
+        $this->actingAs($this->userWith(RoleName::SchoolAdmin));
+
+        Livewire::test(CreateStudent::class)
+            ->fillForm([
+                'nis' => 'FOTO-WEBP',
+                'full_name' => 'Siswa Uji Webp',
+                'gender' => Gender::Male->value,
+                'status' => StudentStatus::Active->value,
+                'photo_url' => UploadedFile::fake()->create('foto.webp', 200, 'image/webp'),
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertTrue(Student::where('nis', 'FOTO-WEBP')->exists());
+
+        Livewire::test(CreateStudent::class)
+            ->fillForm([
+                'nis' => 'FOTO-PDF',
+                'full_name' => 'Siswa Uji Pdf',
+                'gender' => Gender::Male->value,
+                'status' => StudentStatus::Active->value,
+                'photo_url' => UploadedFile::fake()->create('berkas.pdf', 200, 'application/pdf'),
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['photo_url']);
+
+        $this->assertFalse(Student::withTrashed()->where('nis', 'FOTO-PDF')->exists());
+    }
+
+    /**
+     * AC-SIS-07 butir 3 — sasaran 400×400.
+     *
+     * Ini satu-satunya klausul AC-SIS-07 yang **tidak dapat** diuji secara
+     * perilaku dari sisi server, dan alasannya perlu tercatat: pengubahan ukuran
+     * dikerjakan FilePond di peramban, dan tidak ada satu baris pemrosesan
+     * gambar sisi server di aplikasi ini. Berkas yang diunggah langsung — lewat
+     * permintaan buatan seperti pada tes di atas — karena itu tersimpan apa
+     * adanya tanpa diubah ukurannya.
+     *
+     * Yang dapat dijaga hanyalah sasarannya tidak bergeser, dan itulah yang
+     * dilakukan di sini. Konsekuensinya dicatat sebagai temuan, bukan
+     * disembunyikan (butir 592).
+     */
+    public function test_sasaran_ubah_ukuran_foto_tetap_400x400(): void
+    {
+        $student = $this->studentWithPhoto();
+
+        $this->actingAs($this->userWith(RoleName::SchoolAdmin));
+
+        $upload = Livewire::test(EditStudent::class, ['record' => $student->getRouteKey()])
+            ->instance()->form->getComponent('data.photo_url');
+
+        $this->assertSame('400', $upload->getImageResizeTargetWidth());
+        $this->assertSame('400', $upload->getImageResizeTargetHeight());
+        $this->assertSame('1:1', $upload->getImageCropAspectRatio());
     }
 
     public function test_jalur_lama_di_disk_publik_tidak_pernah_disajikan(): void

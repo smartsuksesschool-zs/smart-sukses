@@ -47,6 +47,18 @@ class StudentImportPlan
 
     public const PENDING_PPDB_RECONCILIATION = 'PPDB_RECONCILIATION_REQUIRED';
 
+    /**
+     * NIS-nya milik siswa yang **diarsipkan**.
+     *
+     * Bukan READY_MATCH: menulis ke baris terarsip berarti menghidupkan data ke
+     * dalam catatan yang sengaja disimpan di luar peredaran. Bukan READY_CREATE
+     * pula: indeks unik `school_id + nis` ikut menghitung baris terarsip, jadi
+     * penyisipannya pasti gagal di tengah jalan. Satu-satunya jalan keluar yang
+     * benar adalah keputusan manusia — pulihkan siswa lamanya, atau perbaiki
+     * NIS di berkas sumber (butir 590).
+     */
+    public const PENDING_ARCHIVED_STUDENT = 'PENDING_ARCHIVED_STUDENT';
+
     public const REJECTED_MASTER_INCOMPLETE = 'REJECTED_MASTER_INCOMPLETE';
 
     /**
@@ -467,7 +479,11 @@ class StudentImportPlan
             return $this->outcome($decision, self::PENDING_DUPLICATE_NISN, ['baris '.$seenNisn[$nisn['value']]]);
         }
 
-        $existing = Student::query()
+        // `withTrashed()` dan bukan pencarian biasa: indeks unik `school_id +
+        // nis` tidak mengenal arsip, jadi yang menentukan bisa-tidaknya sebuah
+        // NIS dipakai adalah seluruh baris yang ada secara fisik — termasuk yang
+        // diarsipkan (butir 590).
+        $existing = Student::withTrashed()
             ->where('school_id', $this->school->id)
             ->where('nis', $nis)
             ->first();
@@ -475,7 +491,10 @@ class StudentImportPlan
         if ($existing !== null) {
             $decision['student_id'] = $existing->id;
 
-            return $this->outcome($decision, self::READY_MATCH);
+            return $this->outcome(
+                $decision,
+                $existing->trashed() ? self::PENDING_ARCHIVED_STUDENT : self::READY_MATCH,
+            );
         }
 
         // 4. Tingkat X beririsan dengan pendaftar PPDB. `ppdb_registrations`

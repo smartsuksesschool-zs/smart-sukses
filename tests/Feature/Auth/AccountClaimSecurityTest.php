@@ -28,6 +28,7 @@ use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
+use Throwable;
 
 /**
  * Pagar-pagar yang membuat alur ini boleh dibuka ke publik.
@@ -319,6 +320,42 @@ class AccountClaimSecurityTest extends TestCase
         $this->expectException(AccountClaimException::class);
 
         app(AccountClaimReviewer::class)->approve($lagi, $admin);
+    }
+
+    /**
+     * Siswa yang diarsipkan **sesudah** permintaannya masuk.
+     *
+     * Urutan ini bukan rekaan: daftar permintaan memang menampilkan siswa
+     * terarsip (AccountClaimResource memuatnya dengan `withTrashed`), jadi admin
+     * dapat sampai ke tombol Setujui. Yang diuji adalah bentuk penolakannya —
+     * satu kalimat yang memberi tahu apa yang harus dikerjakan, bukan
+     * ModelNotFoundException yang muncul sebagai galat 500 (butir 590).
+     */
+    public function test_permintaan_bagi_siswa_terarsip_ditolak_dengan_kalimat_bukan_galat_500(): void
+    {
+        $admin = $this->adminOf($this->school);
+        $claim = $this->makeClaim('sub-arsip', 'arsip@example.test', AccountClaimType::Siswa);
+
+        $this->student->delete();
+
+        $thrown = null;
+
+        try {
+            app(AccountClaimReviewer::class)->approve($claim, $admin);
+        } catch (Throwable $e) {
+            $thrown = $e;
+        }
+
+        $this->assertInstanceOf(
+            AccountClaimException::class,
+            $thrown,
+            'Penolakan harus berupa kalimat untuk admin, bukan galat yang tidak tertangani.',
+        );
+        $this->assertStringContainsString('diarsipkan', $thrown->getMessage());
+
+        // Tidak ada akun yang terbentuk, dan permintaannya tetap menunggu.
+        $this->assertFalse(User::query()->where('email', 'arsip@example.test')->exists());
+        $this->assertSame(AccountClaimStatus::Pending, $claim->fresh()->status);
     }
 
     public function test_surel_yang_sudah_dimiliki_akun_lain_tidak_digabungkan_diam_diam(): void

@@ -10467,6 +10467,227 @@ langsung merah.
   lama `students/…` masih melaporkan `true`. Tidak ada fotonya yang tampil di
   portal mana pun.
 
+### 588. Cabang yang tidak pernah ditanyakan
+
+Super Admin tidak memiliki `school_id` — itu bukan cacat melainkan rancangan:
+`SchoolScope::currentSchoolId()` mengembalikan null untuknya supaya ia melihat
+seluruh cabang. Yang tidak dipikirkan adalah sisi **tulis**. Lima resource
+(`StudentResource`, `SchoolClassResource`, `SubjectResource`, `ScheduleResource`,
+`AcademicYearResource`) memperoleh `school_id` dari scope yang sama, sehingga
+Super Admin yang membuat siswa menulis baris ber-`school_id` NULL — dan yang
+terlihat pengguna adalah galat basis data mentah, bukan pesan validasi.
+
+Ditemukan setelah produksi hidup, dan karena itu diperbaiki sebagai hotfix
+tersendiri (`5c2a732`). Perbaikannya **menanyakan** cabangnya: sebuah `Select`
+yang hanya muncul untuk Super Admin, `disabledOn('edit')` supaya baris tidak
+dapat berpindah cabang setelah lahir, dan aturan unik NIS yang membaca cabang
+dari pilihan itu alih-alih dari scope.
+
+Yang sengaja **tidak** dikerjakan: penjaga cabang-null di dalam
+`BelongsToSchool`. Ia akan menutup gejalanya di seluruh model sekaligus, tetapi
+mengubah perilaku jauh di luar lima layar yang rusak — dan rilis perbaikan
+darurat bukan tempat melakukan itu.
+
+Kekeliruan yang terbawa: rollback ke commit sebelumnya tidak akan menolong,
+sebab celahnya sudah ada sebelum rilis yang dicurigai. Itu diperiksa lebih dulu,
+bukan diandaikan.
+
+### 589. Arsip, bukan hapus
+
+CON-45 dan AC-M0-13 melarang penghapusan siswa. Permintaannya "lengkapi CRUD",
+dan huruf D-nya diwujudkan sebagai **arsip**: `SoftDeletes`, tombol "Arsipkan",
+dan `RestoreAction`.
+
+Enam titik yang ikut bergerak, dan masing-masing adalah keputusan:
+
+1. **Pembersihan foto hanya pada `forceDeleted`, bukan `deleted`.** Laravel
+   memicu `deleted` juga untuk soft delete, sehingga hook yang salah akan
+   menghapus foto siswa yang masih dapat dipulihkan. Arsip yang pulih tanpa
+   fotonya bukan arsip.
+2. **NIS tetap dipesan.** Indeks unik tidak mengenal arsip, dan itu dibiarkan apa
+   adanya — tetapi pesannya ditulis ulang menyebut kata "diarsipkan", sebab
+   "NIS sudah digunakan" membuat operator mencari siswa yang tidak muncul di
+   daftar mana pun.
+3. **Status akademik tidak disentuh.** Arsip mengisi `deleted_at`; ia bukan
+   perubahan status, dan menggabungkan keduanya akan mengarang data akademik.
+4. **Layar histori memuat `withTrashed()` satu per satu**, bukan mengubah relasi
+   `student()` secara global. Relasi global yang diubah membuat setiap kueri
+   aktif ikut memuat arsip — kebalikan dari yang diinginkan.
+5. **Roster dan statistik menambahkan `deleted_at IS NULL` pada join.** Join
+   melewati global scope; tanpa baris itu siswa terarsip tetap terhitung.
+6. **Tidak ada Force Delete dan tidak ada Bulk Delete.** `StudentPolicy::forceDelete`
+   mengembalikan false, tetapi `Gate::before` memberi Super Admin segalanya —
+   sehingga yang benar-benar menahan penghapusan permanen adalah **tidak adanya
+   tombolnya**, dan itulah yang diuji.
+
+### 590. Arsip yang tidak terlihat oleh yang membutuhkannya
+
+Butir 589 menambahkan satu global scope, dan global scope berlaku ke tempat-tempat
+yang tidak ikut ditinjau saat itu. Dua di antaranya rusak:
+
+**Perkakas migrasi.** `LegacyDryRun` dan `StudentImportPlan` mencari NIS lewat
+`Student::query()`, yang kini tersaring arsip. Sebuah NIS milik siswa terarsip
+karena itu dinyatakan `READY_CREATE` — lalu `firstOrCreate` di
+`StudentImportApply` mencoba menyisipkannya dan menabrak
+`students_school_id_nis_unique`. Bukan galat per baris melainkan `QueryException`
+di tengah `migrasi:terapkan-produksi`, sesudah sebagian baris masuk.
+
+Perbaikannya bukan `withTrashed()` saja: mencocokkan ke baris terarsip berarti
+menulis data ke catatan yang sengaja disimpan di luar peredaran. Keadaannya
+memang **ketiga**, dan karena itu memperoleh state sendiri —
+`PENDING_ARCHIVED_STUDENT` — yang tidak masuk `WRITABLE` (sehingga penerapan
+tidak pernah menyentuhnya), masuk `BLOCKING_OUTCOMES` (sehingga impor produksi
+menolak berjalan), dan terhitung sebagai "tertunda" pada rekonsiliasi sehingga
+neracanya tetap seimbang. Dry run memperoleh ember ketiga pula, sebab laporan
+yang menyebut baris itu "akan dibuat" menjanjikan yang tidak akan terjadi.
+
+**Persetujuan klaim akun.** `AccountClaimResource` memuat siswa dengan
+`withTrashed()` — jadi baris terarsip memang tampil dan tombol Setujui dapat
+ditekan — tetapi `AccountClaimReviewer` mencarinya tanpa itu, sehingga
+`findOrFail` melempar `ModelNotFoundException`: galat 500 yang tidak memberi tahu
+admin apa pun. `withTrashed()` di sini bukan untuk menyetujui siswa terarsip,
+melainkan untuk dapat **menolaknya dengan kalimat yang benar**.
+
+Keduanya diuji mutasi: mengembalikan `withTrashed()` menjadi `query()`
+memunculkan kembali persis `QueryException` dan `ModelNotFoundException`-nya.
+
+Yang juga ditutup di batch ini adalah kesenjangan yang tidak berupa cacat
+melainkan berupa **ketiadaan bukti**: batas unggahan foto (CON-43), masa berlaku
+sesi 8 jam (CON-29), masa berlaku tautan setel ulang (CON-30), dan sifat NIS
+terarsip pada impor Excel — semuanya sudah benar di kode, tidak satu pun terikat
+oleh test.
+
+**Artefak VPS.** Repositori tidak memiliki satu pun berkas konfigurasi server,
+padahal CON-20/21/22 menyebutkan bentuknya dengan tepat. Yang paling mendesak
+bukan kerapian melainkan aritmetika: bawaan Nginx `client_max_body_size` 1 MB dan
+bawaan PHP `post_max_size` 8 MB keduanya **lebih kecil** daripada yang aplikasi
+terima — satu pendaftaran PPDB sah dapat memuat 5 dokumen × 2 MB dalam satu
+permintaan. Hasilnya 413 tanpa jejak di log aplikasi, pada hari pertama.
+Angka pada `ops/php-smartsukses.ini` dan `ops/nginx-smartsukses.conf` diturunkan
+dari batas yang sudah berlaku di kode, bukan dikarang, dan keduanya menyebut satu
+sama lain supaya tidak bergerak sendiri-sendiri.
+
+`ops/backup-storage.sh` melengkapi backup basis data yang sudah ada — dan
+pengujiannya menemukan cacat pada skrip itu sendiri: pola `--exclude` beruntun
+`./` tidak cocok dengan nama anggota tar, sehingga arsip memuat seluruh dump lama
+**termasuk dirinya sendiri**. Kini `private/backups` dikecualikan tanpa syarat.
+
+### 591. Reset yang tidak mengakhiri apa pun
+
+Sumber kebenaran requirement selama ini hidup di luar version control, di
+direktori yang bahkan bukan git repo. Sejak batch ini ia ada di
+`docs/blueprint/` sebagai salinan byte-for-byte dengan checksum tercatat — dan
+hal pertama yang ditemukan sesudah ia dapat dibaca dengan tenang adalah sebuah
+requirement yang disebut **empat kali** dan tidak dipenuhi satu kali pun.
+
+AUTH-04 AC-3 dan CON-30 berbunyi "seluruh sesi aktif di-invalidate setelah reset
+berhasil". Ia diulang di CON-30 (`01-PRD.md:317`), di AC-nya sendiri (`:485`), di
+AC-M0-10 (`:1008`), dan digambar sebagai satu kotak tersendiri pada diagram alur
+(`03-USER_FLOW.md:917`). Tidak ada satu pun bagian yang membuatnya ambigu.
+
+Yang sebelumnya terjadi: Filament memperbarui `remember_token`, sehingga cookie
+"ingat saya" mati — dan **hanya** itu. Baris sesi di basis data dan token Sanctum
+tetap hidup, sehingga peramban yang sudah masuk di perangkat lain tetap masuk
+memakai sandi yang sudah tidak berlaku. Reset sandi yang tidak mengeluarkan
+siapa pun adalah reset yang tidak mengakhiri persoalan yang membuat orang
+mereset sandinya.
+
+Pendengarnya dipasang pada `PasswordReset`, dan titik itu dipilih setelah membaca
+halaman reset Filament dan bukan setelah menduganya: halaman itu memanggil
+`event(new PasswordReset($user))` dan **tidak** memanggil `Auth::login`. Karena
+yang baru mereset tidak sedang masuk, menghapus seluruh baris sesi miliknya tidak
+memutus alurnya sendiri — kalau ia login di sana, pencabutan menyeluruh akan
+mengeluarkannya dari halaman yang baru saja berhasil.
+
+Sesi hanya dapat dicabut ketika penyimpanannya dapat dijangkau, yaitu driver
+`database` seperti yang diwajibkan kedua berkas `.env` contoh. Pada driver lain
+tidak ada yang dapat dikerjakan dari sana, dan mendiamkannya lebih jujur daripada
+berpura-pura: token Sanctum tetap dicabut. `phpunit.xml` sendiri memakai
+`SESSION_DRIVER=array`, sehingga testnya menyetel driver seperti produksi —
+bukan listener-nya yang dilonggarkan supaya test lulus.
+
+Uji mutasinya menangkap tiga hal, dan yang ketiga yang paling berguna:
+menghilangkan filter `user_id` membuat reset satu orang mencabut sesi **seluruh**
+pengguna. Tanpa pagar lintas-pengguna, perbaikan keamanan itu sendiri akan
+menjadi gangguan layanan.
+
+Satu perbaikan kecil menyertainya, dan asalnya dari arah berlawanan: kalimat yang
+ditujukan kepada siswa dan orang tua menyuruh mereka memakai tautan lupa kata
+sandi, sedangkan halaman masuk sengaja tidak pernah menampilkannya — dan ada test
+yang menegaskan ketiadaannya. Petunjuk yang menunjuk sesuatu yang tidak ada di
+layar lebih buruk daripada penolakan tanpa petunjuk sama sekali: ia membuat orang
+mengira dirinya yang kurang teliti. Kalimatnya kini menunjuk admin sekolah, yaitu
+jalan yang memang bekerja — menyetel sandi lewat Ubah Pengguna melepas penanda
+wajib-ganti pada penyimpanan yang sama.
+
+Yang **tidak** dikerjakan: menyembunyikan tombol "Reset Password" untuk peran
+portal. Tombol itu memang menghasilkan akun yang tidak dapat masuk sampai
+sandinya disetel ulang, tetapi menyembunyikannya adalah keputusan tentang cara
+sekolah bekerja, bukan tentang kebenaran kode. Ia dicatat sebagai OD-11 di
+`docs/requirements/owner-decisions.md`.
+
+### 592. Empat kesenjangan terakhir, dan dua di antaranya ternyata cacat
+
+Keempatnya masuk daftar sebagai "kode benar, test belum ada". Dua ternyata
+memang begitu. Dua lainnya tidak — dan yang membedakannya hanyalah bentuk
+testnya: test yang membaca penyetelan komponen akan melaporkan keduanya sehat.
+
+**AC-SIS-07 — batas foto.** Benar, dan kini terbukti dengan mengunggah:
+berkas 3 MB ditolak, 1 MB diterima, WEBP diterima, PDF ditolak. `maxSize()` dan
+`acceptedFileTypes()` Filament memang diturunkan menjadi aturan validasi sisi
+server, jadi klausul 1 dan 2 punya penegak yang sesungguhnya.
+
+Klausul 3 — "menghasilkan file ter-resize 400×400" — **tidak** punya penegak
+sisi server, dan itu perlu dikatakan terus terang: pengubahan ukuran dikerjakan
+FilePond di peramban, dan tidak ada satu baris pemrosesan gambar di sisi server
+aplikasi ini. Berkas yang tiba lewat permintaan buatan tersimpan apa adanya.
+Untuk alur yang sesungguhnya — admin mengunggah lewat panel — klausul itu
+terpenuhi; untuk jaminan sisi server, ia tidak ada. Yang dijaga test karena itu
+hanya sasarannya tidak bergeser, dan keterbatasannya dicatat sebagai temuan.
+
+**AC-SIS-09 — nama berkas ekspor.** Benar, dan kini terbukti lewat nama yang
+benar-benar diserahkan ke unduhan. Pagar keduanya yang membuat tes itu bernilai:
+cabang berbeda harus menghasilkan nama berbeda, sebab tanpa itu nama yang
+di-hardcode akan lulus.
+
+**AC-KELAS-05 — wali kelas hanya dari guru aktif.** Ternyata **salah**.
+`options()` membentuk apa yang terlihat, bukan apa yang diterima saat disimpan.
+Mengirim id guru **nonaktif** langsung ke form menghasilkan kelas yang tersimpan
+tanpa satu pun galat — dan begitu pula id guru **cabang lain**, yang berarti
+kebocoran batas tenant pada kolom itu. Keduanya bukan keadaan rekaan: seorang
+guru dinonaktifkan sementara form wali kelas masih terbuka di layar admin, lalu
+form itu disimpan.
+
+Pagarnya membaca daftar yang sama persis dengan yang ditampilkan, sehingga
+keduanya tidak mungkin berbeda, dan nilai kosong dilewati karena kelas memang
+boleh tidak berwali.
+
+**AC-KELAS-03 — mata pelajaran per cabang.** Ternyata **salah** pula, dengan
+bentuk yang berbeda. `subjects_school_id_code_unique` memang menolak kode ganda
+— tetapi penolakan itu tiba sebagai `UniqueConstraintViolationException`, yaitu
+layar galat 500. Admin yang mengetik kode yang sudah dipakai tidak diberi tahu
+apa yang harus ia perbaiki. Aturan uniknya kini ada di form, berlingkup cabang,
+sehingga kode yang sama tetap boleh dipakai cabang lain seperti bunyi
+requirement-nya.
+
+Pelajaran yang sama muncul dua kali di batch ini: **indeks unik di basis data
+bukan pengganti validasi di form.** Ia menjaga data, bukan menjaga orang yang
+memakainya.
+
+### Test yang membaca komentarnya sendiri
+
+Penjaga batas unggah untuk VPS hampir lolos dalam keadaan rusak. Regex-nya
+mencari `post_max_size\s*=\s*(\d+)M` di `ops/php-smartsukses.ini` dan menemukan
+angka **8** — bukan dari direktifnya, melainkan dari baris komentar yang
+menerangkan bahwa bawaan PHP adalah `post_max_size=8M`. Hal yang sama terjadi
+pada `my.cnf`, yang memuat peringatan "JANGAN menambahkan `--disable-log-bin`"
+sehingga pencarian polos menemukan larangan itu sendiri.
+
+Keduanya kini dijangkarkan ke awal baris dan mengabaikan baris berkomentar. Yang
+membuatnya terlihat bukan ketelitian membaca, melainkan menjalankan testnya: ia
+gagal dengan "8 is not equal to 10", dan angka 8 itu tidak ada di mana pun
+kecuali di dalam kalimat penjelasan.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

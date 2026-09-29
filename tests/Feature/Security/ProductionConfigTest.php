@@ -188,6 +188,33 @@ class ProductionConfigTest extends TestCase
     }
 
     /**
+     * CON-29 — sesi kedaluwarsa setelah 8 jam tanpa aktivitas.
+     *
+     * Diikat pada berkas contoh dan bukan pada `config('session.lifetime')`,
+     * sebab bawaan framework adalah 120 menit dan yang menaikkannya ke 480
+     * adalah env di server. Tanpa tes ini satu-satunya hal yang memenuhi CON-29
+     * adalah ingatan operator (butir 590).
+     */
+    public function test_the_session_idle_lifetime_follows_con_29(): void
+    {
+        foreach (['.env.example', '.env.production.example'] as $file) {
+            $this->assertStringContainsString(
+                'SESSION_LIFETIME=480',
+                (string) file_get_contents(base_path($file)),
+                $file.' harus menetapkan 8 jam (480 menit); bawaan framework 120.',
+            );
+        }
+    }
+
+    /**
+     * CON-30 — tautan setel ulang sandi berlaku 60 menit.
+     */
+    public function test_the_password_reset_link_expires_after_con_30(): void
+    {
+        $this->assertSame(60, config('auth.passwords.users.expire'));
+    }
+
+    /**
      * Berkas contoh tidak boleh berisi rahasia. Placeholder-nya harus kosong.
      */
     public function test_the_production_template_carries_no_secrets(): void

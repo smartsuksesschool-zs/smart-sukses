@@ -792,4 +792,59 @@ class StudentTestImportTest extends TestCase
 
         $this->assertSame($before, [filesize($this->path), md5_file($this->path)]);
     }
+
+    // ================================================== siswa terarsip
+
+    /**
+     * NIS yang dipegang siswa terarsip menjadi tertunda, bukan siap dibuat.
+     *
+     * Arsip tidak kelihatan oleh pencarian biasa tetapi tetap kelihatan oleh
+     * indeks unik. Rencana yang menyebut baris seperti ini "siap" karena itu
+     * menjanjikan penulisan yang pasti gagal (butir 590).
+     */
+    public function test_nis_milik_siswa_terarsip_tertunda_dan_tidak_pernah_ditulis(): void
+    {
+        $school = $this->school();
+        $arsip = Student::factory()->for($school)->create(['nis' => 'Z0001']);
+        $arsip->delete();
+
+        $plan = $this->plan(['Kelas 10' => [
+            $this->row(1, 'Z0001', '88888888', 'Siswa Karangan Satu'),
+        ]], $school);
+
+        $this->assertSame(1, $plan['outcomes'][StudentImportPlan::PENDING_ARCHIVED_STUDENT]);
+        $this->assertArrayNotHasKey(StudentImportPlan::READY_CREATE, $plan['outcomes']);
+        $this->assertArrayNotHasKey(StudentImportPlan::READY_MATCH, $plan['outcomes']);
+
+        // Neraca tetap seimbang: baris itu terhitung sebagai tertunda.
+        $this->assertSame(0, $plan['reconciliation']['ready']);
+        $this->assertSame(1, $plan['reconciliation']['pending']);
+        $this->assertTrue($plan['reconciliation']['balanced']);
+
+        (new StudentImportApply($school))->run($plan);
+
+        $this->assertSame(0, Student::query()->count());
+        $this->assertSame(1, Student::withTrashed()->count());
+        $this->assertTrue($arsip->fresh()->trashed());
+    }
+
+    /**
+     * Pagar arah sebaliknya: siswa yang **aktif** tetap dicocokkan seperti dulu.
+     */
+    public function test_nis_milik_siswa_aktif_tetap_siap_dicocokkan(): void
+    {
+        $school = $this->school();
+        $aktif = Student::factory()->for($school)->create(['nis' => 'Z0001']);
+
+        $plan = $this->plan(['Kelas 10' => [
+            $this->row(1, 'Z0001', '88888888', 'Siswa Karangan Satu'),
+        ]], $school);
+
+        $this->assertSame(1, $plan['outcomes'][StudentImportPlan::READY_MATCH]);
+        $this->assertArrayNotHasKey(StudentImportPlan::PENDING_ARCHIVED_STUDENT, $plan['outcomes']);
+        $this->assertSame(
+            $aktif->id,
+            $this->rowsWith($plan, StudentImportPlan::READY_MATCH)[0]['student_id'],
+        );
+    }
 }

@@ -156,6 +156,7 @@ class MigrasiDryRun extends Command
         $this->components->twoColumnDetail('baris valid', (string) $s['valid_rows']);
         $this->components->twoColumnDetail('kandidat buat baru', (string) $s['create_candidates']);
         $this->components->twoColumnDetail('kandidat cocok (sudah ada)', (string) $s['match_candidates']);
+        $this->components->twoColumnDetail('NIS dipegang siswa terarsip (harus dipulihkan dulu)', (string) $s['archived_candidates']);
         $this->components->twoColumnDetail('baris ditolak', (string) $s['rejected_rows']);
         $this->components->twoColumnDetail('duplikat NIS di dalam berkas', (string) count($s['duplicates']));
         $this->components->twoColumnDetail('nama kembar (peringatan, bukan identitas)', (string) count($s['name_collisions']));

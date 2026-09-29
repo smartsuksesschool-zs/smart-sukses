@@ -146,10 +146,21 @@ class AccountClaimReviewer
             throw AccountClaimException::studentMissing();
         }
 
-        return Student::query()
+        // `withTrashed()` di sini bukan untuk menyetujui siswa terarsip, melainkan
+        // untuk dapat **menolaknya dengan kalimat yang benar**. Tanpa ini baris
+        // yang diarsipkan sesudah permintaannya masuk menghilang dari pencarian
+        // dan persetujuannya pecah sebagai ModelNotFoundException — galat 500
+        // yang tidak memberi tahu admin apa pun (butir 590).
+        $student = Student::withTrashed()
             ->withoutGlobalScope(SchoolScope::class)
             ->lockForUpdate()
             ->findOrFail((int) $claim->student_id);
+
+        if ($student->trashed()) {
+            throw AccountClaimException::studentArchived();
+        }
+
+        return $student;
     }
 
     /**

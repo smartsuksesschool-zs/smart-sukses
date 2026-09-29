@@ -9,8 +9,10 @@ use App\Policies\RolePolicy;
 use App\Policies\UserPolicy;
 use App\Support\AuditLogger;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Middleware\TrustProxies;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -39,6 +41,7 @@ class AppServiceProvider extends ServiceProvider
         $this->configureAuthorization();
         $this->configurePasswordRules();
         $this->recordLastLogin();
+        $this->revokeCredentialsAfterPasswordReset();
         $this->recordAuditTrail();
     }
 
@@ -103,6 +106,48 @@ class AppServiceProvider extends ServiceProvider
             if ($event->user instanceof User) {
                 $event->user->forceFill(['last_login_at' => now()])->saveQuietly();
             }
+        });
+    }
+
+    /**
+     * AUTH-04 AC-3 / CON-30 — seluruh sesi aktif di-invalidate setelah reset.
+     *
+     * Requirement-nya tidak ambigu dan disebut di empat tempat: CON-30
+     * (`01-PRD.md:317`), AUTH-04 AC-3 (`:485`), AC-M0-10 (`:1008`), dan diagram
+     * alurnya (`03-USER_FLOW.md:917`). Sebelum ini tidak ada satu pun jalur yang
+     * mencabut apa pun: Filament memperbarui `remember_token` — sehingga cookie
+     * "ingat saya" mati — tetapi **baris sesi** dan **token Sanctum** tetap hidup,
+     * sehingga peramban yang sudah masuk di perangkat lain tetap masuk dengan
+     * sandi yang sudah tidak berlaku. Itu justru keadaan yang reset sandi
+     * dimaksudkan untuk mengakhiri (butir 591).
+     *
+     * Pengguna yang baru saja mereset **tidak** sedang masuk: halaman reset
+     * Filament tidak memanggil `Auth::login`, ia mengembalikan pengunjung ke
+     * halaman masuk. Karena itu menghapus seluruh baris sesi miliknya tidak
+     * memutus alurnya sendiri.
+     *
+     * Sesi hanya dapat dicabut ketika penyimpanannya dapat dijangkau — driver
+     * `database`, seperti yang diwajibkan `.env.example` dan berkas contoh
+     * produksi. Pada driver lain (`file`, `cookie`) tidak ada yang dapat
+     * dilakukan dari sini, dan mendiamkannya lebih baik daripada berpura-pura:
+     * token Sanctum tetap dicabut.
+     */
+    protected function revokeCredentialsAfterPasswordReset(): void
+    {
+        Event::listen(PasswordReset::class, function (PasswordReset $event): void {
+            if (! $event->user instanceof User) {
+                return;
+            }
+
+            $event->user->tokens()->delete();
+
+            if (config('session.driver') !== 'database') {
+                return;
+            }
+
+            DB::table(config('session.table', 'sessions'))
+                ->where('user_id', $event->user->getAuthIdentifier())
+                ->delete();
         });
     }
 
