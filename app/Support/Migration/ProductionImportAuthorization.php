@@ -43,6 +43,7 @@ final class ProductionImportAuthorization
         StudentImportPlan::PENDING_DUPLICATE_NISN,
         StudentImportPlan::PENDING_INVALID_NISN,
         StudentImportPlan::PENDING_PPDB_RECONCILIATION,
+        StudentImportPlan::PENDING_ARCHIVED_STUDENT,
     ];
 
     /**

@@ -152,6 +152,32 @@ class StudentPhotoAccessTest extends TestCase
         $this->assertStringNotContainsString('signature=', $files[0]['url']);
     }
 
+    /**
+     * CON-43 / AC-SIS-07: JPG/PNG/WEBP, maksimal 2 MB, dipotong 400×400 px.
+     *
+     * Seluruhnya sudah terpasang di resource, tetapi tidak satu pun angkanya
+     * terikat oleh tes — sehingga penyetelan yang tergeser tidak akan tertangkap
+     * oleh apa pun sebelum berkas 3 MB ditolak di hadapan operator (butir 590).
+     */
+    public function test_batas_unggah_foto_mengikuti_con_43(): void
+    {
+        $student = $this->studentWithPhoto();
+
+        $this->actingAs($this->userWith(RoleName::SchoolAdmin));
+
+        $upload = Livewire::test(EditStudent::class, ['record' => $student->getRouteKey()])
+            ->instance()->form->getComponent('data.photo_url');
+
+        $this->assertSame(2048, $upload->getMaxSize());
+        $this->assertSame(
+            ['image/jpeg', 'image/png', 'image/webp'],
+            $upload->getAcceptedFileTypes(),
+        );
+        $this->assertSame('400', $upload->getImageResizeTargetWidth());
+        $this->assertSame('400', $upload->getImageResizeTargetHeight());
+        $this->assertSame('1:1', $upload->getImageCropAspectRatio());
+    }
+
     public function test_jalur_lama_di_disk_publik_tidak_pernah_disajikan(): void
     {
         // Baris dari sebelum butir 587: jalurnya menunjuk disk publik.

@@ -14,21 +14,28 @@ sudah hilang.
 
 | | Berkas | Sudah otomatis? |
 | --- | --- | --- |
-| Basis data MySQL | `ops/backup-database.sh` | ya (lewat cron) |
-| `storage/app/public` — logo cabang, bukti pembayaran | **belum** | tidak |
-| `storage/app/private` — PDF rapor | **belum** | tidak |
+| | Berkas | Sudah otomatis? |
+| --- | --- | --- |
+| Basis data MySQL | `ops/backup-database.sh` | ya (lewat cron, 02:00) |
+| `storage/app/public` — logo cabang, media situs | `ops/backup-storage.sh` | ya (lewat cron, 02:20) |
+| `storage/app/private` — foto siswa, dokumen PPDB, bukti pembayaran, PDF rapor | `ops/backup-storage.sh` | ya (lewat cron, 02:20) |
 
 Ini yang paling sering terlewat: **backup basis data saja tidak cukup.** Baris
-`payments.proof_path` dan `report_cards.pdf_path` menunjuk berkas di disk. Basis
-data yang dipulihkan tanpa berkasnya menghasilkan sistem yang tampak utuh
-sampai seseorang menekan "Unduh Bukti" (butir 367).
+`payments.proof_path`, `report_cards.pdf_path`, dan `students.photo_url` menunjuk
+berkas di disk. Basis data yang dipulihkan tanpa berkasnya menghasilkan sistem
+yang tampak utuh sampai seseorang menekan "Unduh Bukti" (butir 367).
 
-Untuk Phase 1, unggahan dicadangkan bersama backup sistem berkas VPS, atau
-manual:
+Sejak butir 590 keduanya dicadangkan oleh cron yang sama, 20 menit berselang agar
+dump yang gagal tidak membatalkan arsip berkas dan agar keduanya tidak berebut
+I/O pada VPS 2 Core (CON-21).
 
-```sh
-tar czf storage-$(date +%Y%m%d).tar.gz storage/app/public storage/app/private
-```
+`storage/app/private/backups` dikecualikan dari arsip berkas tanpa syarat: ia
+tujuan dump basis data, sehingga arsip yang memuatnya akan menggandakan seluruh
+dump lama — termasuk memuat dirinya sendiri — setiap hari.
+
+Yang **masih** belum terbukti: bahwa keduanya berjalan terjadwal di server
+(keduanya baru diuji dengan dijalankan tangan), dan **pemulihan** berkas
+`storage/app/*` belum pernah diuji sama sekali.
 
 Backblaze B2 tetap opsional/Phase 2 sesuai `02-infrastructure-costs.md`.
 
@@ -58,6 +65,33 @@ sehingga situs tetap melayani selama backup berjalan.
 **Retensi** hanya menghapus berkas di direktori backup itu sendiri
 (`-maxdepth 1`), bertipe berkas biasa, dan bernama `smartsukses-*.sql*`. Tidak
 ada penghapusan rekursif di dalam skrip ini.
+
+### Berkas unggahan
+
+```sh
+ops/backup-storage.sh [direktori-tujuan]
+```
+
+| | |
+| --- | --- |
+| Sumber | `storage/app/public` + `storage/app/private` |
+| Dikecualikan | `private/backups` (tanpa syarat) |
+| Tujuan bawaan | `storage/app/private/backups` |
+| Nama berkas | `smartsukses-storage-YYYYMMDD-HHMMSS.tar.gz` |
+| Retensi | 30 hari (`BACKUP_KEEP_DAYS`) |
+| Jadwal | 02:20 harian lewat cron — lihat `ops/smartsukses-cron` |
+
+**Arsipnya diverifikasi sebelum disimpan** (`tar tzf`), dan arsip yang gagal
+diverifikasi **dihapus** lalu skrip keluar dengan status bukan-nol. Arsip yang
+terpotong karena disk penuh hanya terlihat pada saat ia dibutuhkan bila tidak
+diperiksa di tempat pembuatannya.
+
+Pola retensinya `smartsukses-storage-*.tar.gz` saja, `-maxdepth 1` — ia tidak
+dapat menyentuh dump basis data yang tinggal di direktori yang sama.
+
+Hanya direktori yang benar-benar ada yang diarsipkan: `tar` berhenti dengan galat
+bila salah satu argumennya tidak ada, dan pemasangan baru belum tentu sudah
+memiliki keduanya.
 
 ---
 

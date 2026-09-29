@@ -112,6 +112,39 @@ class StudentImportExportTest extends TestCase
     }
 
     /**
+     * NIS yang dipegang siswa terarsip tetap dipesan pada impor Excel.
+     *
+     * `Rule::unique` membaca tabel dan bukan model, sehingga ia memang tidak
+     * ikut tersaring oleh arsip — tetapi tidak ada satu pun tes yang
+     * membuktikannya, dan sifat itu justru yang menahan impor dari membuat NIS
+     * kembar yang tidak akan pernah bisa disimpan (butir 590).
+     */
+    public function test_nis_siswa_terarsip_tetap_dipesan_saat_impor_excel(): void
+    {
+        $arsip = Student::factory()->create(['school_id' => $this->school->id, 'nis' => '3020']);
+        $arsip->delete();
+
+        $path = $this->makeSheet([
+            ['nis', 'nisn', 'nama_lengkap', 'jenis_kelamin', 'status'],
+            ['3020', '6666666666', 'Siswa Baru Memakai NIS Terpakai', 'L', 'ACTIVE'],
+        ]);
+
+        $import = new StudentsImport($this->school->id);
+        Excel::import($import, $path);
+
+        $this->assertSame(0, $import->imported);
+        $this->assertCount(1, $import->errors);
+
+        // Pesannya menyebut arsip, karena operator tidak akan menemukan
+        // siswa itu di daftar mana pun.
+        $this->assertStringContainsString('diarsipkan', $import->errors[0]);
+
+        // Satu baris fisik saja, dan ia tetap terarsip.
+        $this->assertSame(1, Student::withTrashed()->where('nis', '3020')->count());
+        $this->assertTrue($arsip->fresh()->trashed());
+    }
+
+    /**
      * Sejak M3, NISN yang kehilangan angka nol di depannya **tidak** lagi
      * ditolak: ia diberi nol pembuka hingga 10 digit. Yang berubah adalah
      * keputusan pemiliknya, bukan kelonggaran importer — NISN yang bukan angka

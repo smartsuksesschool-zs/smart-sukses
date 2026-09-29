@@ -1,0 +1,71 @@
+# Rotasi log Smart Sukses School.
+#
+# Pasang:
+#   sudo cp ops/logrotate-smartsukses /etc/logrotate.d/smartsukses
+#   sudo logrotate --debug /etc/logrotate.d/smartsukses   # uji tanpa menjalankan
+#
+# Tanpa rotasi, storage/logs/laravel.log tumbuh tanpa batas sampai disk 40 GB
+# (CON-21) penuh — dan disk penuh membuat MySQL berhenti menulis, bukan sekadar
+# membuat log besar. Log Nginx sudah dirotasi paket bawaannya; berkas ini
+# mengurus yang tidak.
+
+/var/www/smartsukses/storage/logs/*.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+
+    # Menunda kompresi satu putaran: berkas kemarin tetap dapat dibaca `tail`
+    # tanpa dibuka paksa saat menelusuri kejadian yang baru terjadi.
+    delaycompress
+
+    # `copytruncate` DIPILIH dengan sengaja. Laravel dan queue worker memegang
+    # berkas lognya tetap terbuka; memindahkan berkasnya membuat keduanya terus
+    # menulis ke inode lama yang sudah tidak bernama, sehingga log terlihat
+    # berhenti tanpa alasan sampai proses di-restart.
+    copytruncate
+
+    # Log dapat memuat nama siswa dan alamat surel. 0640 www-data:adm menjaganya
+    # tidak terbaca pengguna lain di mesin yang sama.
+    create 0640 www-data adm
+
+    # Batas keras: berkas yang melampaui ini dirotasi lebih cepat daripada
+    # harian. Satu galat yang berulang dapat menulis ratusan MB dalam sejam.
+    maxsize 100M
+}
+
+/var/log/php8.3-fpm-smartsukses-*.log {
+    weekly
+    rotate 8
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0640 www-data adm
+
+    # FPM harus diberi tahu agar membuka kembali berkas lognya. Tanpa ini log
+    # slow dan error berhenti terisi setelah rotasi pertama.
+    postrotate
+        systemctl reload php8.3-fpm > /dev/null 2>&1 || true
+    endscript
+}
+
+/var/log/mysql/smartsukses-slow.log {
+    weekly
+    rotate 4
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0640 mysql adm
+
+    # mysqladmin memerlukan kredensial. Bila /etc/mysql/debian.cnf tidak ada
+    # (pemasangan non-paket), ganti dengan `mysql -e "FLUSH SLOW LOGS;"` yang
+    # memakai berkas kredensial sendiri — jangan menaruh sandi di berkas ini.
+    postrotate
+        if [ -f /etc/mysql/debian.cnf ]; then
+            mysqladmin --defaults-file=/etc/mysql/debian.cnf flush-logs > /dev/null 2>&1 || true
+        fi
+    endscript
+}

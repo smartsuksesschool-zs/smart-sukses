@@ -10467,6 +10467,111 @@ langsung merah.
   lama `students/…` masih melaporkan `true`. Tidak ada fotonya yang tampil di
   portal mana pun.
 
+### 588. Cabang yang tidak pernah ditanyakan
+
+Super Admin tidak memiliki `school_id` — itu bukan cacat melainkan rancangan:
+`SchoolScope::currentSchoolId()` mengembalikan null untuknya supaya ia melihat
+seluruh cabang. Yang tidak dipikirkan adalah sisi **tulis**. Lima resource
+(`StudentResource`, `SchoolClassResource`, `SubjectResource`, `ScheduleResource`,
+`AcademicYearResource`) memperoleh `school_id` dari scope yang sama, sehingga
+Super Admin yang membuat siswa menulis baris ber-`school_id` NULL — dan yang
+terlihat pengguna adalah galat basis data mentah, bukan pesan validasi.
+
+Ditemukan setelah produksi hidup, dan karena itu diperbaiki sebagai hotfix
+tersendiri (`5c2a732`). Perbaikannya **menanyakan** cabangnya: sebuah `Select`
+yang hanya muncul untuk Super Admin, `disabledOn('edit')` supaya baris tidak
+dapat berpindah cabang setelah lahir, dan aturan unik NIS yang membaca cabang
+dari pilihan itu alih-alih dari scope.
+
+Yang sengaja **tidak** dikerjakan: penjaga cabang-null di dalam
+`BelongsToSchool`. Ia akan menutup gejalanya di seluruh model sekaligus, tetapi
+mengubah perilaku jauh di luar lima layar yang rusak — dan rilis perbaikan
+darurat bukan tempat melakukan itu.
+
+Kekeliruan yang terbawa: rollback ke commit sebelumnya tidak akan menolong,
+sebab celahnya sudah ada sebelum rilis yang dicurigai. Itu diperiksa lebih dulu,
+bukan diandaikan.
+
+### 589. Arsip, bukan hapus
+
+CON-45 dan AC-M0-13 melarang penghapusan siswa. Permintaannya "lengkapi CRUD",
+dan huruf D-nya diwujudkan sebagai **arsip**: `SoftDeletes`, tombol "Arsipkan",
+dan `RestoreAction`.
+
+Enam titik yang ikut bergerak, dan masing-masing adalah keputusan:
+
+1. **Pembersihan foto hanya pada `forceDeleted`, bukan `deleted`.** Laravel
+   memicu `deleted` juga untuk soft delete, sehingga hook yang salah akan
+   menghapus foto siswa yang masih dapat dipulihkan. Arsip yang pulih tanpa
+   fotonya bukan arsip.
+2. **NIS tetap dipesan.** Indeks unik tidak mengenal arsip, dan itu dibiarkan apa
+   adanya — tetapi pesannya ditulis ulang menyebut kata "diarsipkan", sebab
+   "NIS sudah digunakan" membuat operator mencari siswa yang tidak muncul di
+   daftar mana pun.
+3. **Status akademik tidak disentuh.** Arsip mengisi `deleted_at`; ia bukan
+   perubahan status, dan menggabungkan keduanya akan mengarang data akademik.
+4. **Layar histori memuat `withTrashed()` satu per satu**, bukan mengubah relasi
+   `student()` secara global. Relasi global yang diubah membuat setiap kueri
+   aktif ikut memuat arsip — kebalikan dari yang diinginkan.
+5. **Roster dan statistik menambahkan `deleted_at IS NULL` pada join.** Join
+   melewati global scope; tanpa baris itu siswa terarsip tetap terhitung.
+6. **Tidak ada Force Delete dan tidak ada Bulk Delete.** `StudentPolicy::forceDelete`
+   mengembalikan false, tetapi `Gate::before` memberi Super Admin segalanya —
+   sehingga yang benar-benar menahan penghapusan permanen adalah **tidak adanya
+   tombolnya**, dan itulah yang diuji.
+
+### 590. Arsip yang tidak terlihat oleh yang membutuhkannya
+
+Butir 589 menambahkan satu global scope, dan global scope berlaku ke tempat-tempat
+yang tidak ikut ditinjau saat itu. Dua di antaranya rusak:
+
+**Perkakas migrasi.** `LegacyDryRun` dan `StudentImportPlan` mencari NIS lewat
+`Student::query()`, yang kini tersaring arsip. Sebuah NIS milik siswa terarsip
+karena itu dinyatakan `READY_CREATE` — lalu `firstOrCreate` di
+`StudentImportApply` mencoba menyisipkannya dan menabrak
+`students_school_id_nis_unique`. Bukan galat per baris melainkan `QueryException`
+di tengah `migrasi:terapkan-produksi`, sesudah sebagian baris masuk.
+
+Perbaikannya bukan `withTrashed()` saja: mencocokkan ke baris terarsip berarti
+menulis data ke catatan yang sengaja disimpan di luar peredaran. Keadaannya
+memang **ketiga**, dan karena itu memperoleh state sendiri —
+`PENDING_ARCHIVED_STUDENT` — yang tidak masuk `WRITABLE` (sehingga penerapan
+tidak pernah menyentuhnya), masuk `BLOCKING_OUTCOMES` (sehingga impor produksi
+menolak berjalan), dan terhitung sebagai "tertunda" pada rekonsiliasi sehingga
+neracanya tetap seimbang. Dry run memperoleh ember ketiga pula, sebab laporan
+yang menyebut baris itu "akan dibuat" menjanjikan yang tidak akan terjadi.
+
+**Persetujuan klaim akun.** `AccountClaimResource` memuat siswa dengan
+`withTrashed()` — jadi baris terarsip memang tampil dan tombol Setujui dapat
+ditekan — tetapi `AccountClaimReviewer` mencarinya tanpa itu, sehingga
+`findOrFail` melempar `ModelNotFoundException`: galat 500 yang tidak memberi tahu
+admin apa pun. `withTrashed()` di sini bukan untuk menyetujui siswa terarsip,
+melainkan untuk dapat **menolaknya dengan kalimat yang benar**.
+
+Keduanya diuji mutasi: mengembalikan `withTrashed()` menjadi `query()`
+memunculkan kembali persis `QueryException` dan `ModelNotFoundException`-nya.
+
+Yang juga ditutup di batch ini adalah kesenjangan yang tidak berupa cacat
+melainkan berupa **ketiadaan bukti**: batas unggahan foto (CON-43), masa berlaku
+sesi 8 jam (CON-29), masa berlaku tautan setel ulang (CON-30), dan sifat NIS
+terarsip pada impor Excel — semuanya sudah benar di kode, tidak satu pun terikat
+oleh test.
+
+**Artefak VPS.** Repositori tidak memiliki satu pun berkas konfigurasi server,
+padahal CON-20/21/22 menyebutkan bentuknya dengan tepat. Yang paling mendesak
+bukan kerapian melainkan aritmetika: bawaan Nginx `client_max_body_size` 1 MB dan
+bawaan PHP `post_max_size` 8 MB keduanya **lebih kecil** daripada yang aplikasi
+terima — satu pendaftaran PPDB sah dapat memuat 5 dokumen × 2 MB dalam satu
+permintaan. Hasilnya 413 tanpa jejak di log aplikasi, pada hari pertama.
+Angka pada `ops/php-smartsukses.ini` dan `ops/nginx-smartsukses.conf` diturunkan
+dari batas yang sudah berlaku di kode, bukan dikarang, dan keduanya menyebut satu
+sama lain supaya tidak bergerak sendiri-sendiri.
+
+`ops/backup-storage.sh` melengkapi backup basis data yang sudah ada — dan
+pengujiannya menemukan cacat pada skrip itu sendiri: pola `--exclude` beruntun
+`./` tidak cocok dengan nama anggota tar, sehingga arsip memuat seluruh dump lama
+**termasuk dirinya sendiri**. Kini `private/backups` dikecualikan tanpa syarat.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

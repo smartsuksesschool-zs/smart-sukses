@@ -41,6 +41,56 @@ sudo apt install php8.3-fpm php8.3-mysql php8.3-mbstring php8.3-xml \
 `gd` dibutuhkan dompdf (PDF rapor); `zip` dan `gd` dibutuhkan maatwebsite/excel
 (import/export). `intl` dipakai pemformatan tanggal.
 
+### Berkas konfigurasi server
+
+Repositori menyediakan templatnya supaya tidak ada yang disusun dadakan di
+server. Pasang **berurutan** — pool PHP-FPM harus hidup sebelum Nginx merujuk
+socket-nya:
+
+| # | Template | Tujuan pemasangan | Untuk |
+| --- | --- | --- | --- |
+| 1 | `ops/php-smartsukses.ini` | `/etc/php/8.3/fpm/conf.d/99-smartsukses.ini` | batas unggahan & eksekusi |
+| 2 | `ops/php-fpm-smartsukses.conf` | `/etc/php/8.3/fpm/pool.d/smartsukses.conf` | jumlah proses pada 2 GB |
+| 3 | `ops/nginx-smartsukses.conf` | `/etc/nginx/sites-available/smartsukses` | server block + `client_max_body_size` |
+| 4 | `ops/mysql-smartsukses.cnf` | `/etc/mysql/mysql.conf.d/99-smartsukses.cnf` | CON-22 localhost, buffer pool, slow log |
+| 5 | `ops/logrotate-smartsukses` | `/etc/logrotate.d/smartsukses` | log tidak memenuhi disk 40 GB |
+| 6 | `ops/smartsukses-worker.conf` | `/etc/supervisor/conf.d/` | worker antrean (§6) |
+| 7 | `ops/smartsukses-cron` | `crontab -u www-data` | penjadwal + backup (§7, §8) |
+
+Perintah pemasangan lengkap ada sebagai komentar di kepala masing-masing berkas,
+termasuk pool bawaan yang harus **dihapus** (`pool.d/www.conf`,
+`sites-enabled/default`) — bila dibiarkan, keduanya memakan RAM untuk tidak
+melayani apa pun, dan pada 2 GB itu terasa.
+
+**Batas unggahan adalah kegagalan hari pertama yang paling mungkin.** Bawaan
+Nginx `client_max_body_size` 1 MB dan bawaan PHP `post_max_size` 8 MB keduanya
+lebih kecil daripada yang aplikasi terima: satu pendaftaran PPDB yang sah dapat
+memuat 5 dokumen × 2 MB = 10 MB dalam satu permintaan, dan impor Excel menerima
+berkas 5 MB. Yang dilihat pengguna adalah 413 tanpa jejak apa pun di log
+aplikasi. Angka pada template (`12m` / `12M` / `5M`) diturunkan dari batas yang
+sudah berlaku di kode, dan **harus dinaikkan bersama** bila batas itu berubah.
+
+**Bit executable skrip ops.** Ketiga skrip di `ops/` kini tercatat `100755` di
+git, sehingga clone ke server langsung dapat dijalankan. Sebelum ini keduanya
+tercatat `100644`, dan entri cron yang memanggil `ops/backup-database.sh`
+langsung akan gagal "Permission denied" — diam-diam, ke `storage/logs/backup.log`
+yang tidak dibaca siapa pun. Bila berkas dipindahkan lewat zip atau rsync yang
+membuang mode, pulihkan dengan:
+
+```sh
+chmod +x ops/*.sh
+ls -l ops/*.sh          # harus -rwxr-xr-x
+```
+
+Verifikasi sesudah reload — dari SAPI yang benar, sebab `php -i` membaca
+konfigurasi CLI dan bukan FPM:
+
+```sh
+sudo nginx -t && sudo php-fpm8.3 -t
+sudo mysql -e "SELECT @@bind_address, @@innodb_buffer_pool_size, @@max_connections;"
+curl -sI https://apps.smartsukses.sch.id/ | grep -i strict-transport
+```
+
 ---
 
 ## 3. Pemasangan aplikasi
@@ -223,10 +273,28 @@ basis data sungguhan kecuali diminta eksplisit.
 dihancurkan lalu dipulihkan, dan seluruh data kembali utuh. Buktinya di
 [`backup-restore.md`](backup-restore.md) bagian 4.
 
-Yang **belum** terbukti, dan karena itu checklist butir 7 tetap PARTIAL: backup
-terjadwal berjalan di server, dan pemulihan berkas `storage/app/*` — yang belum
-diuji sama sekali. Backup basis data saja akan memulihkan baris yang menunjuk
-berkas yang sudah tidak ada.
+Berkas unggahan: **`ops/backup-storage.sh`** — tar+gzip atas `storage/app/public`
+dan `storage/app/private`, retensi 30 hari, dijadwalkan 02:20 lewat
+`ops/smartsukses-cron`. Arsipnya diverifikasi (`tar tzf`) sebelum disimpan, dan
+arsip yang gagal diverifikasi dihapus alih-alih ditinggalkan sebagai backup palsu.
+Direktori `storage/app/private/backups` dikecualikan tanpa syarat — ia tujuan
+dump basis data, dan tanpa pengecualian itu setiap arsip berkas akan menggandakan
+seluruh dump lama sampai disk 40 GB penuh.
+
+Yang **belum** terbukti, dan karena itu checklist butir 7 tetap PARTIAL: kedua
+backup berjalan **terjadwal di server** (keduanya baru diuji dengan dijalankan
+tangan), dan **pemulihan** berkas `storage/app/*` belum pernah diuji sama sekali.
+Backup basis data saja akan memulihkan baris yang menunjuk berkas yang sudah
+tidak ada.
+
+Backup yang gagal tidak memberi tahu siapa pun. Keluaran kedua skrip masuk
+`storage/logs/backup.log`; sampai ada pemantauan (§9), satu-satunya yang
+menemukan kegagalan adalah orang yang membacanya:
+
+```sh
+tail -n 20 /var/www/smartsukses/storage/logs/backup.log
+ls -lh /var/www/smartsukses/storage/app/private/backups | tail -5
+```
 
 ---
 
@@ -234,6 +302,78 @@ berkas yang sudah tidak ada.
 
 Endpoint kesehatan sudah tersedia: `GET /up`. Arahkan UptimeRobot atau Better
 Stack ke sana. Belum dikonfigurasi.
+
+---
+
+## 10. Rollback
+
+Ditulis lebih dulu, sebab rollback disusun saat panik bila tidak disusun saat
+tenang. Urutannya penting: **kode dan skema tidak dapat dibatalkan dengan cara
+yang sama.**
+
+**Sebelum rilis apa pun**, dan bukan sesudahnya:
+
+```sh
+cd /var/www/smartsukses
+ops/backup-database.sh && ops/backup-storage.sh
+git rev-parse HEAD > storage/app/private/backups/rilis-sebelumnya.txt
+```
+
+Commit yang sedang berjalan harus tercatat di luar kepala seseorang. Tanpa itu,
+"kembalikan seperti semula" tidak punya sasaran.
+
+### Kode saja (tidak ada migration pada rilis itu)
+
+```sh
+git fetch origin && git checkout <commit-sebelumnya>
+composer install --no-dev --optimize-autoloader
+php artisan config:cache && php artisan route:cache && php artisan view:cache
+php artisan queue:restart
+sudo systemctl reload php8.3-fpm
+```
+
+`queue:restart` wajib: worker memuat kode lama ke memori dan akan terus
+menjalankannya sampai daur ulang. Reload PHP-FPM wajib bila
+`opcache.validate_timestamps=0`.
+
+### Ada migration pada rilis itu
+
+`php artisan migrate:rollback` **hanya** aman bila setiap migration pada rilis itu
+memiliki `down()` yang benar. Periksa dulu, jangan andaikan:
+
+```sh
+php artisan migrate:status | tail -20
+```
+
+Migration yang menghapus kolom atau tabel **tidak dapat** dibatalkan tanpa
+kehilangan data — `down()`-nya membuat ulang strukturnya, bukan isinya. Untuk
+kasus itu jalurnya adalah pemulihan dari dump, bukan rollback:
+
+```sh
+ops/restore-database.sh <dump-sebelum-rilis> smartsukses
+```
+
+Pemulihan dump mengembalikan basis data ke keadaan pukul backup — pekerjaan
+antara backup dan rollback **hilang**. Itu sebabnya backup diambil sesaat sebelum
+rilis dan bukan semalam sebelumnya.
+
+### Batas yang harus diketahui lebih dulu
+
+- **Berkas tidak ikut rollback basis data.** Baris yang dipulihkan dapat menunjuk
+  berkas yang sudah ditimpa. Pulihkan arsip `storage` dari waktu yang sama.
+- **PITR bergantung pada binlog.** `ops/mysql-smartsukses.cnf` membiarkannya
+  aktif dengan retensi 7 hari. Bila binlog dimatikan, satu-satunya titik pulih
+  adalah dump harian.
+- **Pemulihan berkas belum pernah diuji** (§8). Jangan menyebutnya jalur yang
+  terbukti sampai ia dijalankan sekali di staging.
+
+### Sesudah rollback
+
+```sh
+php artisan app:production-check
+curl -sI https://apps.smartsukses.sch.id/up
+tail -n 50 storage/logs/laravel.log
+```
 
 ---
 

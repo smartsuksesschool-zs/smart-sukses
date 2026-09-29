@@ -230,6 +230,7 @@
     "Data kehadiran belum tersedia": "Attendance data is not available yet",
     "Data pendaftaran tidak ditemukan. Periksa kembali nomor pendaftaran dan tanggal lahir.": "No application was found. Please check the registration number and date of birth.",
     "Data per cabang terpisah": "Each branch keeps its own data",
+    "Data siswa yang ditunjuk sudah diarsipkan. Pulihkan siswa tersebut lebih dahulu bila permintaan ini memang sah.": "The referenced student record has been archived. Restore that student first if this request is legitimate.",
     "Deskripsi": "Description",
     "Deskripsi Singkat": "Short Description",
     "Diakses lewat peramban": "Accessed through a browser",
