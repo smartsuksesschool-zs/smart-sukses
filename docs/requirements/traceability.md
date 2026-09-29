@@ -31,17 +31,17 @@ sudah dikerjakan selesai, dan yang tersisa bukan pekerjaan koding.
 | AUTH-05 Ganti bahasa ID/EN | `routes/web.php` (`POST /bahasa/{locale}`), `users.locale` | `BilingualCoverageTest` (29 test) | COMPLETE |
 | SIS-01 Tambah siswa manual | `Filament/Resources/StudentResource.php` | `MasterData/StudentManagementTest` (NISN 10 digit, NIS unik per cabang) | COMPLETE |
 | SIS-02 Edit & nonaktifkan siswa | `Models/Student.php` (SoftDeletes), `StudentPolicy`, `StudentResource::archiveAction()` | `MasterData/StudentArchiveTest` (20 test), `MasterDataRbacTest::test_students_are_never_hard_deleted` | COMPLETE · OWNER-DECISION — mekanisme "nonaktif" diwujudkan sebagai arsip; lihat OD-13 |
-| SIS-03 Upload foto siswa | `StudentResource.php:150-164`, `Support/StudentPhoto.php` | `MasterData/StudentPhotoAccessTest` (19 test, termasuk `test_batas_unggah_foto_mengikuti_con_43`) | PARTIAL — batas 2 MB, tipe, dan target 400×400 terikat pada konfigurasi pengunggah; **dimensi berkas hasil** tidak diperiksa oleh test mana pun |
+| SIS-03 Upload foto siswa | `StudentResource.php:150-164`, `Support/StudentPhoto.php` | `MasterData/StudentPhotoAccessTest` (22 test) — 3 MB ditolak, 1 MB diterima, WEBP diterima, PDF ditolak, sasaran 400×400 terjaga | COMPLETE · catatan — klausul "resize 400×400" ditegakkan FilePond di peramban; **tidak ada penegak sisi server** (butir 592) |
 | SIS-04 Guru melihat siswa kelas ajar | `Services/Portal/TeacherPortalService.php`, `Support/TeacherClassVisibility.php` | `MasterData/StudentViewPageTest::test_guru_hanya_melihat_siswa_kelas_ajarnya`, `Portal/TeacherPortalUiTest` | PARTIAL · OWNER-DECISION — AC-1 terbukti; AC-2 "status kehadiran hari ini" tertahan RSK-01 (OD-03) |
-| SIS-05 Export siswa ke Excel | `Exports/StudentsExport.php`, `Pages/ListStudents.php` | `MasterData/StudentImportExportTest` | PARTIAL — ekspor terbukti; format nama berkas `siswa_[kode]_[tanggal].xlsx` (AC-SIS-09) tidak diuji |
+| SIS-05 Export siswa ke Excel | `Exports/StudentsExport.php`, `Pages/ListStudents.php` | `MasterData/StudentImportExportTest` — nama berkas unduhan sungguhan `siswa_[kode]_[tanggal].xlsx`, dan cabang berbeda menghasilkan nama berbeda | COMPLETE |
 | PPDB-01 Formulir pendaftaran publik | `Livewire/Ppdb/RegistrationForm.php`; dialihkan `Http/Middleware/RedirectPpdbToConfiguredForm.php` | `Ppdb/PpdbPublicRegistrationTest`, `PublicSite/PpdbSingleEntryTest` | APPROVED-DEVIATION — AD-01 (keputusan pemilik M7.2) |
 | PPDB-02 Cek status pendaftaran | `Livewire/Ppdb/StatusCheck.php` | `Ppdb/PpdbStatusCheckTest::test_every_status_of_the_ppdb_flow_can_be_reported` | COMPLETE |
 | PPDB-03 Kelola pendaftar | `PpdbRegistrationResource.php`, `Services/Ppdb/PpdbStatusUpdater.php` | `Ppdb/PpdbAdminReviewTest` | COMPLETE — tanpa masukan baru selama AD-01 aktif |
 | PPDB-04 Link wa.me PPDB | `Support/PpdbWaTemplate.php`, `Support/WhatsAppLink.php` | `Ppdb/PpdbWaLinkTest` (format wa.me, template per status, placeholder) | COMPLETE · OWNER-DECISION — normalisasi nomor telepon diputuskan implementasi (OD-14) |
 | PPDB-05 Konversi pendaftar → siswa | `PpdbRegistrationResource.php:280-373` | `Ppdb/PpdbEnrollmentTest` (tidak dapat didaftarkan dua kali) | COMPLETE — tanpa masukan baru selama AD-01 aktif |
-| KELAS-01 Buat kelas & wali kelas | `SchoolClassResource.php`, unique `(academic_year_id, homeroom_teacher_id)` | `MasterData/ClassEnrollmentTest` (CON-36 satu wali per TA) | PARTIAL — AC-KELAS-05 (wali hanya dari guru **aktif**) terpasang di `SchoolClassResource.php:206` tetapi tidak diuji |
+| KELAS-01 Buat kelas & wali kelas | `SchoolClassResource.php` — pagar AC-KELAS-05 membaca daftar pilihan yang sama, unique `(academic_year_id, homeroom_teacher_id)` | `MasterData/ClassEnrollmentTest` (12 test) — guru nonaktif ditolak, guru cabang lain ditolak, guru aktif diterima, CON-36 | COMPLETE |
 | KELAS-02 Tambah siswa ke kelas | `Student::scopeEligibleForYear`, `StudentsRelationManager` | `MasterData/ClassEnrollmentTest` (AC-KELAS-07, AC-KELAS-08) | COMPLETE — penolakan di tingkat aplikasi; CON-35 tidak menuntut constraint DB (lihat catatan di bawah) |
-| KELAS-03 Buat jadwal pelajaran | `ScheduleResource.php`, `Models/Schedule.php` | `MasterData/ScheduleConflictTest` (6 test konflik guru/ruang/kelas, CON-48) | PARTIAL — jadwal terbukti; CRUD mata pelajaran (AC-KELAS-03) hanya tersentuh `MasterDataRbacTest`, tanpa test validasi tersendiri |
+| KELAS-03 Buat jadwal pelajaran & mata pelajaran | `ScheduleResource.php`, `SubjectResource.php` (aturan unik kode berlingkup cabang) | `MasterData/ScheduleConflictTest` (6 test konflik, CON-48); `MasterData/SubjectManagementTest` (4 test) — nama/kode/jam pelajaran tersimpan, kode ganda jadi validasi bukan galat 500, kode sama boleh di cabang lain | COMPLETE |
 | KELAS-04 Guru melihat jadwal | `TeacherPortalService.php:221-265` | `Portal/TeacherPortalUiTest`, `Portal/TeacherPortalApiTest` | COMPLETE |
 | NILAI-01 Input nilai per komponen | `Filament/Pages/InputNilai.php`, `Imports/GradesImport.php` | `Grading/GradeInputTest`, `GradeImportTest`, `GradeImportXlsxTest` | COMPLETE |
 | NILAI-02 Perhitungan nilai akhir | `Services/Grading/FinalScoreCalculator.php`, `GradeWeightSnapshotter.php` | `Grading/FinalScoreCalculationTest` | COMPLETE · OWNER-DECISION — presedensi `grades.weight` vs `grade_configs.components` diputuskan implementasi (OD-15) |
@@ -69,26 +69,33 @@ sudah dikerjakan selesai, dan yang tersisa bukan pekerjaan koding.
 
 | Status | Jumlah FR |
 | --- | --- |
-| `COMPLETE` (tanpa catatan tertahan) | 22 |
+| `COMPLETE` | 25 |
+| `COMPLETE` dengan catatan teknis (SIS-03) | 1 |
 | `COMPLETE` dengan butir pemilik terbuka | 4 |
 | `COMPLETE` dengan butir infrastruktur | 1 |
-| `PARTIAL` | 12 |
+| `PARTIAL` | 8 |
 | `APPROVED-DEVIATION` | 1 |
 | `MISSING` | 0 |
 | **Total** | **40** |
 
-Tidak ada satu pun FR Phase 1 yang **tidak memiliki implementasi**. Dari 12 baris
-`PARTIAL`, hanya **empat** yang benar-benar menyisakan pekerjaan koding — dan
-keempatnya berupa test, bukan fitur:
+Tidak ada satu pun FR Phase 1 yang **tidak memiliki implementasi**, dan
+**tidak ada lagi sisa pekerjaan koding** pada requirement Phase 1.
 
-| Sisa pekerjaan koding | Requirement |
-| --- | --- |
-| Dimensi berkas foto hasil resize tidak diuji | AC-SIS-07 |
-| Format nama berkas ekspor tidak diuji | AC-SIS-09 |
-| Wali kelas hanya dari guru aktif tidak diuji | AC-KELAS-05 |
-| CRUD/validasi mata pelajaran tanpa test tersendiri | AC-KELAS-03 |
+### Keempat kesenjangan terakhir — ditutup
 
-Sisanya menunggu keputusan pemilik atau infrastruktur, bukan menunggu kode.
+Keempatnya masuk daftar sebagai "kode benar, test belum ada". Dua ternyata bukan:
+
+| Requirement | Yang ditemukan | Hasil |
+| --- | --- | --- |
+| AC-SIS-07 | Klausul 1–2 memang benar dan ditegakkan server | Diuji secara perilaku (3 MB ditolak, WEBP diterima, PDF ditolak). Klausul 3 tidak punya penegak sisi server — dicatat, tidak ditambal |
+| AC-SIS-09 | Benar | Diuji lewat nama berkas unduhan sungguhan, dengan pagar kode cabang |
+| AC-KELAS-05 | **Cacat** — guru nonaktif **dan** guru cabang lain tersimpan tanpa galat | Diperbaiki; pagar membaca daftar pilihan yang sama |
+| AC-KELAS-03 | **Cacat** — kode mapel ganda menjadi galat 500 | Diperbaiki; aturan unik berlingkup cabang di form |
+
+Delapan baris `PARTIAL` yang tersisa seluruhnya menunggu **keputusan pemilik atau
+infrastruktur**, bukan menunggu kode: AUTH-04 (SMTP), SIS-04 dan PORTAL-01
+(kehadiran, RSK-01), NILAI-03 (kehadiran dan peringkat), NILAI-05 (CON-42),
+SPP-02 (RSK-10), PORTAL-02 (shortcut guru), PORTAL-04 (pengiriman sandi).
 
 ## Catatan yang bukan kesenjangan requirement
 
