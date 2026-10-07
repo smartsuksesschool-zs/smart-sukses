@@ -23,6 +23,7 @@ use App\Services\Grading\GradeConfigVersionManager;
 use App\Support\SeedPassword;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use RuntimeException;
 
 /**
  * Data demo untuk menguji Sprint 4 (Akademik — Penilaian & E-Rapor) langsung
@@ -64,6 +65,26 @@ class Sprint4DemoSeeder extends Seeder
 
     public function run(): void
     {
+        /*
+         * Produksi ditolak lebih dulu, sebelum apa pun yang lain.
+         *
+         * `SeedPassword::resolve()` di bawah memang sudah menahan lingkungan yang
+         * tidak menyetel kata sandi seeding — tetapi produksi **justru
+         * menyetelnya**, karena akun bootstrap membutuhkannya. Jadi pagar itu
+         * terbuka tepat di tempat yang paling berbahaya.
+         *
+         * Seeder ini membuat akun yang dapat login dengan
+         * `must_change_password = false`: akun demo yang langsung dapat dipakai
+         * siapa pun yang mengetahui alamatnya. `SimulationSeeder` sudah menolak
+         * produksi dengan cara ini sejak awal, dan tidak ada alasan seeder ini
+         * berbeda (butir 593).
+         */
+        if (app()->environment('production')) {
+            throw new RuntimeException(
+                'Sprint4DemoSeeder membuat akun demo yang dapat login dan tidak boleh berjalan di produksi.'
+            );
+        }
+
         /*
          * Kata sandi dipastikan **sebelum** satu baris pun ditulis.
          *

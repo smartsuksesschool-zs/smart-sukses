@@ -44,6 +44,7 @@ memblokir tetap perlu dijawab; ia hanya tidak perlu dijawab **hari ini**.
 | OD-16 | Status `06-API.md`: kontrak atau dokumen desain | TIDAK |
 | OD-17 | Tailwind 4 vs Tailwind CSS 3 pada PRD | TIDAK |
 | OD-18 | Mekanisme koreksi/unpublish rapor | TIDAK |
+| OD-19 | Struktur kolom template impor akun, dan bentuk penyerahan kredensialnya | TIDAK |
 
 ---
 
@@ -548,6 +549,47 @@ bahwa koreksi dilakukan di luar sistem lewat rapor pengganti.
 **Yang berubah.** (1)/(2) membuka kembali kunci CON-40 — perlu dipastikan
 konsistensinya dengan nilai yang sudah dilihat orang tua. (3) dokumen dan
 prosedur, tanpa kode.
+
+---
+
+## OD-19 · Struktur kolom template impor akun, dan penyerahan kredensialnya
+
+**Pertanyaan.** Apakah kolom template impor akun dan cara sandi sementara
+diserahkan sudah sesuai kehendak pemilik?
+
+**Mengapa penting.** PORTAL-04 AC-1 mewajibkan impor massal, tetapi
+`06-API.md:722` menyatakan "Struktur kolom template: **Belum dijelaskan dalam
+blueprint**". Implementasi karena itu memutuskan sendiri — dan begitu tata usaha
+mulai memakai templatnya, formatnya menjadi mahal diubah: berkas yang sudah
+disiapkan sekolah harus disusun ulang.
+
+**Keadaan sekarang.** Tiga keputusan yang diambil implementasi:
+
+1. **Kolom** diturunkan dari payload `POST /users` (`06-API.md:2352`) dan kolom
+   `users` yang memang ada. Lembar `Akun Guru`: `nama`, `email`, `peran`, `hp`,
+   `bahasa`. Lembar `Akun Siswa`: `nis`, `email`, `hp`, `bahasa` — tanpa kolom
+   nama, sebab nama akun diambil dari data induk agar keduanya tidak dapat
+   berbeda. **Tidak ada kolom cabang** dan **tidak ada kolom kata sandi**.
+2. **Pemisahan guru** mengikuti ASM-11 (`01-PRD.md:246`): "guru" berarti `users`
+   berperan `GURU`/`WALI_KELAS`, jadi keduanya diterima. `01-PRD.md:428` sendiri
+   mencatat bahwa perbedaan teknis keduanya "Belum dijelaskan".
+3. **Kredensial** diserahkan lewat unduhan `.xlsx` sekali, di-stream, tidak
+   pernah ditulis ke disk aplikasi dan tidak pernah masuk log. Dengan
+   `MAIL_MAILER=log` tidak ada yang dapat dikirim otomatis, dan dua ratus sandi
+   tidak dapat dibaca dari satu notifikasi.
+
+**Pilihan.** (1) ratifikasi ketiganya apa adanya. (2) ubah daftar kolom — mis.
+menambahkan kolom nama pada lembar siswa, atau memisahkan lembar `WALI_KELAS`.
+(3) ubah penyerahan kredensial — mis. menunggu SMTP tersedia lalu mengirim
+surel per akun, atau membatasi impor massal hanya untuk guru.
+
+**Yang berubah.** (1) dokumen saja. (2) kontrak importer, templat, dan testnya;
+dan berkas yang sudah disiapkan sekolah menjadi tidak sah. (3) menunggu
+OD-Infra-1, atau mempersempit fitur yang sudah terpenuhi.
+
+**Catatan pemblokiran.** Tidak memblokir rilis: requirement-nya terpenuhi dan
+alurnya teruji. Yang tertahan hanya kepastian bahwa formatnya tidak akan diubah
+sesudah sekolah mulai memakainya.
 
 ---
 

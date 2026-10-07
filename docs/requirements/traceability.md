@@ -63,7 +63,7 @@ sudah dikerjakan selesai, dan yang tersisa bukan pekerjaan koding.
 | PORTAL-01 Dashboard orang tua | `Services/Portal/ParentPortalService.php` | `Portal/ParentPortalPagesTest`, `Portal/RowLevelAccessTest` | PARTIAL · OWNER-DECISION — nilai & tagihan terbukti; kehadiran mengembalikan `available:false` (OD-03), jumlah nilai terbaru 3-vs-5 (OD-06) |
 | PORTAL-02 Dashboard guru | `Livewire/Teacher/TeacherDashboard.php` | `Portal/TeacherPortalUiTest`, `SprintSevenClosureTest` | PARTIAL · OWNER-DECISION — shortcut "Buat Pengumuman" sengaja tidak ada; PRD:931 dan matriks izin berselisih (OD-07) |
 | PORTAL-03 Portal siswa | `Services/Portal/StudentPortalService.php` | `Portal/StudentPortalUiTest`, `StudentPortalApiTest`, `StudentNotificationTest` | COMPLETE |
-| PORTAL-04 Manajemen akun pengguna | `Filament/Resources/UserResource.php`, `Middleware/EnsurePasswordIsChanged.php` | `Auth/PanelAccessTest` (sandi sementara wajib diganti), `Auth/AccessManagementResourceTest` | PARTIAL · OWNER-DECISION — pengelolaan akun terbukti; pengiriman sandi sementara tidak lewat notifikasi seperti PRD:961 (OD-10) |
+| PORTAL-04 Manajemen akun pengguna | `Filament/Resources/UserResource.php`, `Middleware/EnsurePasswordIsChanged.php`, `Imports/UserAccountsImport.php`, `Services/Admin/AccountProvisioner.php` | `Auth/PanelAccessTest`, `Auth/AccessManagementResourceTest`, `Auth/ProvisioningHardeningTest` (20 test), `Auth/AccountBulkImportTest` (25 test — impor massal guru & siswa, semua-atau-tidak-ada, isolasi cabang) | **COMPLETE · OWNER-DECISION** — AC-1 impor massal Excel terpenuhi; struktur kolom templatnya mengisi kekosongan yang diakui `06-API.md:722` dan menunggu ratifikasi (OD-19). AC-2 pengiriman sandi sementara tidak lewat notifikasi (OD-10) |
 
 ## Rekapitulasi
 
@@ -71,15 +71,16 @@ sudah dikerjakan selesai, dan yang tersisa bukan pekerjaan koding.
 | --- | --- |
 | `COMPLETE` | 25 |
 | `COMPLETE` dengan catatan teknis (SIS-03) | 1 |
-| `COMPLETE` dengan butir pemilik terbuka | 4 |
+| `COMPLETE` dengan butir pemilik terbuka | 5 |
 | `COMPLETE` dengan butir infrastruktur | 1 |
-| `PARTIAL` | 8 |
+| `PARTIAL` | 7 |
 | `APPROVED-DEVIATION` | 1 |
 | `MISSING` | 0 |
 | **Total** | **40** |
 
-Tidak ada satu pun FR Phase 1 yang **tidak memiliki implementasi**, dan
-**tidak ada lagi sisa pekerjaan koding** pada requirement Phase 1.
+Tidak ada satu pun FR Phase 1 yang **tidak memiliki implementasi**, dan **tidak
+ada lagi sisa pekerjaan koding** pada requirement Phase 1: PORTAL-04 AC-1 — impor
+massal akun guru dan siswa lewat Excel — ditutup pada butir 594.
 
 ### Keempat kesenjangan terakhir — ditutup
 
@@ -92,10 +93,24 @@ Keempatnya masuk daftar sebagai "kode benar, test belum ada". Dua ternyata bukan
 | AC-KELAS-05 | **Cacat** — guru nonaktif **dan** guru cabang lain tersimpan tanpa galat | Diperbaiki; pagar membaca daftar pilihan yang sama |
 | AC-KELAS-03 | **Cacat** — kode mapel ganda menjadi galat 500 | Diperbaiki; aturan unik berlingkup cabang di form |
 
-Delapan baris `PARTIAL` yang tersisa seluruhnya menunggu **keputusan pemilik atau
-infrastruktur**, bukan menunggu kode: AUTH-04 (SMTP), SIS-04 dan PORTAL-01
+Ketujuh baris `PARTIAL` yang tersisa seluruhnya menunggu keputusan pemilik atau
+infrastruktur — bukan menunggu kode: AUTH-04 (SMTP), SIS-04 dan PORTAL-01
 (kehadiran, RSK-01), NILAI-03 (kehadiran dan peringkat), NILAI-05 (CON-42),
-SPP-02 (RSK-10), PORTAL-02 (shortcut guru), PORTAL-04 (pengiriman sandi).
+SPP-02 (RSK-10), PORTAL-02 (shortcut guru).
+
+### PORTAL-04 AC-1 — dari tercatat kurang, menjadi ditutup
+
+Baris PORTAL-04 di matriks ini dahulu hanya menyebut pengiriman sandi sementara
+(OD-10), sehingga **menyatakan kurang** dari keadaan sebenarnya: AC-1-nya berbunyi
+"pembuatan akun guru dan siswa bisa dilakukan massal via import Excel"
+(`01-PRD.md:960`, diulang sebagai AC-M0-12 `:1010`), **Must Have, Sprint 1**, dan
+importer akunnya tidak ada.
+
+Kini ada: `UserAccountsImport` memeriksa, `AccountProvisioner` menulis dalam satu
+transaksi, dan `AccountTemplateExport` menerbitkan templatnya dari kontrak
+importer. Yang tersisa bukan kode melainkan ratifikasi: **struktur kolom
+templatnya** mengisi kekosongan yang diakui `06-API.md:722` ("Struktur kolom
+template: Belum dijelaskan dalam blueprint") dan dicatat sebagai **OD-19**.
 
 ## Catatan yang bukan kesenjangan requirement
 

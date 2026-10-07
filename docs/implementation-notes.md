@@ -10688,6 +10688,215 @@ membuatnya terlihat bukan ketelitian membaca, melainkan menjalankan testnya: ia
 gagal dengan "8 is not equal to 10", dan angka 8 itu tidak ada di mana pun
 kecuali di dalam kalimat penjelasan.
 
+### 593. Empat jebakan provisioning, satu bentuk yang sama
+
+Keempatnya ditemukan saat memeriksa apakah akun production dapat dibuat dengan
+aman, dan keempatnya berbentuk sama: **antarmuka yang membentuk apa yang terlihat
+tanpa menolak apa yang dikirim.** Akun yang salah karena itu lahir tanpa satu pun
+galat, dan baru terasa salah pada hari ia dipakai.
+
+**Reset Password pada akun portal.** Aksi itu menyalakan `must_change_password`,
+dan yang melepasnya kembali adalah halaman ganti sandi **di dalam panel**.
+`SISWA` dan `ORANG_TUA` tidak pernah masuk panel, sehingga penandanya tidak punya
+tempat untuk dilepas: akunnya tidak dapat masuk sampai admin menyetel sandinya
+lewat Ubah Pengguna.
+
+Pagarnya membaca `canAccessAdminPanel()` dan bukan daftar peran yang ditulis
+tangan. Yang membuat aksi itu tidak aman memang **ketiadaan halaman panelnya**,
+bukan nama perannya — jadi peran portal baru nanti ikut terlindungi tanpa
+menyentuh berkas itu lagi. Policy tidak disentuh: yang berubah hanya apa yang
+ditawarkan, bukan siapa yang berwenang.
+
+**Penautan akun portal lintas cabang.** `userOptions()` memakai `User::query()`,
+dan `SchoolScope` tidak membatasi Super Admin — daftarnya karena itu memuat akun
+seluruh cabang, tanpa satu pun aturan yang menolak id dari cabang lain. Portal
+sendiri memang bertahan: keduanya menuntut `school_id` cocok, sehingga akun yang
+salah cabang berhasil tersimpan lalu **tidak menampilkan apa pun**. Itu bukan
+kebocoran, tetapi juga bukan keadaan yang pantas dibiarkan: yang dilihat
+penggunanya adalah portal yang rusak.
+
+Daftar kini disaring ke cabang **siswanya**, dan validatornya membaca daftar yang
+sama persis sehingga keduanya tidak mungkin berbeda.
+
+Satu hal yang sengaja **tidak** ditambahkan: filter status aktif. Tidak ada
+requirement yang menuntutnya, dan akun nonaktif yang tertaut tetap ditolak masuk
+oleh `PortalEligibility`. Menambahkannya berarti mengarang aturan.
+
+**Satu akun siswa untuk dua siswa.** ERD 2.2 menyatakan "satu User dapat memiliki
+paling banyak satu Student", tetapi tidak ada indeks unik pada `students.user_id`
+yang menegakkannya — dan `StudentPortalService` mencari dengan
+`->where('user_id', …)` lalu mengambil satu di antaranya. Yang terlihat
+penggunanya adalah nilai dan tagihan **anak orang lain**. Pagarnya di form, dan
+sengaja hanya untuk `user_id`: `parent_user_id` memang satu-ke-banyak, sebab
+PORTAL-01 AC-2 menuntut orang tua dengan lebih dari satu anak.
+
+**Akun School Level tanpa cabang.** Select cabang hanya tampil bagi Super Admin
+dan tidak wajib, sehingga Super Admin dapat membuat Guru atau Bendahara tanpa
+cabang. Akun semacam itu **lolos** `canAccessPanel()`, lalu `SchoolScope`
+memberinya `1 = 0`: seluruh layar kosong tanpa satu pun pesan yang menerangkan
+sebabnya.
+
+Perwujudannya tidak seperti dugaan pertama. Aturan closure yang hendak menolak
+nilai kosong **tidak pernah menyala**: Filament menambahkan `nullable` pada field
+opsional, dan Laravel berhenti memproses aturan berikutnya begitu nilainya null.
+Testnya gagal dengan "Component has no errors" — penjaga yang tidak pernah
+dipanggil. Yang benar adalah `required` bersyarat, yaitu mekanisme Filament
+sendiri.
+
+### Pagar seeder yang terbuka tepat di tempat terbahaya
+
+`Sprint4DemoSeeder` bersandar pada `SeedPassword::resolve()`, yang menolak
+lingkungan yang tidak menyetel kata sandi seeding. Tetapi produksi **justru
+menyetelnya** — akun bootstrap membutuhkannya. Jadi pagar itu terbuka persis di
+satu tempat yang seharusnya paling tertutup, dan seeder yang membuat akun demo
+ber-`must_change_password = false` dapat berjalan di sana.
+
+`SimulationSeeder` sudah menolak produksi dengan penolakan eksplisit sejak awal.
+Tidak ada alasan seeder demo berbeda, dan kini keduanya sama.
+
+### Satu requirement yang selama ini dicatat kurang
+
+Pemeriksaan ini juga menemukan bahwa matriks traceability menyatakan **kurang**
+dari keadaan sebenarnya. Baris PORTAL-04 hanya menyebut pengiriman sandi
+sementara, padahal **AC-1**-nya berbunyi "pembuatan akun guru dan siswa bisa
+dilakukan massal via import Excel" — Must Have, Sprint 1, diulang sebagai
+AC-M0-12 — dan importer akun itu tidak ada. `app/Imports/` hanya memuat
+`StudentsImport` dan `GradesImport`, yang membuat baris siswa dan nilai, bukan
+akun.
+
+Importer-nya **tidak** dibuat pada batch ini: jumlah dan bentuk data akun yang
+sesungguhnya belum diketahui, dan importer yang dibangun atas dugaan akan
+menentukan format berkas yang nanti harus diikuti sekolah.
+
+### 594. Impor akun: yang didefinisikan dokumen, dan yang tidak
+
+PORTAL-04 AC-1 berbunyi satu kalimat: "pembuatan akun guru dan siswa bisa
+dilakukan massal via import Excel". Yang menarik bukan kalimat itu, melainkan apa
+yang dokumen **sudah** dan **belum** tetapkan di sekitarnya.
+
+Sudah ditetapkan: endpointnya (`POST /users/import`), siapa yang boleh (Super
+Admin dan Admin Sekolah, `06-API.md:2016`), jenis berkasnya (`.xlsx`), dan
+**kontrak responsnya** — "Sukses + daftar error per baris" (`:731`, ditegaskan
+`:1587`). Payload `POST /users` juga ada: `name`, `email`, `phone`, `role`
+(`:2352`). Email unik lintas platform (ASM-12).
+
+Belum ditetapkan, dan dokumen mengatakannya terus terang: **"Struktur kolom
+template: Belum dijelaskan dalam blueprint"** (`:722`). Jadi kolomnya diisi dari
+dua hal yang memang ada — payload `POST /users` dan kolom `users` — bukan dari
+selera, dan keputusannya dicatat sebagai OD-19 alih-alih disahkan sendiri.
+
+**Dua lembar, bukan satu kolom peran.** Guru dan siswa dipisahkan oleh nama
+lembar, bukan oleh kolom `peran` pada satu lembar. Itu menghapus satu kelas galat
+seluruhnya: tidak mungkin ada baris siswa yang kebetulan berperan `GURU`. Lembar
+siswa juga **tidak punya kolom nama** — namanya diambil dari baris siswa yang
+ditunjuk NIS, sehingga akun dan data induk tidak dapat berbeda nama.
+
+**Tidak ada kolom cabang, dan itu pagar tenant yang sesungguhnya.** Cabang
+ditentukan di luar berkas: cabang akun Admin Sekolah, atau pilihan Super Admin.
+Baris Excel karena itu tidak dapat menyeberang tenant — bukan karena ditolak,
+melainkan karena tidak ada tempat untuk menuliskannya.
+
+Di sini satu preseden sengaja dilanggar. `ListStudents::runImport` **menolak**
+Super Admin dengan alasan ia tidak terikat satu cabang. Tetapi matriks izin
+memberi `POST /users/import` kepada Super Admin, sehingga menolaknya berarti
+melanggar matriks. Yang benar adalah **menanyakan** cabangnya.
+
+### Semua atau tidak ada, dan mengapa berbeda dari impor siswa
+
+Importer siswa memasukkan baris yang sah dan melaporkan sisanya. Bentuk itu tepat
+untuk data induk: 39 siswa yang masuk tetap berguna meski satu baris keliru.
+
+Akun tidak begitu. Setiap akun lahir bersama **sandi sementara yang hanya terlihat
+sekali**. Impor yang berhenti di tengah meninggalkan sebagian akun hidup dengan
+sandi yang tidak tercatat siapa pun, dan percobaan kedua akan menabraknya sebagai
+"surel sudah dipakai" — sehingga admin harus menebak sampai baris mana ia sempat
+berjalan. Karena itu validasinya berjalan **seluruhnya lebih dulu**, dan satu galat
+membatalkan semuanya.
+
+Pemisahannya tercermin di kodenya: `UserAccountsImport` hanya memeriksa dan
+merencanakan, `AccountProvisioner` menulis dalam satu transaksi. Penulis itu
+memeriksa ulang tautan siswanya **di dalam** transaksi — bukan karena ragu pada
+validator, melainkan karena jarak waktunya: validasi terjadi saat berkas diunggah,
+penulisan saat admin menekan Terapkan, dan di antara keduanya admin lain dapat
+menautkan siswa yang sama.
+
+### `must_change_password` yang sengaja tidak seragam
+
+Akun guru menyalakannya; akun siswa tidak. Itu bukan kelalaian melainkan
+konsekuensi butir 593: peran portal tidak punya halaman ganti sandi, sehingga
+penanda itu akan **mengunci** akunnya alih-alih memaksanya berganti.
+
+### Uji mutasi yang menunjukkan test saya menguji lapis yang salah
+
+Delapan mutasi diterapkan; dua lolos pada percobaan pertama karena **testnya
+mengandalkan lapis lain**, bukan karena pagarnya tidak ada:
+
+- Membuang `->where('school_id', …)` pada pencarian NIS tetap lolos, sebab test
+  memakai Admin Sekolah dan `SchoolScope` sudah menyaring cabangnya. Yang
+  membuktikan filter itu adalah **Super Admin**, yang tidak dibatasi scope.
+- Membuang penolakan "siswa sudah berakun" di validator tetap lolos, sebab
+  `AccountProvisioner` membatalkan seluruh transaksi lewat `whereNull('user_id')`.
+  Hasil akhirnya benar, tetapi penolakan yang tiba pada fase tulis muncul sebagai
+  "impor dibatalkan" tanpa menyebut baris mana — dan admin dengan dua ratus baris
+  tidak dapat mencarinya.
+
+Keduanya ditutup dengan test yang menyasar lapisnya langsung. Dua mutasi lain
+tetap lolos **karena memang demikian rancangannya**: jalur null `school_id` dan
+penitipan cabang oleh Admin Sekolah sudah dinetralkan konfigurasi Filament sendiri
+(field wajib, field tersembunyi), sehingga kode di belakangnya lapis kedua. Testnya
+karena itu menguji mekanisme yang sesungguhnya berlaku — `->required()` — bukan
+lapis keduanya.
+
+### Kredensial yang harus keluar dari sistem
+
+Satu permukaan baru, dan satu-satunya pada batch ini: unduhan `.xlsx` berisi surel
+dan sandi sementara. Tanpa itu impor massal tidak ada gunanya — dua ratus sandi
+tidak dapat dibaca dari satu notifikasi, dan `MAIL_MAILER=log` berarti tidak ada
+yang terkirim otomatis.
+
+Yang menjaganya: berkas di-stream dan tidak pernah ditulis ke disk aplikasi, sandi
+tidak pernah masuk log (diuji dengan menyadap `Log::listen`), yang tersimpan di
+basis data hanya hash-nya, dan setiap sel ditulis sebagai teks sehingga Excel
+tidak pernah mengevaluasinya — lihat butir 595, yang menemukan bahwa cara pertama
+menegakkan hal itu justru merusak sandinya.
+
+### 595. Pagar yang melindungi berkas, lalu merusak isinya
+
+Pagar formula injection pada berkas kredensial mula-mula dikerjakan dengan cara
+yang paling sering dianjurkan: menyisipkan kutip tunggal di depan nilai yang
+diawali `=`, `+`, `-`, `@`, tab, atau carriage return. Ia ada di kode, ia
+terdokumentasi — dan tidak ada satu test pun yang mengikatnya.
+
+Testnya ditulis terakhir, dan bentuknya yang menentukan: ia **membangkitkan
+`.xlsx` sungguhan, memuatnya kembali dengan PhpSpreadsheet, lalu memeriksa tipe
+dan nilai setiap sel**. Memeriksa keberadaan method `safe()` atau mencocokkan
+potongan kode tidak akan menemukan apa pun; yang menentukan aman atau tidak adalah
+apa yang tersimpan di dalam berkasnya.
+
+Yang ditemukan: formulanya memang tidak pernah dievaluasi — tipenya selalu string
+— tetapi PhpSpreadsheet menyimpan apostrofnya sebagai **karakter biasa**, tanpa
+menyetel atribut `quotePrefix`. Jadi apostrof itu menjadi **bagian dari sandi**.
+Akun yang sandinya `-Sandi1234` menerima `'-Sandi1234` di berkasnya, dan admin yang
+menyerahkannya apa adanya membuat penggunanya gagal masuk — sebab yang ter-hash di
+basis data tidak memuat apostrof. Pagar yang melindungi berkasnya telah merusak
+satu-satunya hal yang berguna di dalamnya.
+
+Sandi yang diawali simbol bukan kemungkinan teoretis: `Str::password()` menyertakan
+simbol, dan `-` ada di dalamnya. Pada dua ratus akun, beberapa pasti terkena.
+
+Perbaikannya bukan menambal apostrofnya melainkan membuang pendekatannya:
+`StringValueBinder` mengikat **setiap** sel sebagai teks. Nilainya tersimpan bersih
+apa adanya, tipenya selalu string sehingga tidak pernah dievaluasi, dan untuk nilai
+yang diawali `=` PhpSpreadsheet menyetel sendiri atribut `quotePrefix` — mekanisme
+Excel yang memang dimaksudkan untuk itu, dan yang tidak pernah ikut tersalin ketika
+selnya dicopy.
+
+Uji mutasinya menangkap keduanya secara terpisah: melepas pagar sepenuhnya
+menggagalkan tiga test (tipe rumus, `quotePrefix`, dan seluruh-kolom-teks),
+sedangkan **mengembalikan pendekatan apostrof lama** menggagalkan dua — dan mutasi
+kedua itulah yang membuktikan testnya menangkap cacat nyata, bukan sekadar
+ketiadaan pagar.
+
 ## Menjalankan test terhadap MySQL
 
 `phpunit.xml` memakai SQLite in-memory. Untuk memverifikasi perilaku yang bergantung

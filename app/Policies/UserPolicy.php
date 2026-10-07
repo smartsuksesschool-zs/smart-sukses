@@ -29,6 +29,19 @@ class UserPolicy
         return $user->can(PermissionName::UserManage->value);
     }
 
+    /**
+     * PORTAL-04 AC-1 — impor massal akun guru dan siswa.
+     *
+     * Menumpang `user.manage` apa adanya, persis seperti `create`. Matriks izin
+     * `06-API.md:2016` memberi `POST /users/import` kepada Super Admin dan Admin
+     * Sekolah — himpunan yang sama dengan `POST /users` — jadi tidak ada peran
+     * baru dan tidak ada izin baru yang perlu diterbitkan (butir 594).
+     */
+    public function import(User $user): bool
+    {
+        return $user->can(PermissionName::UserManage->value);
+    }
+
     public function update(User $user, User $model): bool
     {
         return $user->can(PermissionName::UserManage->value)

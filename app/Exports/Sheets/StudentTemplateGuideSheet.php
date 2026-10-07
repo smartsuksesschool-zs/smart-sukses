@@ -124,7 +124,7 @@ class StudentTemplateGuideSheet implements FromArray, ShouldAutoSize, WithHeadin
             __('NIS harus unik di dalam satu cabang. NIS yang sudah ada akan ditolak, bukan ditimpa.'),
             __('Kolom kelas diisi nama rombel yang sudah ada pada tahun ajaran aktif. Rombel yang belum ada harus dibuat lebih dulu lewat menu Kelas — berkas ini tidak pernah membuat rombel baru.'),
             __('Kelas yang tidak dikenali menolak barisnya, dan siswanya tidak jadi dibuat. Nama rombel yang tersedia disebutkan pada pesan kesalahan.'),
-            __('Akun portal siswa tidak dibuat oleh import ini.'),
+            __('Akun portal siswa tidak dibuat oleh import ini. Gunakan menu Pengguna → Import Akun setelah data siswa masuk.'),
         ];
     }
 }
