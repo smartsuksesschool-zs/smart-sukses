@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
+use Spatie\Permission\Models\Role;
 
 /**
  * PORTAL-04 / API 4.4 — Manajemen akun pengguna: buat, edit, nonaktifkan,
@@ -90,6 +91,45 @@ class UserResource extends Resource
                         // Hanya Super Admin yang boleh memindahkan user antar cabang.
                         ->visible(fn () => Auth::user()?->isSuperAdmin())
                         ->default(fn () => Auth::user()?->school_id)
+                        /*
+                         * Hanya Super Administrator yang boleh tanpa cabang.
+                         *
+                         * Akun tanpa cabang berperan School Level adalah akun
+                         * yatim: `canAccessPanel()` meloloskannya masuk panel,
+                         * lalu `SchoolScope` memberinya `1 = 0` sehingga seluruh
+                         * layar kosong tanpa satu pun pesan yang menerangkan
+                         * sebabnya. Yang tampak bagi penggunanya adalah sistem
+                         * yang rusak, bukan akun yang salah dibuat.
+                         *
+                         * Aturannya tinggal di field ini — bukan di field Peran —
+                         * karena field ini hanya tampil bagi Super Admin. Bagi
+                         * peran School Level ia tersembunyi, karena itu
+                         * dikecualikan dari state **dan** dari validasi, dan
+                         * cabangnya diisi `CreateUser` dari akun pembuatnya.
+                         *
+                         * Diwujudkan sebagai `required` bersyarat, bukan aturan
+                         * tersendiri: Filament menambahkan `nullable` pada field
+                         * opsional, dan Laravel berhenti memproses aturan
+                         * berikutnya begitu nilainya null — sehingga aturan apa
+                         * pun yang hendak menolak **ketiadaan** nilai tidak akan
+                         * pernah menyala di sana (butir 593).
+                         */
+                        ->required(static function (Forms\Get $get): bool {
+                            $chosen = array_map('intval', (array) $get('roles'));
+
+                            if ($chosen === []) {
+                                return false;
+                            }
+
+                            $superAdminRoleId = (int) Role::query()
+                                ->where('name', RoleName::SuperAdmin->value)
+                                ->value('id');
+
+                            return ! in_array($superAdminRoleId, $chosen, true);
+                        })
+                        ->validationMessages([
+                            'required' => __('Cabang wajib dipilih untuk peran selain Super Administrator.'),
+                        ])
                         ->helperText(__('Kosongkan hanya untuk Super Administrator (akses lintas cabang).')),
 
                     Forms\Components\Select::make('roles')
@@ -190,7 +230,24 @@ class UserResource extends Resource
                     ->color('warning')
                     ->requiresConfirmation()
                     ->modalDescription(__('Password sementara akan dibuat dan ditampilkan sekali saja.'))
-                    ->visible(fn (User $record) => Auth::user()?->can('resetPassword', $record))
+                    /*
+                     * Tidak ditawarkan untuk peran yang tidak punya halaman panel.
+                     *
+                     * Aksi ini menyalakan `must_change_password`, dan yang
+                     * mencabutnya kembali adalah halaman ganti sandi **di dalam
+                     * panel** (`EnsurePasswordIsChanged`). SISWA dan ORANG_TUA
+                     * tidak pernah masuk panel, sehingga penanda itu tidak punya
+                     * tempat untuk dilepas: akunnya menjadi tidak dapat masuk
+                     * sampai admin menyetel sandinya lewat Ubah Pengguna.
+                     *
+                     * Pagarnya membaca `canAccessAdminPanel()` dan bukan daftar
+                     * peran yang ditulis tangan — yang membuat aksi ini tidak
+                     * aman memang **ketiadaan halaman panelnya**, jadi peran
+                     * portal baru nanti ikut terlindungi tanpa menyentuh berkas
+                     * ini (butir 593).
+                     */
+                    ->visible(fn (User $record) => $record->primaryRole()?->canAccessAdminPanel() === true
+                        && Auth::user()?->can('resetPassword', $record))
                     ->action(function (User $record) {
                         $temporary = Str::password(12);
 

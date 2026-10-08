@@ -11,6 +11,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Support\StudentPhoto;
 use App\Support\TeacherClassVisibility;
+use Closure;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Infolists;
@@ -183,9 +184,26 @@ class StudentResource extends Resource
 
                     Forms\Components\Select::make('parent_user_id')
                         ->label(__('Akun Portal Orang Tua'))
-                        ->options(fn () => static::userOptions(RoleName::OrangTua))
+                        ->options(fn (Forms\Get $get) => static::userOptions(
+                            RoleName::OrangTua,
+                            static::resolveSchoolId($get('school_id')),
+                        ))
                         ->searchable()
-                        ->helperText(__('Opsional — hubungkan ke akun dengan peran Orang Tua.')),
+                        // Satu akun orang tua boleh menjadi wali banyak siswa
+                        // (ERD 2.2), jadi di sini **tidak** ada pagar keunikan.
+                        ->rule(static fn (Forms\Get $get): Closure => static function (
+                            string $attribute,
+                            mixed $value,
+                            Closure $fail,
+                        ) use ($get): void {
+                            static::failUnlessPortalAccount(
+                                $value,
+                                RoleName::OrangTua,
+                                static::resolveSchoolId($get('school_id')),
+                                $fail,
+                            );
+                        })
+                        ->helperText(__('Opsional — hubungkan ke akun dengan peran Orang Tua di cabang yang sama.')),
                 ]),
 
             Forms\Components\Section::make(__('Status Akademik'))
@@ -205,9 +223,50 @@ class StudentResource extends Resource
 
                     Forms\Components\Select::make('user_id')
                         ->label(__('Akun Portal Siswa'))
-                        ->options(fn () => static::userOptions(RoleName::Siswa))
+                        ->options(fn (Forms\Get $get) => static::userOptions(
+                            RoleName::Siswa,
+                            static::resolveSchoolId($get('school_id')),
+                        ))
                         ->searchable()
-                        ->helperText(__('Opsional — siswa tidak wajib punya akun portal.')),
+                        ->rule(static fn (Forms\Get $get, ?Student $record): Closure => static function (
+                            string $attribute,
+                            mixed $value,
+                            Closure $fail,
+                        ) use ($get, $record): void {
+                            static::failUnlessPortalAccount(
+                                $value,
+                                RoleName::Siswa,
+                                static::resolveSchoolId($get('school_id')),
+                                $fail,
+                            );
+
+                            if (blank($value)) {
+                                return;
+                            }
+
+                            /*
+                             * ERD 2.2: "Satu User dapat memiliki paling banyak
+                             * satu Student (sebagai akun portal siswa)."
+                             *
+                             * Tidak ada indeks unik pada `students.user_id` yang
+                             * menegakkannya, sehingga satu akun siswa dapat
+                             * tertaut ke dua baris siswa — dan portal siswa
+                             * mencari dengan `->where('user_id', …)` lalu
+                             * mengambil satu di antaranya. Yang terlihat
+                             * penggunanya adalah nilai dan tagihan **anak orang
+                             * lain** (butir 593).
+                             */
+                            $taken = Student::query()
+                                ->withTrashed()
+                                ->where('user_id', (int) $value)
+                                ->when($record, fn ($query, Student $student) => $query->whereKeyNot($student->getKey()))
+                                ->exists();
+
+                            if ($taken) {
+                                $fail(__('Akun portal siswa ini sudah tertaut ke siswa lain.'));
+                            }
+                        })
+                        ->helperText(__('Opsional — satu akun hanya untuk satu siswa, di cabang yang sama.')),
 
                     Forms\Components\Textarea::make('notes')
                         ->label(__('Catatan'))
@@ -488,17 +547,53 @@ class StudentResource extends Resource
     }
 
     /**
-     * Opsi akun portal, dibatasi peran tertentu dan tenant aktif.
+     * Akun yang sah untuk ditautkan sebagai portal siswa atau orang tua.
+     *
+     * Disaring ke **cabang siswanya**, bukan ke cabang akun yang sedang bekerja.
+     * Bagi peran School Level keduanya sama, tetapi `SchoolScope` tidak membatasi
+     * Super Admin — tanpa `$schoolId` daftarnya memuat akun seluruh cabang, dan
+     * penautan lintas cabang menghasilkan akun yang lolos disimpan lalu tidak
+     * menampilkan apa pun di portal (butir 593).
      *
      * @return array<int, string>
      */
-    protected static function userOptions(RoleName $role): array
+    protected static function userOptions(RoleName $role, ?int $schoolId = null): array
     {
         return User::query()
             ->whereHas('roles', fn (Builder $query) => $query->where('name', $role->value))
+            ->when($schoolId, fn (Builder $query, int $id) => $query->where('school_id', $id))
             ->orderBy('name')
             ->pluck('name', 'id')
             ->all();
+    }
+
+    /**
+     * Menolak id yang tidak ada di daftar pilihan yang sah.
+     *
+     * Daftar pilihan membentuk apa yang terlihat; ia tidak menolak apa pun.
+     * Validatornya membaca **daftar yang sama persis**, sehingga keduanya tidak
+     * mungkin berbeda — dan id yang dikirim langsung ke permintaan simpan,
+     * berperan keliru atau dari cabang lain, tetap ditolak.
+     *
+     * Status aktif **tidak** diperiksa: tidak ada requirement yang menuntutnya,
+     * dan akun nonaktif yang tertaut tetap ditolak masuk oleh
+     * `PortalEligibility`. Menambahkannya di sini berarti mengarang aturan.
+     */
+    protected static function failUnlessPortalAccount(
+        mixed $value,
+        RoleName $role,
+        ?int $schoolId,
+        Closure $fail,
+    ): void {
+        if (blank($value)) {
+            return;
+        }
+
+        if (! array_key_exists((int) $value, static::userOptions($role, $schoolId))) {
+            $fail(__('Akun portal harus berperan :peran dan berada di cabang siswa.', [
+                'peran' => $role->label(),
+            ]));
+        }
     }
 
     /**

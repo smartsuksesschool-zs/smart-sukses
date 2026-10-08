@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Http\Controllers\Admin\AccountTemplateController;
 use App\Http\Controllers\Admin\PpdbDocumentController;
 use App\Http\Controllers\Admin\StudentPhotoController;
 use App\Http\Controllers\Admin\StudentTemplateController;
@@ -145,6 +146,10 @@ class AdminPanelProvider extends PanelProvider
                 'siswa/template-import',
                 StudentTemplateController::class,
             )->name('students.import-template'))
+            ->authenticatedRoutes(fn () => Route::get(
+                'pengguna/template-import',
+                AccountTemplateController::class,
+            )->name('users.import-template'))
             ->authenticatedRoutes(fn () => Route::get(
                 'siswa/{student}/foto',
                 StudentPhotoController::class,
